@@ -64,6 +64,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where a codec could only be referenced by name.
 - `meshsa.version.warn_deprecated(old, replacement, removed_in=...)` helper to emit
   `DeprecationWarning` on renamed fields/options, per the compatibility policy.
+- `.github/workflows/nightly.yml`: scheduled run that installs the full extras
+  (`[dev,meshtastic,health]`) and runs mypy + the suite against the real optional
+  dependency graph (catching optional-dep typing drift the `[dev]`-only CI can't),
+  plus any `@pytest.mark.slow` soak tests. Registered the `slow` pytest marker.
+- `release.yml`: opt-in GHCR image publish on `v*` tags (gated on the
+  `PUBLISH_DOCKER` repo variable, using the built-in `GITHUB_TOKEN`).
+- Docker runtime image now installs the `[meshtastic,health]` extras.
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.

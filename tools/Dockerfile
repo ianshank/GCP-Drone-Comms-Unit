@@ -27,7 +27,7 @@ RUN groupadd -r -g ${APP_UID} ${APP_USER} \
 
 COPY --from=builder /build/dist/*.whl /tmp/
 
-RUN pip install --no-cache-dir /tmp/*.whl[meshtastic] \
+RUN pip install --no-cache-dir /tmp/*.whl[meshtastic,health] \
  && rm /tmp/*.whl
 
 USER ${APP_USER}
