@@ -14,6 +14,7 @@ from .health import health_snapshot
 from .metrics import RouterMetrics
 from .models import ChatPayload, Envelope, MessageKind, NodeInfo, NodeTier, PliPayload, Position
 from .node import Node, build_node
+from .plugins import load_plugins
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
 from .registry import Registry, codec_registry, transport_registry
 from .router import Router
@@ -60,6 +61,7 @@ __all__ = [
     "health_snapshot",
     "Node",
     "build_node",
+    "load_plugins",
     "LoopbackBus",
     "LoopbackTransport",
     "NullTransport",

@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pinned canonical envelope, to catch accidental wire-format breakage
   (regenerate with `MESHSA_UPDATE_SNAPSHOTS=1`).
 - Transport-level multicast group join/leave test for `TakMulticastTransport`.
+- Opt-in out-of-tree plugin discovery: `meshsa.plugins.load_plugins()` loads the
+  `meshsa.transports` / `meshsa.codecs` entry-point groups (py3.10–3.12 metadata
+  compat shim), skipping any broken driver. Not called implicitly.
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.
