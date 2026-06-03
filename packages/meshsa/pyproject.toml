@@ -49,7 +49,7 @@ dev = [
 ]
 
 [project.scripts]
-meshsa-base = "meshsa.examples.base_node:main"
+meshsa-base = "meshsa.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/your-org/jetson-flight-control"

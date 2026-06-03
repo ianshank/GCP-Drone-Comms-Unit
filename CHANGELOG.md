@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Re-enabled the `SIM105` ruff rule and rewrote the 7 `try/except: pass` sites as
   `contextlib.suppress(...)`; the rule is no longer ignored.
 - Confirmed the project license as Apache-2.0 (dropped the "placeholder" wording).
+- Moved the runnable CLI from `examples/base_node.py` into the importable
+  `meshsa.cli` module (the example is now a thin re-export so `examples/` stays
+  demonstrative-only); the `meshsa-base` console script targets `meshsa.cli:main`
+  (name unchanged, so the systemd unit is unaffected). Added
+  `--health/--healthz-host/--healthz-port` flags.
 
 ### Added
 - `[dev]` extra (pytest, coverage, ruff, mypy, pre-commit, build, twine).
