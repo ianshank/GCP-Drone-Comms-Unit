@@ -394,3 +394,20 @@ async def test_e2e_json_mesh_cot_tak_bridge(clock, ids):
 
     reader.push(b"")
     await node.stop()
+
+
+async def test_multicast_joins_on_start_and_leaves_on_stop():
+    # Transport-level group join/leave: io built on start, closed on stop.
+    io = FakeDgram()
+    made = {"n": 0}
+
+    def factory():
+        made["n"] += 1
+        return io
+
+    t = TakMulticastTransport(io_factory=factory)
+    assert made["n"] == 0  # no group join before start
+    await t.start()
+    assert made["n"] == 1 and not io.closed  # joined exactly once
+    await t.stop()
+    assert io.closed  # left the group

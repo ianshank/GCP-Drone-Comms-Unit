@@ -50,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   opt-in `/healthz` aiohttp listener (`serve_healthz`) behind a new `[health]`
   extra; `aiohttp` is imported lazily so the module loads without it.
 - `HealthConfig` (`NodeConfig.health`: enabled/host/port).
+- Hypothesis property tests for codec round-trips (JSON lossless; Compact PLI
+  within scale tolerance; Compact CHAT text preserved) — `hypothesis` added to `[dev]`.
+- Serialized-envelope snapshot tests (`tests/snapshots/`) for JSON/Compact/CoT of a
+  pinned canonical envelope, to catch accidental wire-format breakage
+  (regenerate with `MESHSA_UPDATE_SNAPSHOTS=1`).
+- Transport-level multicast group join/leave test for `TakMulticastTransport`.
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.
