@@ -12,6 +12,7 @@ delimiter and the backoff schedule all come from config options.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -167,10 +168,8 @@ class TakTcpTransport(AbstractTransport):
         self._stopping = True
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         await self._aclose_writer()
         self._started = False
@@ -249,10 +248,8 @@ class TakMulticastTransport(AbstractTransport):
     async def stop(self) -> None:
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         if self._io is not None:
             self._io.close()

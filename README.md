@@ -60,4 +60,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and
 
 ## License
 
-[Apache-2.0](LICENSE) (placeholder pending owner confirmation).
+[Apache-2.0](LICENSE).

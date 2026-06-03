@@ -21,11 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI now runs strict mypy as a required package-local check.
 - Type hints tightened across codecs, registry, router, node assembly, transports,
   and the base-node example without changing runtime behavior.
+- Re-enabled the `SIM105` ruff rule and rewrote the 7 `try/except: pass` sites as
+  `contextlib.suppress(...)`; the rule is no longer ignored.
+- Confirmed the project license as Apache-2.0 (dropped the "placeholder" wording).
 
 ### Added
 - `[dev]` extra (pytest, coverage, ruff, mypy, pre-commit, build, twine).
-- `LICENSE` (Apache-2.0 placeholder), `CHANGELOG.md`, `CONTRIBUTING.md`,
+- `LICENSE` (Apache-2.0), `CHANGELOG.md`, `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`.
+- `py.typed` marker (PEP 561) so downstream consumers get `meshsa`'s types;
+  packaged via `[tool.setuptools.package-data]`.
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.

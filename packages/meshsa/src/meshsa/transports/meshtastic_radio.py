@@ -16,6 +16,7 @@ schedule come from config options.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
@@ -232,10 +233,8 @@ class MeshtasticTransport(AbstractTransport):
             self._lost.set()  # wake the supervisor if it is waiting
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         self._teardown_subs()
         self._close_iface()

@@ -56,6 +56,9 @@ Issues = "https://github.com/your-org/jetson-flight-control/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+meshsa = ["py.typed"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=90"
@@ -75,7 +78,6 @@ extend-exclude = [".venv", "build", "dist"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = [
     "E501",   # line length handled by formatter
-    "SIM105", # try/except/pass -> contextlib.suppress; tracked in AUDIT_REPORT backlog
 ]
 
 [tool.ruff.lint.per-file-ignores]

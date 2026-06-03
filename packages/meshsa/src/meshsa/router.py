@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import contextlib
 import inspect
 from collections.abc import Awaitable, Callable
 
@@ -101,10 +102,8 @@ class Router:
         for task in self._tasks:
             task.cancel()
         for task in self._tasks:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
         self._tasks.clear()
         for transport in self.transports:
             await transport.stop()

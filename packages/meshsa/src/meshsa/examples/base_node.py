@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import os
 import signal
 
@@ -130,20 +131,16 @@ async def run(args: argparse.Namespace) -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        with contextlib.suppress(NotImplementedError):  # e.g. Windows
             loop.add_signal_handler(sig, stop.set)
-        except NotImplementedError:  # e.g. Windows
-            pass
 
     await node.start()
     log.info("bridge up", uid=args.uid, mesh_port=args.port, fts=f"{args.fts_host}:{args.fts_port}")
     try:
         while not stop.is_set():
             await node.publish_position(Position(lat=args.lat, lon=args.lon))
-            try:
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=node.config.pli_interval_s)
-            except asyncio.TimeoutError:
-                pass
     finally:
         log.info("shutting down")
         await node.stop()
@@ -151,10 +148,8 @@ async def run(args: argparse.Namespace) -> None:
 
 def main() -> None:
     structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(20))
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(run(parse_args()))
-    except KeyboardInterrupt:
-        pass
 
 
 if __name__ == "__main__":
