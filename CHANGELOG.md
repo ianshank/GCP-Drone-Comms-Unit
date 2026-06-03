@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Opt-in out-of-tree plugin discovery: `meshsa.plugins.load_plugins()` loads the
   `meshsa.transports` / `meshsa.codecs` entry-point groups (py3.10–3.12 metadata
   compat shim), skipping any broken driver. Not called implicitly.
+- `build_node(codec_instances=...)` injects a pre-configured `Codec` instance per
+  transport (preferred over registry-by-name), closing the audit's modularity gap
+  where a codec could only be referenced by name.
+- `meshsa.version.warn_deprecated(old, replacement, removed_in=...)` helper to emit
+  `DeprecationWarning` on renamed fields/options, per the compatibility policy.
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.

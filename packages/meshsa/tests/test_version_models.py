@@ -38,3 +38,14 @@ def test_default_clock_and_id_factory():
     assert SystemClock().now() > 0
     a, b = UuidFactory().new_id(), UuidFactory().new_id()
     assert a != b and len(a) == 32
+
+
+def test_warn_deprecated_emits_deprecationwarning():
+    import pytest
+
+    from meshsa.version import warn_deprecated
+
+    with pytest.warns(DeprecationWarning, match="old_field"):
+        warn_deprecated("old_field", "new_field")
+    with pytest.warns(DeprecationWarning, match="removal in 0.3.0"):
+        warn_deprecated("a", "b", removed_in="0.3.0")

@@ -106,3 +106,13 @@ def test_build_node_forwards_mesh_config_to_meshtastic():
         "region": "EU",
         "freq_khz": 906500,
     }
+
+
+def test_build_node_accepts_injected_codec_instance():
+    from meshsa import CotCodec
+
+    cfg = NodeConfig(
+        uid="b", callsign="B", tier="base", transports=[{"name": "tak", "type": "loopback"}]
+    )
+    node = build_node(cfg, codec_instances={"tak": CotCodec(stale_s=42.0)})
+    assert node.router.codecs["tak"].stale_s == 42.0  # injected instance wins
