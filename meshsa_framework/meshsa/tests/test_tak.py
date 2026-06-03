@@ -1,0 +1,366 @@
+import asyncio
+
+import pytest
+
+from meshsa import (CotCodec, Envelope, JsonCodec, LoopbackBus, LoopbackTransport,
+                    MessageKind, NodeConfig, Position, TakMulticastTransport,
+                    TakTcpTransport, build_node, transport_registry)
+from meshsa.transports.tak import CotFramer
+
+
+# ============================ framer ============================
+def test_framer_splits_concatenated_and_partial():
+    f = CotFramer()
+    assert f.feed(b"<event a><point/></eve") == []          # partial -> buffered
+    out = f.feed(b"nt><event b></event>junk<event c></event>")
+    assert out == [
+        b"<event a><point/></event>",
+        b"<event b></event>",
+        b"<event c></event>",          # inter-event "junk" is resynced away
+    ]
+
+
+def test_framer_discards_stray_closing_tag():
+    assert CotFramer().feed(b"</event>") == []   # no <event> start -> dropped
+
+
+def test_framer_strips_leading_noise():
+    assert CotFramer().feed(b"\n  <event x></event>") == [b"<event x></event>"]
+
+
+# ============================ fakes ============================
+class QueueReader:
+    def __init__(self):
+        self.q: asyncio.Queue = asyncio.Queue()
+
+    async def read(self, n):
+        return await self.q.get()
+
+    def push(self, data):
+        self.q.put_nowait(data)
+
+
+class EofReader:
+    async def read(self, n):
+        return b""
+
+
+class RaiseReader:
+    async def read(self, n):
+        raise ConnectionError("read fail")
+
+
+class FakeWriter:
+    def __init__(self):
+        self.buf = b""
+        self.closed = False
+
+    def write(self, d):
+        self.buf += d
+
+    async def drain(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+    async def wait_closed(self):
+        pass
+
+
+class NoWaitWriter:
+    def __init__(self):
+        self.buf = b""
+        self.closed = False
+
+    def write(self, d):
+        self.buf += d
+
+    async def drain(self):
+        pass
+
+    def close(self):
+        self.closed = True
+    # intentionally no wait_closed()
+
+
+class DrainFailWriter(FakeWriter):
+    async def drain(self):
+        raise ConnectionError("drain fail")
+
+
+class CloseFailWriter(FakeWriter):
+    def close(self):
+        raise OSError("close fail")
+
+
+class FakeDgram:
+    def __init__(self):
+        self.sent = []
+        self.q: asyncio.Queue = asyncio.Queue()
+        self.closed = False
+
+    def sendto(self, data):
+        self.sent.append(data)
+
+    async def recv(self):
+        return await self.q.get()
+
+    def close(self):
+        self.closed = True
+
+    def push(self, d):
+        self.q.put_nowait(d)
+
+
+class ScriptedConnector:
+    """Yields (reader, writer) pairs in order; first `fail_times` calls raise."""
+
+    def __init__(self, pairs, fail_times=0):
+        self._pairs = list(pairs)
+        self.calls = 0
+        self._fail = fail_times
+
+    async def __call__(self):
+        self.calls += 1
+        if self._fail > 0:
+            self._fail -= 1
+            raise ConnectionError("connect fail")
+        return self._pairs.pop(0)
+
+
+class FakeSleep:
+    def __init__(self):
+        self.calls = []
+
+    async def __call__(self, secs):
+        self.calls.append(secs)
+
+
+def _conn(reader, writer):
+    async def connect():
+        return reader, writer
+    return connect()
+
+
+def _cot_pli(uid="remote-1"):
+    return CotCodec().encode(Envelope(
+        msg_id="x", ts=1_700_000_000.0, source_uid=uid, kind=MessageKind.PLI,
+        payload={"node": {"callsign": "RMT"}, "position": {"lat": 10.0, "lon": 20.0}}))
+
+
+async def _wait(cond, tries=300):
+    for _ in range(tries):
+        if cond():
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("condition not met in time")
+
+
+# ============================ TCP transport ============================
+async def test_tcp_send_writes_with_delimiter():
+    reader, writer = QueueReader(), FakeWriter()
+    t = TakTcpTransport(connector=lambda: _conn(reader, writer),
+                        delimiter=b"\n", sleep=FakeSleep())
+    await t.start()
+    await t.send(b"<event/></event>")
+    assert writer.buf.endswith(b"\n")
+    reader.push(b"")
+    await t.stop()
+    assert writer.closed
+
+
+async def test_tcp_receive_frames_and_ingests():
+    reader, writer = QueueReader(), FakeWriter()
+    t = TakTcpTransport(connector=lambda: _conn(reader, writer), sleep=FakeSleep())
+    await t.start()
+    reader.push(_cot_pli()[:20])           # partial
+    reader.push(_cot_pli()[20:])           # completes the event
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    reader.push(b"")
+    await t.stop()
+
+
+async def test_tcp_send_before_start_raises():
+    t = TakTcpTransport(connector=lambda: _conn(QueueReader(), FakeWriter()))
+    with pytest.raises(RuntimeError):
+        await t.send(b"x")
+
+
+async def test_tcp_stop_without_start_safe():
+    t = TakTcpTransport(connector=lambda: _conn(QueueReader(), FakeWriter()))
+    await t.stop()  # task None / writer None branches
+
+
+async def test_tcp_stop_writer_without_wait_closed():
+    reader, writer = QueueReader(), NoWaitWriter()
+    t = TakTcpTransport(connector=lambda: _conn(reader, writer), sleep=FakeSleep())
+    await t.start()
+    await t.stop()  # getattr(wait_closed) -> None branch
+    assert writer.closed
+
+
+async def test_tcp_reconnects_after_eof():
+    r2 = QueueReader()
+    conn = ScriptedConnector([(EofReader(), FakeWriter()), (r2, FakeWriter())])
+    t = TakTcpTransport(connector=conn, sleep=FakeSleep())
+    await t.start()                        # connect #1 (EofReader) -> EOF
+    await _wait(lambda: conn.calls >= 2)   # -> reconnect to #2
+    r2.push(_cot_pli())
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    assert conn.calls == 2
+    await t.stop()
+
+
+async def test_tcp_reconnects_after_read_error():
+    conn = ScriptedConnector([(RaiseReader(), FakeWriter()), (QueueReader(), FakeWriter())])
+    t = TakTcpTransport(connector=conn, sleep=FakeSleep())
+    await t.start()
+    await _wait(lambda: conn.calls >= 2)   # read error -> reconnect
+    assert conn.calls == 2
+    await t.stop()
+
+
+async def test_tcp_backoff_grows_and_caps():
+    sl = FakeSleep()
+    conn = ScriptedConnector([(QueueReader(), FakeWriter())], fail_times=4)
+    t = TakTcpTransport(connector=conn, sleep=sl,
+                        backoff_initial_s=1.0, backoff_max_s=3.0, backoff_factor=2.0)
+    await t.start()                         # initial connect fails -> supervisor retries
+    await _wait(lambda: conn.calls >= 5)
+    assert sl.calls == [1.0, 2.0, 3.0]      # grows then caps at max
+    assert conn.calls == 5
+    await t.stop()
+
+
+async def test_tcp_no_reconnect_stops_on_eof():
+    conn = ScriptedConnector([(EofReader(), FakeWriter())])
+    t = TakTcpTransport(connector=conn, reconnect=False)
+    await t.start()
+    await _wait(lambda: t._task.done())     # EOF -> break (no reconnect)
+    assert conn.calls == 1
+    await t.send(b"x")                      # writer None -> best-effort drop (no raise)
+    await t.stop()
+
+
+async def test_tcp_initial_connect_failure_raises_without_reconnect():
+    conn = ScriptedConnector([], fail_times=1)
+    t = TakTcpTransport(connector=conn, reconnect=False)
+    with pytest.raises(ConnectionError):
+        await t.start()
+
+
+async def test_tcp_send_swallows_write_error():
+    conn = ScriptedConnector([(QueueReader(), DrainFailWriter())])
+    t = TakTcpTransport(connector=conn, sleep=FakeSleep())
+    await t.start()
+    await t.send(b"x")                      # drain raises -> swallowed
+    await t.stop()
+
+
+async def test_tcp_close_error_swallowed_on_stop():
+    conn = ScriptedConnector([(QueueReader(), CloseFailWriter())])
+    t = TakTcpTransport(connector=conn, sleep=FakeSleep())
+    await t.start()
+    await t.stop()                          # close raises -> swallowed
+
+
+async def test_tcp_supervisor_exits_on_stop_flag():
+    box = {}
+
+    async def flip(secs):
+        box["t"]._stopping = True
+
+    conn = ScriptedConnector([], fail_times=99)
+    t = TakTcpTransport(connector=conn, reconnect=True, sleep=flip)
+    box["t"] = t
+    await t.start()                         # initial connect fails -> supervisor
+    await _wait(lambda: t._task.done())     # connect fail -> sleep flips stop -> loop exits
+    assert t._task.done()
+    await t.stop()
+
+
+# ============================ multicast transport ============================
+async def test_multicast_send_and_receive():
+    io = FakeDgram()
+    t = TakMulticastTransport(io_factory=lambda: io)
+    await t.start()
+    await t.send(b"<event/></event>")
+    assert io.sent == [b"<event/></event>"]
+    io.push(_cot_pli())
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    await t.stop()
+    assert io.closed
+
+
+async def test_multicast_send_before_start_raises():
+    t = TakMulticastTransport(io_factory=lambda: FakeDgram())
+    with pytest.raises(RuntimeError):
+        await t.send(b"x")
+
+
+async def test_multicast_ignores_empty_datagram():
+    io = FakeDgram()
+    t = TakMulticastTransport(io_factory=lambda: io)
+    await t.start()
+    io.push(b"")            # falsy -> skipped
+    io.push(_cot_pli())     # delivered
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    await t.stop()
+
+
+async def test_multicast_stop_without_start_safe():
+    t = TakMulticastTransport(io_factory=lambda: FakeDgram())
+    await t.stop()
+
+
+# ============================ registry ============================
+def test_tak_registered():
+    assert transport_registry.has("tak_tcp")
+    assert transport_registry.has("tak_multicast")
+
+
+def test_tak_registry_factories_create():
+    tcp = transport_registry.create("tak_tcp", name="t",
+                                    connector=lambda: _conn(QueueReader(), FakeWriter()))
+    mc = transport_registry.create("tak_multicast", name="m",
+                                   io_factory=lambda: FakeDgram())
+    assert isinstance(tcp, TakTcpTransport)
+    assert isinstance(mc, TakMulticastTransport)
+
+
+# ================ END TO END: JSON mesh <-> CoT TAK bridge ================
+async def test_e2e_json_mesh_cot_tak_bridge(clock, ids):
+    bus = LoopbackBus()
+    reader, writer = QueueReader(), FakeWriter()
+    cfg = NodeConfig(uid="base", callsign="BASE", tier="base", transports=[
+        {"name": "mesh", "type": "loopback"},
+        {"name": "tak", "type": "tak_tcp", "codec": "cot"},
+    ])
+    node = build_node(cfg, clock=clock, id_factory=ids, transport_kwargs={
+        "mesh": {"bus": bus},
+        "tak": {"connector": lambda: _conn(reader, writer), "sleep": FakeSleep()},
+    })
+    peer = LoopbackTransport(name="peer", bus=bus)
+    await node.start()
+
+    # (1) locally-published position: JSON to the mesh, CoT to the TAK server
+    await node.publish_position(Position(lat=37.0, lon=-122.0))
+    mesh_json = await asyncio.wait_for(peer.stream().__anext__(), timeout=1.0)
+    assert JsonCodec().decode(mesh_json).payload["position"]["lat"] == 37.0
+    assert writer.buf.startswith(b"<event")
+
+    # (2) CoT arriving from the TAK server is bridged to the mesh as JSON
+    reader.push(_cot_pli("remote-1"))
+    bridged = await asyncio.wait_for(peer.stream().__anext__(), timeout=1.0)
+    out = JsonCodec().decode(bridged)
+    assert out.kind == MessageKind.PLI
+    assert out.source_uid == "remote-1"
+    assert out.payload["position"]["lat"] == 10.0
+
+    reader.push(b"")
+    await node.stop()

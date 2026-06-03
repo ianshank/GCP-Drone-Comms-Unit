@@ -1,0 +1,12 @@
+{
+  "uid": "user-0007",
+  "callsign": "FOX7",
+  "tier": "user",
+  "pli_interval_s": 30.0,
+  "default_stale_s": 120.0,
+  "mesh": { "channel": "ops-1", "region": "US", "freq_khz": 906500 },
+  "router": { "dedupe_cache_size": 2048, "queue_maxsize": 1000 },
+  "transports": [
+    { "name": "lora", "type": "meshtastic", "options": { "port": "/dev/ttyUSB0" } }
+  ]
+}

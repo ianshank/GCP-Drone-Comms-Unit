@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meshsa"
+version = "0.1.0"
+description = "Modular framework for a distributable mesh situational-awareness network"
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2", "structlog>=23"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=90"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["meshsa"]
+branch = true

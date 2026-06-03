@@ -1,0 +1,29 @@
+# /etc/systemd/system/meshsa-base.service
+# Runs the Meshtastic <-> FreeTAKServer bridge (examples/base_node.py) as a service.
+# Config comes from /etc/meshsa/base.env (MESHSA_* vars that base_node.py reads).
+[Unit]
+Description=meshsa base node (Meshtastic <-> FreeTAKServer bridge)
+After=network-online.target
+Wants=network-online.target
+# If FreeTAKServer runs on this host as a unit, also gate on it (optional):
+# After=freetakserver.service
+
+[Service]
+Type=simple
+User=meshsa
+Group=dialout                       # serial access to the T-Beam (/dev/ttyUSB*)
+EnvironmentFile=/etc/meshsa/base.env
+WorkingDirectory=/opt/meshsa
+ExecStart=/opt/meshsa/venv/bin/python /opt/meshsa/base_node.py
+Restart=always
+RestartSec=3
+TimeoutStopSec=10                   # base_node handles SIGTERM for a clean stop
+
+# --- light hardening ---
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
