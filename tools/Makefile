@@ -35,7 +35,7 @@ format:
 	ruff format $(PKG)
 
 type:
-	mypy $(PKG)/src
+	cd $(PKG) && mypy src
 
 build:
 	cd $(PKG) && $(PY) -m build

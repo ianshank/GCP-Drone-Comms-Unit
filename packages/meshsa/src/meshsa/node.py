@@ -4,13 +4,14 @@ transports (via the registry), a codec, and the router together."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
 from .codec import JsonCodec
 from .config import NodeConfig
 from .models import ChatPayload, Envelope, MessageKind, NodeInfo, PliPayload, Position
-from .protocols import Clock, Codec, IdFactory, SystemClock, UuidFactory
+from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
 from .registry import Registry, codec_registry, transport_registry
 from .router import Handler, Router
 from .version import SCHEMA_VERSION
@@ -35,7 +36,7 @@ class Node:
     def on_message(self, handler: Handler) -> None:
         self.router.subscribe(handler)
 
-    def _envelope(self, kind: MessageKind, payload: dict) -> Envelope:
+    def _envelope(self, kind: MessageKind, payload: dict[str, Any]) -> Envelope:
         return Envelope(
             schema_version=SCHEMA_VERSION,
             msg_id=self.id_factory.new_id(),
@@ -64,18 +65,18 @@ def build_node(
     clock: Clock | None = None,
     id_factory: IdFactory | None = None,
     codec: Codec | None = None,
-    registry: Registry | None = None,
-    transport_kwargs: dict[str, dict] | None = None,
+    registry: Registry[Transport] | None = None,
+    transport_kwargs: dict[str, dict[str, object]] | None = None,
 ) -> Node:
     """Assemble a Node from config. Unknown transport types are skipped (not
     fatal), so a node tolerates configs written for newer/older builds."""
-    reg = registry or transport_registry
-    clock = clock or SystemClock()
-    id_factory = id_factory or UuidFactory()
-    codec = codec or JsonCodec()
+    reg = registry if registry is not None else transport_registry
+    clock = clock if clock is not None else SystemClock()
+    id_factory = id_factory if id_factory is not None else UuidFactory()
+    codec = codec if codec is not None else JsonCodec()
 
-    transports = []
-    codecs: dict[str, object] = {}
+    transports: list[Transport] = []
+    codecs: dict[str, Codec] = {}
     for tc in config.transports:
         if not tc.enabled:
             continue

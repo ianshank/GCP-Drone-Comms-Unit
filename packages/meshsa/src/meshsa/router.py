@@ -53,7 +53,7 @@ class Router:
         self.config = config or RouterConfig()
         self._seen: collections.OrderedDict[str, bool] = collections.OrderedDict()
         self._subscribers: list[Handler] = []
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[None]] = []
 
     def _codec_for(self, transport: Transport) -> Codec:
         return self.codecs.get(transport.name, self.codec)

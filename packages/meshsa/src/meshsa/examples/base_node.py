@@ -29,13 +29,21 @@ import signal
 
 import structlog
 
-from meshsa import NodeConfig, Position, build_node
+from meshsa import Envelope, NodeConfig, Position, build_node
 
 log = structlog.get_logger("base_node")
 
 
-def _env(key: str, default: str | None = None) -> str | None:
+def _env(key: str, default: str) -> str:
     return os.environ.get(f"MESHSA_{key}", default)
+
+
+def _env_int(key: str, default: int) -> int:
+    return int(_env(key, str(default)))
+
+
+def _env_float(key: str, default: float) -> float:
+    return float(_env(key, str(default)))
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,26 +52,26 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--portnum",
         type=int,
-        default=int(_env("PORTNUM", "256")),
+        default=_env_int("PORTNUM", 256),
         help="Meshtastic app portnum (default 256 / PRIVATE_APP)",
     )
     p.add_argument("--region", default=_env("MESH_REGION", "US"))
     p.add_argument("--fts-host", default=_env("FTS_HOST", "127.0.0.1"))
-    p.add_argument("--fts-port", type=int, default=int(_env("FTS_PORT", "8087")))
+    p.add_argument("--fts-port", type=int, default=_env_int("FTS_PORT", 8087))
     p.add_argument("--uid", default=_env("UID", "base-1"))
     p.add_argument("--callsign", default=_env("CALLSIGN", "BASE1"))
-    p.add_argument("--lat", type=float, default=float(_env("LAT", "0.0")))
-    p.add_argument("--lon", type=float, default=float(_env("LON", "0.0")))
+    p.add_argument("--lat", type=float, default=_env_float("LAT", 0.0))
+    p.add_argument("--lon", type=float, default=_env_float("LON", 0.0))
     p.add_argument(
         "--interval",
         type=float,
-        default=float(_env("PLI_INTERVAL_S", "30")),
+        default=_env_float("PLI_INTERVAL_S", 30.0),
         help="seconds between own-position broadcasts",
     )
     p.add_argument(
         "--stale",
         type=float,
-        default=float(_env("COT_STALE_S", "120")),
+        default=_env_float("COT_STALE_S", 120.0),
         help="CoT stale window in seconds",
     )
     p.add_argument(
@@ -114,7 +122,7 @@ def build_config(args: argparse.Namespace) -> NodeConfig:
 async def run(args: argparse.Namespace) -> None:
     node = build_node(build_config(args))
 
-    def on_message(env) -> None:
+    def on_message(env: Envelope) -> None:
         log.info("rx", kind=env.kind.value, src=env.source_uid, payload=env.payload)
 
     node.on_message(on_message)

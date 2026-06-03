@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from typing import Any
 
 from .errors import MeshSAError
 from .models import Envelope, MessageKind
@@ -114,8 +115,9 @@ class CotCodec:
         detail = ev.find("detail")
         if etype.startswith("b-t-f") or etype.startswith("b.t.f"):
             text = ""
-            if detail is not None and detail.find("remarks") is not None:
-                text = detail.find("remarks").text or ""
+            remarks = detail.find("remarks") if detail is not None else None
+            if remarks is not None:
+                text = remarks.text or ""
             return Envelope(
                 schema_version=SCHEMA_VERSION,
                 msg_id=f"{uid}:{ev.attrib.get('time', '')}",
@@ -132,8 +134,9 @@ class CotCodec:
                 if k in pt.attrib:
                     pos[k] = float(pt.attrib[k])
         callsign = uid
-        if detail is not None and detail.find("contact") is not None:
-            callsign = detail.find("contact").attrib.get("callsign", uid)
+        contact = detail.find("contact") if detail is not None else None
+        if contact is not None:
+            callsign = contact.attrib.get("callsign", uid)
         kind = MessageKind.PLI if etype.startswith("a-") else MessageKind.MARKER
         return Envelope(
             schema_version=SCHEMA_VERSION,
@@ -146,5 +149,5 @@ class CotCodec:
 
 
 @codec_registry.register("cot")
-def _make_cot(**kwargs: object) -> CotCodec:
+def _make_cot(**kwargs: Any) -> CotCodec:
     return CotCodec(**kwargs)

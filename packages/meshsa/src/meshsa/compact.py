@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import struct
+from typing import Any
 
 from .errors import IncompatibleSchemaError, MeshSAError
 from .models import Envelope, MessageKind, NodeTier
@@ -93,6 +94,7 @@ class CompactCodec:
         return bytes(out)
 
     def decode(self, data: bytes) -> Envelope:
+        payload: dict[str, Any]
         try:
             schema = data[0]
             if not is_compatible(schema):

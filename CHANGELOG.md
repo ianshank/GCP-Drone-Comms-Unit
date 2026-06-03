@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `meshsa-base.service` updated to call `meshsa-base` and use `KillSignal=SIGINT`.
 - Runtime dependencies pinned with upper bounds (`pydantic>=2,<3`, `structlog>=23,<26`).
 - `meshtastic` and `pypubsub` moved to the `[meshtastic]` optional extra.
+- CI now runs strict mypy as a required package-local check.
+- Type hints tightened across codecs, registry, router, node assembly, transports,
+  and the base-node example without changing runtime behavior.
 
 ### Added
 - `[dev]` extra (pytest, coverage, ruff, mypy, pre-commit, build, twine).
@@ -26,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.
+- Config-driven bridge e2e coverage for JSON mesh <-> CoT TAK translation through
+  `NodeConfig` and `build_node`.
+- Enterprise agent harness: `AGENTS.md`, `CLAUDE.md`, Copilot instructions,
+  scoped folder guidance, custom agent modes, and project skills.
 
 ## [0.1.0] - 2026-06-02
 

@@ -9,18 +9,20 @@ hardware designs for the system.
 
 ## Layout
 
-| Path                                | What lives here                                                          |
-|-------------------------------------|--------------------------------------------------------------------------|
-| [packages/meshsa](packages/meshsa)  | `meshsa` Python framework (registry-based codecs + transports, src layout) |
-| [ops/pi5-node](ops/pi5-node)        | Raspberry Pi 5 user-node provisioning (`mesh-up.sh`, `setup_pi5_node.sh`) |
-| [ops/base-service](ops/base-service)| Base-node systemd service unit + install guide                           |
-| [hardware/gcs-stls](hardware/gcs-stls) | Pelican 1400 GCS 3D-printable parts                                  |
-| [hardware/usernode-stls](hardware/usernode-stls) | User-node enclosures (Pi 5, T-Beam)                         |
-| [hardware/vcase](hardware/vcase)    | Vertical Jetson Orin Nano case                                           |
-| [docs](docs)                        | Architecture, audit report                                               |
-| [tools](tools)                      | `Dockerfile`, `Makefile`                                                 |
-| [.github/workflows](.github/workflows) | CI + release pipelines                                                |
-| [archive](archive)                  | Historical ZIP snapshots (read-only)                                     |
+| Path | What lives here |
+| ---- | --------------- |
+| [packages/meshsa](packages/meshsa) | `meshsa` Python framework (registry-based codecs + transports, src layout) |
+| [ops/pi5-node](ops/pi5-node) | Raspberry Pi 5 user-node provisioning (`mesh-up.sh`, `setup_pi5_node.sh`) |
+| [ops/base-service](ops/base-service) | Base-node systemd service unit + install guide |
+| [hardware/gcs-stls](hardware/gcs-stls) | Pelican 1400 GCS 3D-printable parts |
+| [hardware/usernode-stls](hardware/usernode-stls) | User-node enclosures (Pi 5, T-Beam) |
+| [hardware/vcase](hardware/vcase) | Vertical Jetson Orin Nano case |
+| [docs](docs) | Architecture, audit report |
+| [tools](tools) | `Dockerfile`, `Makefile` |
+| [AGENTS.md](AGENTS.md) | Canonical AI agent operating guide |
+| [.agents](.agents) | Project skills for repeatable agent workflows |
+| [.github/workflows](.github/workflows) | CI + release pipelines |
+| [archive](archive) | Historical ZIP snapshots (read-only) |
 
 ## Quick start (development)
 
@@ -28,7 +30,7 @@ hardware designs for the system.
 python -m venv .venv
 . .venv/bin/activate            # Windows: .\.venv\Scripts\Activate.ps1
 pip install -e "packages/meshsa[dev]"
-cd packages/meshsa && pytest    # 98 tests, 100% coverage
+cd packages/meshsa && pytest    # 101 tests, 100% coverage
 ```
 
 For real-radio runs (Meshtastic + FreeTAKServer bridge):
@@ -53,8 +55,8 @@ See [packages/meshsa/README.md](packages/meshsa/README.md) for framework details
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security disclosures go through
-[SECURITY.md](SECURITY.md).
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). AI coding agents should start with
+[AGENTS.md](AGENTS.md). Security disclosures go through [SECURITY.md](SECURITY.md).
 
 ## License
 
