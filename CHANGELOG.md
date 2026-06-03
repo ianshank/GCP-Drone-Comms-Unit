@@ -34,7 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-codec `supported_schemas` (`frozenset[int]`): codecs accept the full
   compatibility window by default (`version.SUPPORTED_SCHEMAS`) but can be built
   with an explicit set so multiple codec/schema versions can coexist on one node.
-  Additive and behavior-preserving — no `SCHEMA_VERSION` bump.
+  `JsonCodec`/`CompactCodec` gate decode on membership; `CotCodec` is
+  schema-agnostic (CoT XML carries no meshsa schema). Additive and
+  behavior-preserving — no `SCHEMA_VERSION` bump.
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.
@@ -46,11 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `RouterConfig.queue_maxsize` is now applied to transport inbox queues (was
   dead config); a per-transport `options.queue_maxsize` still overrides it.
-- `MeshConfig` (region/channel/psk/freq_khz) is now threaded to the Meshtastic
-  transport and applied to the device at connect via an injectable provisioning
-  seam (was dead config). The real device-apply runs only on hardware; the
-  wiring is unit-tested with a fake provisioner.
-- Transport inbox is now bounded and non-blocking: when full it drops the newest
+- `MeshConfig` is now threaded to the Meshtastic transport (was dead config) and
+  applied to the device via an injectable provisioning seam, on the initial
+  connect **and re-applied after every reconnect**. Scope: the default
+  provisioner applies `region` (passthrough) and persists it; `channel`/`psk`/
+  `freq_khz` are logged as pending firmware-specific implementation rather than
+  silently claimed. The control flow is fully unit-tested with a fake device.
+- Transport inbox is now bounded and non-blocking across **all** inbound paths
+  (including the Meshtastic receive callback): when full it drops the newest
   frame and counts it (`dropped_inbox_full`) instead of stalling the reader —
   relevant now that `queue_maxsize` is configurable.
 - `_default_pubsub()` return typing corrected (cast) so strict mypy passes with

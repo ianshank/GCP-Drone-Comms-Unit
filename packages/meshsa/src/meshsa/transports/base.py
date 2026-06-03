@@ -25,19 +25,26 @@ class AbstractTransport(abc.ABC):
     async def stop(self) -> None:
         self._running = False
 
-    async def _ingest(self, data: bytes) -> None:
-        """Called by the concrete transport when bytes arrive from the medium.
+    def _ingest_nowait(self, data: bytes) -> None:
+        """Non-blocking, thread-safe enqueue used by every inbound path.
 
-        Non-blocking: when the inbox is full (a slow subscriber), the newest
-        frame is dropped and counted rather than stalling the reader — matching
-        the transports' best-effort delivery model on a lossy medium. The inbox
-        bound is ``queue_maxsize`` (configurable via ``RouterConfig``).
+        When the inbox is full (a slow subscriber), the *newest* frame is dropped
+        and counted rather than stalling the reader — matching the transports'
+        best-effort model on a lossy medium. We drop the newest (rather than
+        evicting the oldest) so a frame already accepted for in-order delivery is
+        never discarded; sustained overflow signals a stuck consumer regardless.
+        Safe to hand to ``loop.call_soon_threadsafe`` from a radio reader thread.
+        The inbox bound is ``queue_maxsize`` (configurable via ``RouterConfig``).
         """
         try:
             self._inbox.put_nowait(data)
         except asyncio.QueueFull:
             self.dropped_inbox_full += 1
             _log.warning("inbox full; dropping frame", transport=self.name)
+
+    async def _ingest(self, data: bytes) -> None:
+        """Async ingest for in-loop callers (e.g. the TAK read loop)."""
+        self._ingest_nowait(data)
 
     async def stream(self) -> AsyncIterator[bytes]:
         while True:

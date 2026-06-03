@@ -58,13 +58,17 @@ def _default_pubsub() -> tuple[SubscribeFn, SubscribeFn]:  # pragma: no cover - 
     return cast(SubscribeFn, pub.subscribe), cast(SubscribeFn, pub.unsubscribe)
 
 
-def _default_provisioner(iface: Any, mesh: dict[str, Any]) -> None:  # pragma: no cover - hardware
-    """Apply node mesh settings to a real Meshtastic device.
+def _default_provisioner(iface: Any, mesh: dict[str, Any]) -> None:
+    """Apply node mesh settings to a Meshtastic device's persistent config.
 
     Region/channel/PSK/frequency are device-level radio config, not per-send
-    parameters, so they are written to the attached node's ``localConfig`` and
-    persisted. Runs only against live hardware; unit tests inject a fake
-    provisioner instead.
+    parameters, so the region is written to the attached node's ``localConfig``
+    and persisted via ``writeConfig``. Scope note (no hardware yet): only the
+    region is applied here, as a passthrough — the exact region value mapping
+    (string vs. firmware enum) and the channel/PSK/frequency channel-set API
+    vary by firmware and must be verified on hardware; those are logged as
+    pending rather than silently claimed. The control flow is exercised by unit
+    tests with a fake device; a fake provisioner can also be injected wholesale.
     """
     node = getattr(iface, "localNode", None)
     if node is None:
@@ -74,8 +78,6 @@ def _default_provisioner(iface: Any, mesh: dict[str, Any]) -> None:  # pragma: n
     if region:
         node.localConfig.lora.region = region
         node.writeConfig("lora")
-    # Channel name / PSK / explicit frequency are applied via the device channel
-    # API, which varies by firmware; operators must verify on hardware.
     if any(mesh.get(k) for k in ("channel", "psk", "freq_khz")):
         _log.info(
             "mesh channel/psk/freq are device-provisioned; verify on hardware",
@@ -157,9 +159,17 @@ class MeshtasticTransport(AbstractTransport):
                 self._started = False
                 raise
             self._iface = None
+        self._apply_mesh()
+        self._task = asyncio.create_task(self._supervise())
+
+    def _apply_mesh(self) -> None:
+        """Apply mesh device config to the current interface, if both present.
+
+        Called on the initial connect and after every supervisor reconnect, so a
+        rebuilt interface is re-provisioned rather than reverting to its boot config.
+        """
         if self._iface is not None and self._mesh:
             self._provision(self._iface, self._mesh)
-        self._task = asyncio.create_task(self._supervise())
 
     def _on_lost(self, *args: Any, **kwargs: Any) -> None:
         if self._loop is not None and self._lost is not None:
@@ -178,6 +188,7 @@ class MeshtasticTransport(AbstractTransport):
                     backoff = min(backoff * self._backoff_factor, self._backoff_max)
                     continue
                 backoff = self._backoff_initial
+                self._apply_mesh()
             await self._lost.wait()
             self._lost.clear()
             self._close_iface()
@@ -225,7 +236,9 @@ class MeshtasticTransport(AbstractTransport):
         if not payload:
             return
         if self._loop is not None:
-            self._loop.call_soon_threadsafe(self._inbox.put_nowait, bytes(payload))
+            # Route through the shared drop-counting ingest so a full inbox is
+            # counted (dropped_inbox_full), not an unhandled QueueFull in the loop.
+            self._loop.call_soon_threadsafe(self._ingest_nowait, bytes(payload))
 
     async def stop(self) -> None:
         self._stopping = True

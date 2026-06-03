@@ -28,6 +28,7 @@ async def test_inbox_full_drops_newest_and_counts():
     # rather than blocking the reader.
     t = NullTransport(name="n", queue_maxsize=1)
     await t._ingest(b"a")  # fills the single slot
-    await t._ingest(b"b")  # full -> dropped, counted
+    await t._ingest(b"b")  # full -> newest dropped, counted
     assert t.dropped_inbox_full == 1
     assert t._inbox.qsize() == 1
+    assert await t._inbox.get() == b"a"  # oldest retained (drop-newest semantics)

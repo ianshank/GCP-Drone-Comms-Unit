@@ -264,3 +264,82 @@ async def test_provisioner_called_with_mesh_on_start():
     assert dev is iface
     assert mesh["region"] == "EU" and mesh["freq_khz"] == 906500
     await t.stop()
+
+
+async def test_provisioner_not_called_without_mesh():
+    iface, pub = FakeIface(), FakePub()
+    seen = []
+    t = _make(iface, pub, sleep=FakeSleep(), provision=lambda dev, mesh: seen.append(dev))
+    await t.start()
+    assert seen == []  # no mesh configured -> provisioning skipped
+    await t.stop()
+
+
+async def test_provisioner_reapplied_after_reconnect():
+    # A rebuilt interface must be re-provisioned, not left on its boot config.
+    i1, i2 = FakeIface(), FakeIface()
+    fac, pub = ScriptedFactory([i1, i2]), FakePub()
+    seen = []
+    t = _make(
+        fac,
+        pub,
+        sleep=FakeSleep(),
+        mesh={"region": "EU"},
+        provision=lambda dev, mesh: seen.append(dev),
+    )
+    await t.start()  # provisions i1
+    pub.emit("meshtastic.connection.lost")  # drop -> supervisor rebuilds -> i2
+    await _wait(lambda: fac.calls >= 2)
+    await _wait(lambda: seen == [i1, i2])
+    assert seen == [i1, i2]
+    await t.stop()
+
+
+async def test_receive_full_inbox_counts_drop():
+    # The receive path must funnel through the shared drop-counter, not raise
+    # QueueFull in the loop callback.
+    iface, pub = FakeIface(), FakePub()
+    t = _make(iface, pub, sleep=FakeSleep(), queue_maxsize=1)
+    await t.start()
+    for payload in (b"a", b"b"):  # 2nd overflows the 1-slot inbox
+        pub.emit(
+            "meshtastic.receive",
+            packet={"decoded": {"portnum": 256, "payload": payload}},
+            interface=iface,
+        )
+    await _wait(lambda: t.dropped_inbox_full >= 1)
+    assert t.dropped_inbox_full == 1
+    await t.stop()
+
+
+# ---- default provisioner control flow (fakes for the device API) ----
+class _FakeNode:
+    def __init__(self):
+        self.localConfig = type("_C", (), {"lora": type("_L", (), {"region": None})()})()
+        self.written = []
+
+    def writeConfig(self, name):
+        self.written.append(name)
+
+
+def test_default_provisioner_applies_region_and_logs_extras():
+    from meshsa.transports.meshtastic_radio import _default_provisioner
+
+    iface = type("_I", (), {"localNode": _FakeNode()})()
+    _default_provisioner(iface, {"region": "EU", "channel": "ops", "psk": None, "freq_khz": 906500})
+    assert iface.localNode.localConfig.lora.region == "EU"
+    assert iface.localNode.written == ["lora"]
+
+
+def test_default_provisioner_no_localnode_is_safe():
+    from meshsa.transports.meshtastic_radio import _default_provisioner
+
+    _default_provisioner(type("_I", (), {"localNode": None})(), {"region": "EU"})  # no raise
+
+
+def test_default_provisioner_no_region_skips_write():
+    from meshsa.transports.meshtastic_radio import _default_provisioner
+
+    iface = type("_I", (), {"localNode": _FakeNode()})()
+    _default_provisioner(iface, {"region": None, "channel": None, "psk": None, "freq_khz": None})
+    assert iface.localNode.written == []
