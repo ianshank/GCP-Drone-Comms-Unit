@@ -67,10 +67,18 @@ class FakeSleep:
 
 
 def _make(factory_or_iface, pub, **kw):
-    fac = factory_or_iface if callable(factory_or_iface) and not isinstance(
-        factory_or_iface, FakeIface) else (lambda: factory_or_iface)
-    return MeshtasticTransport(name="lora", interface_factory=fac,
-                               subscribe=pub.subscribe, unsubscribe=pub.unsubscribe, **kw)
+    fac = (
+        factory_or_iface
+        if callable(factory_or_iface) and not isinstance(factory_or_iface, FakeIface)
+        else (lambda: factory_or_iface)
+    )
+    return MeshtasticTransport(
+        name="lora",
+        interface_factory=fac,
+        subscribe=pub.subscribe,
+        unsubscribe=pub.unsubscribe,
+        **kw,
+    )
 
 
 async def _wait(cond, tries=300):
@@ -84,8 +92,7 @@ async def _wait(cond, tries=300):
 # ---- core send/receive ----
 async def test_send_uses_configured_portnum_and_dest():
     iface, pub = FakeIface(), FakePub()
-    t = _make(iface, pub, portnum=256, destination="^all", channel_index=2,
-              sleep=FakeSleep())
+    t = _make(iface, pub, portnum=256, destination="^all", channel_index=2, sleep=FakeSleep())
     await t.start()
     await t.send(b"payload")
     data, kw = iface.sent[0]
@@ -99,8 +106,11 @@ async def test_receive_matching_portnum_is_ingested():
     iface, pub = FakeIface(), FakePub()
     t = _make(iface, pub, portnum=256, sleep=FakeSleep())
     await t.start()
-    pub.emit("meshtastic.receive",
-             packet={"decoded": {"portnum": 256, "payload": b"hello"}}, interface=iface)
+    pub.emit(
+        "meshtastic.receive",
+        packet={"decoded": {"portnum": 256, "payload": b"hello"}},
+        interface=iface,
+    )
     got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
     assert got == b"hello"
     await t.stop()
@@ -122,8 +132,9 @@ async def test_receive_accepts_portnum_name():
     iface, pub = FakeIface(), FakePub()
     t = _make(iface, pub, portnum=256, portnum_name="PRIVATE_APP", sleep=FakeSleep())
     await t.start()
-    pub.emit("meshtastic.receive",
-             packet={"decoded": {"portnum": "PRIVATE_APP", "payload": b"named"}})
+    pub.emit(
+        "meshtastic.receive", packet={"decoded": {"portnum": "PRIVATE_APP", "payload": b"named"}}
+    )
     got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
     assert got == b"named"
     await t.stop()
@@ -153,9 +164,13 @@ async def test_stop_without_start_safe():
 
 def test_registry_factory_builds_with_injection():
     iface, pub = FakeIface(), FakePub()
-    t = transport_registry.create("meshtastic", name="lora",
-                                  interface_factory=lambda: iface,
-                                  subscribe=pub.subscribe, unsubscribe=pub.unsubscribe)
+    t = transport_registry.create(
+        "meshtastic",
+        name="lora",
+        interface_factory=lambda: iface,
+        subscribe=pub.subscribe,
+        unsubscribe=pub.unsubscribe,
+    )
     assert isinstance(t, MeshtasticTransport) and t.name == "lora"
 
 
@@ -164,9 +179,9 @@ async def test_reconnects_after_connection_lost():
     i1, i2 = FakeIface(), FakeIface()
     fac, pub = ScriptedFactory([i1, i2]), FakePub()
     t = _make(fac, pub, sleep=FakeSleep())
-    await t.start()                              # factory #1 -> i1
-    pub.emit("meshtastic.connection.lost")       # device drop
-    await _wait(lambda: fac.calls >= 2)          # supervisor closes i1, rebuilds -> i2
+    await t.start()  # factory #1 -> i1
+    pub.emit("meshtastic.connection.lost")  # device drop
+    await _wait(lambda: fac.calls >= 2)  # supervisor closes i1, rebuilds -> i2
     assert i1.closed and fac.calls == 2
     await t.stop()
 
@@ -174,11 +189,10 @@ async def test_reconnects_after_connection_lost():
 async def test_backoff_on_connect_failure():
     sl = FakeSleep()
     fac, pub = ScriptedFactory([FakeIface()], fail_times=4), FakePub()
-    t = _make(fac, pub, sleep=sl, backoff_initial_s=1.0, backoff_max_s=3.0,
-              backoff_factor=2.0)
-    await t.start()                              # initial connect fails
+    t = _make(fac, pub, sleep=sl, backoff_initial_s=1.0, backoff_max_s=3.0, backoff_factor=2.0)
+    await t.start()  # initial connect fails
     await _wait(lambda: fac.calls >= 5)
-    assert sl.calls == [1.0, 2.0, 3.0]           # grows then caps
+    assert sl.calls == [1.0, 2.0, 3.0]  # grows then caps
     assert fac.calls == 5
     await t.stop()
 
@@ -191,7 +205,7 @@ async def test_no_reconnect_stops_after_lost():
     pub.emit("meshtastic.connection.lost")
     await _wait(lambda: t._task.done())
     assert i1.closed and fac.calls == 1
-    await t.send(b"x")                           # iface None -> drop (no raise)
+    await t.send(b"x")  # iface None -> drop (no raise)
     await t.stop()
 
 
@@ -200,14 +214,14 @@ async def test_initial_connect_failure_raises_without_reconnect():
     t = _make(fac, pub, reconnect=False)
     with pytest.raises(ConnectionError):
         await t.start()
-    assert pub.subs.get("meshtastic.receive") == []   # subscriptions torn down
+    assert pub.subs.get("meshtastic.receive") == []  # subscriptions torn down
 
 
 async def test_send_swallows_error():
     fac, pub = ScriptedFactory([SendFailIface()]), FakePub()
     t = _make(fac, pub, sleep=FakeSleep())
     await t.start()
-    await t.send(b"x")                           # sendData raises -> swallowed
+    await t.send(b"x")  # sendData raises -> swallowed
     await t.stop()
 
 
@@ -215,7 +229,7 @@ async def test_close_error_swallowed_on_stop():
     fac, pub = ScriptedFactory([CloseFailIface()]), FakePub()
     t = _make(fac, pub, sleep=FakeSleep())
     await t.start()
-    await t.stop()                               # close raises -> swallowed
+    await t.stop()  # close raises -> swallowed
 
 
 async def test_supervisor_exits_on_stop_flag():

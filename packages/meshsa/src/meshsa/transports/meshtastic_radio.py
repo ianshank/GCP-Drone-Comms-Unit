@@ -12,10 +12,12 @@ the lost-signal cross into the asyncio loop via ``call_soon_threadsafe``. Nothin
 hard-coded — connection/port, portnum, destination, channel, topics and the backoff
 schedule come from config options.
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import structlog
 
@@ -34,16 +36,20 @@ def _default_interface_factory(options: dict[str, Any]) -> InterfaceFactory:  # 
         connection = options.get("connection", "serial")
         if connection == "serial":
             from meshtastic.serial_interface import SerialInterface
+
             return SerialInterface(devPath=options.get("port"))
         if connection == "tcp":
             from meshtastic.tcp_interface import TCPInterface
+
             return TCPInterface(hostname=options["host"])
         raise ValueError(f"unknown meshtastic connection {connection!r}")
+
     return factory
 
 
 def _default_pubsub() -> tuple[SubscribeFn, SubscribeFn]:  # pragma: no cover - needs pypubsub
     from pubsub import pub
+
     return pub.subscribe, pub.unsubscribe
 
 
@@ -57,7 +63,7 @@ class MeshtasticTransport(AbstractTransport):
         unsubscribe: SubscribeFn | None = None,
         topic: str = "meshtastic.receive",
         lost_topic: str = "meshtastic.connection.lost",
-        portnum: int = 256,            # PRIVATE_APP
+        portnum: int = 256,  # PRIVATE_APP
         portnum_name: str = "PRIVATE_APP",
         destination: str = "^all",
         want_ack: bool = False,
@@ -162,8 +168,13 @@ class MeshtasticTransport(AbstractTransport):
         if iface is None:
             return  # transiently disconnected; best-effort drop
         try:
-            iface.sendData(data, destinationId=self.destination, portNum=self.portnum,
-                           wantAck=self.want_ack, channelIndex=self.channel_index)
+            iface.sendData(
+                data,
+                destinationId=self.destination,
+                portNum=self.portnum,
+                wantAck=self.want_ack,
+                channelIndex=self.channel_index,
+            )
         except Exception:
             _log.warning("meshtastic send failed; dropping frame", transport=self.name)
 

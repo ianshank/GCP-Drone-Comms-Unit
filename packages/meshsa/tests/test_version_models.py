@@ -34,6 +34,7 @@ def test_nodeinfo_default_tier():
 
 def test_default_clock_and_id_factory():
     from meshsa import SystemClock, UuidFactory
+
     assert SystemClock().now() > 0
     a, b = UuidFactory().new_id(), UuidFactory().new_id()
     assert a != b and len(a) == 32

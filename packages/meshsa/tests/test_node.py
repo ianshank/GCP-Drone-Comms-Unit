@@ -1,20 +1,24 @@
 import asyncio
 
-from meshsa import (LoopbackBus, MessageKind, NodeConfig, NodeTier, Position,
-                    build_node)
+from meshsa import LoopbackBus, MessageKind, NodeConfig, NodeTier, Position, build_node
 
 
 def _cfg(uid, tier="user"):
-    return NodeConfig(uid=uid, callsign=uid.upper(), tier=tier,
-                      transports=[{"name": "mesh", "type": "loopback"}])
+    return NodeConfig(
+        uid=uid, callsign=uid.upper(), tier=tier, transports=[{"name": "mesh", "type": "loopback"}]
+    )
 
 
 def test_build_node_skips_unknown_and_disabled(clock, ids):
-    cfg = NodeConfig(uid="u", callsign="U", transports=[
-        {"name": "good", "type": "loopback"},
-        {"name": "future", "type": "halow-v2"},   # unknown -> skipped, not fatal
-        {"name": "off", "type": "loopback", "enabled": False},
-    ])
+    cfg = NodeConfig(
+        uid="u",
+        callsign="U",
+        transports=[
+            {"name": "good", "type": "loopback"},
+            {"name": "future", "type": "halow-v2"},  # unknown -> skipped, not fatal
+            {"name": "off", "type": "loopback", "enabled": False},
+        ],
+    )
     node = build_node(cfg, clock=clock, id_factory=ids)
     assert len(node.router.transports) == 1
     assert node.info.tier == NodeTier.USER
@@ -50,11 +54,15 @@ async def test_publish_chat_builds_envelope(clock, ids):
 
 
 def test_build_node_per_transport_codec():
-    cfg = NodeConfig(uid="b", callsign="BASE", tier="base", transports=[
-        {"name": "mesh", "type": "loopback"},
-        {"name": "tak", "type": "loopback", "codec": "cot",
-         "codec_options": {"stale_s": 60.0}},
-    ])
+    cfg = NodeConfig(
+        uid="b",
+        callsign="BASE",
+        tier="base",
+        transports=[
+            {"name": "mesh", "type": "loopback"},
+            {"name": "tak", "type": "loopback", "codec": "cot", "codec_options": {"stale_s": 60.0}},
+        ],
+    )
     node = build_node(cfg)
     assert "tak" in node.router.codecs
     assert node.router.codecs["tak"].stale_s == 60.0

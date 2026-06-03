@@ -1,5 +1,3 @@
-import pytest
-
 from meshsa import LoopbackBus, LoopbackTransport, NullTransport
 
 

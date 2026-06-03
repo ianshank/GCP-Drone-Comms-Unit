@@ -12,19 +12,26 @@ def test_defaults_are_explicit_not_hardcoded():
 
 
 def test_from_mapping_roundtrip():
-    c = NodeConfig.from_mapping({
-        "uid": "u", "callsign": "BR1", "tier": "backbone",
-        "transports": [{"name": "lo", "type": "loopback"}],
-    })
+    c = NodeConfig.from_mapping(
+        {
+            "uid": "u",
+            "callsign": "BR1",
+            "tier": "backbone",
+            "transports": [{"name": "lo", "type": "loopback"}],
+        }
+    )
     assert c.tier == NodeTier.BACKBONE
     assert c.transports[0].type == "loopback"
 
 
 def test_from_env_scalar_and_mesh_override(monkeypatch):
     env = {
-        "MESHSA_UID": "n1", "MESHSA_CALLSIGN": "FOX",
-        "MESHSA_PLI_INTERVAL_S": "5", "MESHSA_TIER": "base",
-        "MESHSA_MESH_CHANNEL": "ops", "MESHSA_MESH_FREQ_KHZ": "906500",
+        "MESHSA_UID": "n1",
+        "MESHSA_CALLSIGN": "FOX",
+        "MESHSA_PLI_INTERVAL_S": "5",
+        "MESHSA_TIER": "base",
+        "MESHSA_MESH_CHANNEL": "ops",
+        "MESHSA_MESH_FREQ_KHZ": "906500",
     }
     c = NodeConfig.from_env(env)
     assert c.uid == "n1" and c.tier == NodeTier.BASE
@@ -34,13 +41,12 @@ def test_from_env_scalar_and_mesh_override(monkeypatch):
 
 def test_from_env_json_blob_then_scalar_wins():
     env = {
-        "MESHSA_CONFIG_JSON": json.dumps({"uid": "x", "callsign": "OLD",
-                                          "pli_interval_s": 99}),
+        "MESHSA_CONFIG_JSON": json.dumps({"uid": "x", "callsign": "OLD", "pli_interval_s": 99}),
         "MESHSA_CALLSIGN": "NEW",
     }
     c = NodeConfig.from_env(env)
-    assert c.callsign == "NEW"      # scalar override beats blob
-    assert c.pli_interval_s == 99   # blob value retained
+    assert c.callsign == "NEW"  # scalar override beats blob
+    assert c.pli_interval_s == 99  # blob value retained
 
 
 def test_from_file(tmp_path):

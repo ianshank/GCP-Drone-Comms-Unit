@@ -1,9 +1,14 @@
 import asyncio
 
-import pytest
-
-from meshsa import (Envelope, JsonCodec, LoopbackBus, LoopbackTransport,
-                    MessageKind, Router, RouterConfig)
+from meshsa import (
+    Envelope,
+    JsonCodec,
+    LoopbackBus,
+    LoopbackTransport,
+    MessageKind,
+    Router,
+    RouterConfig,
+)
 
 
 def _env(mid: str) -> Envelope:
@@ -52,8 +57,8 @@ async def test_dedupe_cache_evicts_oldest():
     assert r._mark_seen("a") is True
     assert r._mark_seen("b") is True
     assert r._mark_seen("a") is False
-    r._mark_seen("c")          # evicts "a"
-    assert r._mark_seen("a") is True   # seen again after eviction
+    r._mark_seen("c")  # evicts "a"
+    assert r._mark_seen("a") is True  # seen again after eviction
 
 
 async def test_async_subscriber_supported():

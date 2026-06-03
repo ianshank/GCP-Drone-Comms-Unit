@@ -8,10 +8,12 @@ framing/reconnect/bridge logic is tested with fakes; only the real socket builde
 are ``# pragma: no cover``. Nothing is hard-coded — host/port/group/read-size/
 delimiter and the backoff schedule all come from config options.
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable, Protocol
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol
 
 import structlog
 
@@ -52,6 +54,7 @@ SleepFn = Callable[[float], Awaitable[None]]
 def _default_connector(host: str, port: int) -> Connector:  # pragma: no cover - real network
     async def connect() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         return await asyncio.open_connection(host, port)
+
     return connect
 
 
@@ -180,8 +183,9 @@ class DatagramIO(Protocol):
     def close(self) -> None: ...
 
 
-def _default_multicast_io(group: str, port: int,
-                          iface: str) -> DatagramIO:  # pragma: no cover - real socket
+def _default_multicast_io(
+    group: str, port: int, iface: str
+) -> DatagramIO:  # pragma: no cover - real socket
     import socket
 
     class _MIO:

@@ -1,5 +1,6 @@
 """Pydantic data models. Operational defaults live in :mod:`meshsa.config`,
 never inline here, so behaviour is configuration-driven."""
+
 from __future__ import annotations
 
 import enum

@@ -15,6 +15,7 @@ Wire layout (big-endian):
     other body      : u16 len | compact-JSON(payload)
   str = u8 length + UTF-8 bytes (<=255).
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,7 @@ from .models import Envelope, MessageKind, NodeTier
 from .registry import codec_registry
 from .version import is_compatible
 
-_KINDS = [k.value for k in MessageKind]      # index == wire kind byte
+_KINDS = [k.value for k in MessageKind]  # index == wire kind byte
 _TIERS = [t.value for t in NodeTier]
 _LATLON_SCALE = 1e7
 _U16_MAX = 0xFFFF
@@ -43,7 +44,7 @@ def _put_str(buf: bytearray, s: str) -> None:
 def _get_str(data: bytes, off: int) -> tuple[str, int]:
     n = data[off]
     off += 1
-    return data[off:off + n].decode("utf-8"), off + n
+    return data[off : off + n].decode("utf-8"), off + n
 
 
 def _clamp_u16(v: float) -> int:
@@ -74,8 +75,9 @@ class CompactCodec:
                 int(round(pos.get("lon", 0.0) * _LATLON_SCALE)),
                 int(round(pos.get("hae", 0.0))),
             )
-            out += struct.pack(">HH", _clamp_u16(pos.get("ce", _U16_MAX)),
-                               _clamp_u16(pos.get("le", _U16_MAX)))
+            out += struct.pack(
+                ">HH", _clamp_u16(pos.get("ce", _U16_MAX)), _clamp_u16(pos.get("le", _U16_MAX))
+            )
             _put_str(out, str(node.get("callsign", envelope.source_uid)))
             tier = str(node.get("tier", _TIERS[0]))
             out.append(_TIERS.index(tier) if tier in _TIERS else 0)
@@ -109,28 +111,37 @@ class CompactCodec:
                 callsign, off = _get_str(data, off)
                 tier_idx = data[off]
                 payload = {
-                    "node": {"uid": source_uid, "callsign": callsign,
-                             "tier": _TIERS[tier_idx]},
-                    "position": {"lat": lat_e7 / _LATLON_SCALE,
-                                 "lon": lon_e7 / _LATLON_SCALE,
-                                 "hae": float(hae), "ce": float(ce), "le": float(le)},
+                    "node": {"uid": source_uid, "callsign": callsign, "tier": _TIERS[tier_idx]},
+                    "position": {
+                        "lat": lat_e7 / _LATLON_SCALE,
+                        "lon": lon_e7 / _LATLON_SCALE,
+                        "hae": float(hae),
+                        "ce": float(ce),
+                        "le": float(le),
+                    },
                 }
             elif kind == MessageKind.CHAT:
                 to, off = _get_str(data, off)
                 tlen = struct.unpack_from(">H", data, off)[0]
                 off += 2
-                text = data[off:off + tlen].decode("utf-8")
+                text = data[off : off + tlen].decode("utf-8")
                 payload = {"text": text, "to": to or None}
             else:
                 blen = struct.unpack_from(">H", data, off)[0]
                 off += 2
-                payload = json.loads(data[off:off + blen].decode("utf-8"))
+                payload = json.loads(data[off : off + blen].decode("utf-8"))
         except IncompatibleSchemaError:
             raise
         except Exception as exc:
             raise MeshSAError(f"undecodable compact frame: {exc}") from exc
-        return Envelope(schema_version=schema, msg_id=msg_id, ts=float(ts),
-                        source_uid=source_uid, kind=kind, payload=payload)
+        return Envelope(
+            schema_version=schema,
+            msg_id=msg_id,
+            ts=float(ts),
+            source_uid=source_uid,
+            kind=kind,
+            payload=payload,
+        )
 
 
 @codec_registry.register("compact")

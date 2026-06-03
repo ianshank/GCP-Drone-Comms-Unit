@@ -5,13 +5,14 @@ Maps our :class:`Envelope` to/from CoT XML events. PLI envelopes become position
 tracks; CHAT envelopes become GeoChat events. All CoT-specific values (event
 types, ``how``, stale window) are constructor parameters — nothing is hard-coded.
 """
+
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 from .errors import MeshSAError
-from .models import MessageKind, Envelope
+from .models import Envelope, MessageKind
 from .registry import codec_registry
 from .version import SCHEMA_VERSION
 
@@ -51,19 +52,31 @@ class CotCodec:
         return self._encode_pli(envelope)
 
     def _event(self, uid: str, etype: str, ts: float) -> ET.Element:
-        ev = ET.Element("event", version=self.cot_version, uid=uid, type=etype,
-                        how=self.how, time=_iso(ts), start=_iso(ts),
-                        stale=_iso(ts + self.stale_s))
+        ev = ET.Element(
+            "event",
+            version=self.cot_version,
+            uid=uid,
+            type=etype,
+            how=self.how,
+            time=_iso(ts),
+            start=_iso(ts),
+            stale=_iso(ts + self.stale_s),
+        )
         return ev
 
     def _encode_pli(self, env: Envelope) -> bytes:
         node = env.payload.get("node", {})
         pos = env.payload.get("position", {})
         ev = self._event(env.source_uid, self.pli_type, env.ts)
-        ET.SubElement(ev, "point",
-                      lat=str(pos.get("lat", 0.0)), lon=str(pos.get("lon", 0.0)),
-                      hae=str(pos.get("hae", 0.0)), ce=str(pos.get("ce", 9999999.0)),
-                      le=str(pos.get("le", 9999999.0)))
+        ET.SubElement(
+            ev,
+            "point",
+            lat=str(pos.get("lat", 0.0)),
+            lon=str(pos.get("lon", 0.0)),
+            hae=str(pos.get("hae", 0.0)),
+            ce=str(pos.get("ce", 9999999.0)),
+            le=str(pos.get("le", 9999999.0)),
+        )
         detail = ET.SubElement(ev, "detail")
         ET.SubElement(detail, "contact", callsign=str(node.get("callsign", env.source_uid)))
         ET.SubElement(detail, "__group", name=str(node.get("tier", "")), role="Team Member")
@@ -72,13 +85,17 @@ class CotCodec:
     def _encode_chat(self, env: Envelope) -> bytes:
         text = env.payload.get("text", "")
         ev = self._event(env.msg_id, self.chat_type, env.ts)
-        ET.SubElement(ev, "point", lat="0.0", lon="0.0", hae="0.0",
-                      ce="9999999.0", le="9999999.0")
+        ET.SubElement(ev, "point", lat="0.0", lon="0.0", hae="0.0", ce="9999999.0", le="9999999.0")
         detail = ET.SubElement(ev, "detail")
-        chat = ET.SubElement(detail, "__chat", senderCallsign=env.source_uid,
-                             id=str(env.payload.get("to") or "All Chat Rooms"))
-        ET.SubElement(chat, "chatgrp", uid0=env.source_uid,
-                      uid1=str(env.payload.get("to") or "All"))
+        chat = ET.SubElement(
+            detail,
+            "__chat",
+            senderCallsign=env.source_uid,
+            id=str(env.payload.get("to") or "All Chat Rooms"),
+        )
+        ET.SubElement(
+            chat, "chatgrp", uid0=env.source_uid, uid1=str(env.payload.get("to") or "All")
+        )
         ET.SubElement(detail, "remarks").text = text
         return ET.tostring(ev)
 
@@ -99,10 +116,14 @@ class CotCodec:
             text = ""
             if detail is not None and detail.find("remarks") is not None:
                 text = detail.find("remarks").text or ""
-            return Envelope(schema_version=SCHEMA_VERSION,
-                            msg_id=f"{uid}:{ev.attrib.get('time','')}", ts=ts,
-                            source_uid=uid, kind=MessageKind.CHAT,
-                            payload={"text": text, "to": None})
+            return Envelope(
+                schema_version=SCHEMA_VERSION,
+                msg_id=f"{uid}:{ev.attrib.get('time', '')}",
+                ts=ts,
+                source_uid=uid,
+                kind=MessageKind.CHAT,
+                payload={"text": text, "to": None},
+            )
 
         pt = ev.find("point")
         pos = {"lat": 0.0, "lon": 0.0, "hae": 0.0, "ce": 9999999.0, "le": 9999999.0}
@@ -114,11 +135,14 @@ class CotCodec:
         if detail is not None and detail.find("contact") is not None:
             callsign = detail.find("contact").attrib.get("callsign", uid)
         kind = MessageKind.PLI if etype.startswith("a-") else MessageKind.MARKER
-        return Envelope(schema_version=SCHEMA_VERSION,
-                        msg_id=f"{uid}:{ev.attrib.get('time','')}", ts=ts,
-                        source_uid=uid, kind=kind,
-                        payload={"node": {"uid": uid, "callsign": callsign},
-                                 "position": pos})
+        return Envelope(
+            schema_version=SCHEMA_VERSION,
+            msg_id=f"{uid}:{ev.attrib.get('time', '')}",
+            ts=ts,
+            source_uid=uid,
+            kind=kind,
+            payload={"node": {"uid": uid, "callsign": callsign}, "position": pos},
+        )
 
 
 @codec_registry.register("cot")

@@ -1,10 +1,12 @@
 """Configuration models. Every operational value is a field with an explicit,
 overridable default — there are no magic numbers buried in the code."""
+
 from __future__ import annotations
 
 import json
 import os
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -43,17 +45,18 @@ class NodeConfig(BaseModel):
     transports: list[TransportConfig] = Field(default_factory=list)
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "NodeConfig":
+    def from_mapping(cls, data: Mapping[str, Any]) -> NodeConfig:
         return cls.model_validate(dict(data))
 
     @classmethod
-    def from_file(cls, path: str) -> "NodeConfig":
-        with open(path, "r", encoding="utf-8") as fh:
+    def from_file(cls, path: str) -> NodeConfig:
+        with open(path, encoding="utf-8") as fh:
             return cls.from_mapping(json.load(fh))
 
     @classmethod
-    def from_env(cls, environ: Mapping[str, str] | None = None,
-                 prefix: str = "MESHSA_") -> "NodeConfig":
+    def from_env(
+        cls, environ: Mapping[str, str] | None = None, prefix: str = "MESHSA_"
+    ) -> NodeConfig:
         """Build config from environment variables; a ``<prefix>CONFIG_JSON``
         blob is merged first, then individual scalar overrides are applied."""
         env = dict(os.environ if environ is None else environ)

@@ -3,11 +3,13 @@
 Everything the core needs from the outside world is a ``Protocol`` here, so the
 router/node can be assembled with real or fake implementations without changes.
 """
+
 from __future__ import annotations
 
 import time
 import uuid
-from typing import AsyncIterator, Protocol, runtime_checkable
+from collections.abc import AsyncIterator
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -28,8 +30,8 @@ class Codec(Protocol):
 
     name: str
 
-    def encode(self, envelope: "object") -> bytes: ...
-    def decode(self, data: bytes) -> "object": ...
+    def encode(self, envelope: object) -> bytes: ...
+    def decode(self, data: bytes) -> object: ...
 
 
 @runtime_checkable

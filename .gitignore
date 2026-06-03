@@ -1,11 +1,31 @@
-﻿venv/
-.venv/
+﻿# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Test / coverage / type / lint caches
 .pytest_cache/
 .coverage
-*.egg-info/
-dist/
-build/
+.coverage.*
+htmlcov/
 .mypy_cache/
 .ruff_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local env files
+*.env
+!*.env.example
+
+# Build outputs
+*.whl
+*.tar.gz

@@ -1,5 +1,6 @@
 """Default JSON codec. A CoT/XML codec can be added later via ``codec_registry``
 without touching the router."""
+
 from __future__ import annotations
 
 from .errors import IncompatibleSchemaError, MeshSAError
@@ -20,9 +21,7 @@ class JsonCodec:
         except Exception as exc:  # malformed wire data
             raise MeshSAError(f"undecodable envelope: {exc}") from exc
         if not is_compatible(envelope.schema_version):
-            raise IncompatibleSchemaError(
-                f"schema {envelope.schema_version} not supported"
-            )
+            raise IncompatibleSchemaError(f"schema {envelope.schema_version} not supported")
         return envelope
 
 

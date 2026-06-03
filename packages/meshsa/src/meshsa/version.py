@@ -3,6 +3,7 @@
 Backward compatibility is anchored here: every Envelope carries ``schema_version``
 and peers accept any version in ``[MIN_COMPATIBLE_SCHEMA, SCHEMA_VERSION]``.
 """
+
 from __future__ import annotations
 
 __version__ = "0.1.0"

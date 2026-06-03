@@ -1,9 +1,10 @@
 """Shared transport plumbing: an inbound queue plus an async ``stream``."""
+
 from __future__ import annotations
 
 import abc
 import asyncio
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 
 class AbstractTransport(abc.ABC):

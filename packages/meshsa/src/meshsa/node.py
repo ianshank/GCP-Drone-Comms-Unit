@@ -1,5 +1,6 @@
 """Node assembly: turns a :class:`NodeConfig` into a runnable node by wiring
 transports (via the registry), a codec, and the router together."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,8 +9,7 @@ import structlog
 
 from .codec import JsonCodec
 from .config import NodeConfig
-from .models import (ChatPayload, Envelope, MessageKind, NodeInfo, PliPayload,
-                     Position)
+from .models import ChatPayload, Envelope, MessageKind, NodeInfo, PliPayload, Position
 from .protocols import Clock, Codec, IdFactory, SystemClock, UuidFactory
 from .registry import Registry, codec_registry, transport_registry
 from .router import Handler, Router
@@ -46,8 +46,9 @@ class Node:
         )
 
     async def publish_position(self, position: Position) -> Envelope:
-        env = self._envelope(MessageKind.PLI,
-                             PliPayload(node=self.info, position=position).model_dump())
+        env = self._envelope(
+            MessageKind.PLI, PliPayload(node=self.info, position=position).model_dump()
+        )
         await self.router.publish(env)
         return env
 
@@ -89,8 +90,8 @@ def build_node(
         if tc.codec is not None:
             codecs[tc.name] = codec_registry.create(tc.codec, **tc.codec_options)
 
-    router = Router(transports, codec, clock=clock, id_factory=id_factory,
-                    config=config.router, codecs=codecs)
+    router = Router(
+        transports, codec, clock=clock, id_factory=id_factory, config=config.router, codecs=codecs
+    )
     info = NodeInfo(uid=config.uid, callsign=config.callsign, tier=config.tier)
-    return Node(config=config, router=router, info=info, clock=clock,
-                id_factory=id_factory)
+    return Node(config=config, router=router, info=info, clock=clock, id_factory=id_factory)

@@ -3,9 +3,11 @@
 New transports and codecs register themselves here, so adding a medium never
 requires editing the core (forward/backward compatible by construction).
 """
+
 from __future__ import annotations
 
-from typing import Callable, Generic, TypeVar
+from collections.abc import Callable
+from typing import Generic, TypeVar
 
 from .errors import DuplicateRegistrationError, UnknownComponentError
 
@@ -40,5 +42,5 @@ class Registry(Generic[T]):
         return sorted(self._factories)
 
 
-transport_registry: "Registry" = Registry("transport")
-codec_registry: "Registry" = Registry("codec")
+transport_registry: Registry = Registry("transport")
+codec_registry: Registry = Registry("codec")

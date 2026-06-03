@@ -109,12 +109,13 @@ publishes a position — JSON reaches the mesh peer, CoT reaches the FTS writer 
 an inbound CoT event from the server is bridged back onto the mesh as JSON.
 
 ## Runnable field example (real hardware)
-`examples/base_node.py` wires a **real** T-Beam (Meshtastic over USB) to a **real**
+`src/meshsa/examples/base_node.py` wires a **real** T-Beam (Meshtastic over USB) to a **real**
 FreeTAKServer (no fakes) and runs the JSON-mesh <-> CoT-TAK bridge, broadcasting its
-own position on an interval. Install `meshtastic` and `pypubsub` alongside `meshsa`,
-then:
+own position on an interval. Install with the meshtastic extra, then run the
+installed console script:
 
-    python examples/base_node.py --port /dev/ttyUSB0 --fts-host 127.0.0.1 \
+    pip install -e ".[meshtastic]"
+    meshsa-base --port /dev/ttyUSB0 --fts-host 127.0.0.1 \
         --lat 37.0 --lon -122.0 --callsign BASE1
 
 All flags also read from the environment (`MESHSA_PORT`, `MESHSA_FTS_HOST`, ...);

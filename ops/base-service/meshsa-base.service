@@ -14,10 +14,11 @@ User=meshsa
 Group=dialout                       # serial access to the T-Beam (/dev/ttyUSB*)
 EnvironmentFile=/etc/meshsa/base.env
 WorkingDirectory=/opt/meshsa
-ExecStart=/opt/meshsa/venv/bin/python /opt/meshsa/base_node.py
+ExecStart=/opt/meshsa/venv/bin/meshsa-base
 Restart=always
 RestartSec=3
-TimeoutStopSec=10                   # base_node handles SIGTERM for a clean stop
+KillSignal=SIGINT                   # asyncio cleanup on stop
+TimeoutStopSec=10                   # base_node handles SIGINT/SIGTERM for a clean stop
 
 # --- light hardening ---
 NoNewPrivileges=true

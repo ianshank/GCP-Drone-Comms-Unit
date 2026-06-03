@@ -10,11 +10,11 @@ sudo mkdir -p /opt/meshsa && sudo chown meshsa:meshsa /opt/meshsa
 
 # copy the framework + example into place (from this repo's packages/meshsa/)
 sudo -u meshsa cp -r packages/meshsa /opt/meshsa/meshsa
-sudo -u meshsa cp /opt/meshsa/meshsa/examples/base_node.py /opt/meshsa/base_node.py
 
 # venv with the framework and the radio libs
 sudo -u meshsa python3 -m venv /opt/meshsa/venv
 sudo -u meshsa /opt/meshsa/venv/bin/pip install -e "/opt/meshsa/meshsa[meshtastic]"
+# the install creates a `meshsa-base` console script in /opt/meshsa/venv/bin/
 ```
 
 ## 2. Configuration

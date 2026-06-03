@@ -19,6 +19,7 @@ Run:
 Every value can also come from the environment (MESHSA_PORT, MESHSA_FTS_HOST, ...);
 CLI flags win. Stop with Ctrl-C.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,10 +40,13 @@ def _env(key: str, default: str | None = None) -> str | None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Meshtastic <-> FreeTAKServer bridge node")
-    p.add_argument("--port", default=_env("PORT", "/dev/ttyUSB0"),
-                   help="T-Beam serial device")
-    p.add_argument("--portnum", type=int, default=int(_env("PORTNUM", "256")),
-                   help="Meshtastic app portnum (default 256 / PRIVATE_APP)")
+    p.add_argument("--port", default=_env("PORT", "/dev/ttyUSB0"), help="T-Beam serial device")
+    p.add_argument(
+        "--portnum",
+        type=int,
+        default=int(_env("PORTNUM", "256")),
+        help="Meshtastic app portnum (default 256 / PRIVATE_APP)",
+    )
     p.add_argument("--region", default=_env("MESH_REGION", "US"))
     p.add_argument("--fts-host", default=_env("FTS_HOST", "127.0.0.1"))
     p.add_argument("--fts-port", type=int, default=int(_env("FTS_PORT", "8087")))
@@ -50,56 +54,68 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--callsign", default=_env("CALLSIGN", "BASE1"))
     p.add_argument("--lat", type=float, default=float(_env("LAT", "0.0")))
     p.add_argument("--lon", type=float, default=float(_env("LON", "0.0")))
-    p.add_argument("--interval", type=float, default=float(_env("PLI_INTERVAL_S", "30")),
-                   help="seconds between own-position broadcasts")
-    p.add_argument("--stale", type=float, default=float(_env("COT_STALE_S", "120")),
-                   help="CoT stale window in seconds")
-    p.add_argument("--tcp-delimiter", default=_env("TCP_DELIMITER", ""),
-                   help="bytes appended to each CoT frame on TCP (e.g. '\\n')")
+    p.add_argument(
+        "--interval",
+        type=float,
+        default=float(_env("PLI_INTERVAL_S", "30")),
+        help="seconds between own-position broadcasts",
+    )
+    p.add_argument(
+        "--stale",
+        type=float,
+        default=float(_env("COT_STALE_S", "120")),
+        help="CoT stale window in seconds",
+    )
+    p.add_argument(
+        "--tcp-delimiter",
+        default=_env("TCP_DELIMITER", ""),
+        help="bytes appended to each CoT frame on TCP (e.g. '\\n')",
+    )
     return p.parse_args()
 
 
 def build_config(args: argparse.Namespace) -> NodeConfig:
-    return NodeConfig.from_mapping({
-        "uid": args.uid,
-        "callsign": args.callsign,
-        "tier": "base",
-        "pli_interval_s": args.interval,
-        "default_stale_s": args.stale,
-        "mesh": {"region": args.region},
-        "transports": [
-            {
-                "name": "mesh",
-                "type": "meshtastic",
-                "codec": "compact",          # LoRa-sized binary; JSON won't fit a packet
-                "options": {
-                    "connection": "serial",
-                    "port": args.port,
-                    "portnum": args.portnum,
+    return NodeConfig.from_mapping(
+        {
+            "uid": args.uid,
+            "callsign": args.callsign,
+            "tier": "base",
+            "pli_interval_s": args.interval,
+            "default_stale_s": args.stale,
+            "mesh": {"region": args.region},
+            "transports": [
+                {
+                    "name": "mesh",
+                    "type": "meshtastic",
+                    "codec": "compact",  # LoRa-sized binary; JSON won't fit a packet
+                    "options": {
+                        "connection": "serial",
+                        "port": args.port,
+                        "portnum": args.portnum,
+                    },
                 },
-            },
-            {
-                "name": "tak",
-                "type": "tak_tcp",
-                "codec": "cot",
-                "options": {
-                    "host": args.fts_host,
-                    "port": args.fts_port,
-                    "delimiter": args.tcp_delimiter.encode().decode("unicode_escape").encode(),
-                    "reconnect": True,
+                {
+                    "name": "tak",
+                    "type": "tak_tcp",
+                    "codec": "cot",
+                    "options": {
+                        "host": args.fts_host,
+                        "port": args.fts_port,
+                        "delimiter": args.tcp_delimiter.encode().decode("unicode_escape").encode(),
+                        "reconnect": True,
+                    },
+                    "codec_options": {"stale_s": args.stale},
                 },
-                "codec_options": {"stale_s": args.stale},
-            },
-        ],
-    })
+            ],
+        }
+    )
 
 
 async def run(args: argparse.Namespace) -> None:
     node = build_node(build_config(args))
 
     def on_message(env) -> None:
-        log.info("rx", kind=env.kind.value, src=env.source_uid,
-                 payload=env.payload)
+        log.info("rx", kind=env.kind.value, src=env.source_uid, payload=env.payload)
 
     node.on_message(on_message)
 
@@ -112,8 +128,7 @@ async def run(args: argparse.Namespace) -> None:
             pass
 
     await node.start()
-    log.info("bridge up", uid=args.uid, mesh_port=args.port,
-             fts=f"{args.fts_host}:{args.fts_port}")
+    log.info("bridge up", uid=args.uid, mesh_port=args.port, fts=f"{args.fts_host}:{args.fts_port}")
     try:
         while not stop.is_set():
             await node.publish_position(Position(lat=args.lat, lon=args.lon))

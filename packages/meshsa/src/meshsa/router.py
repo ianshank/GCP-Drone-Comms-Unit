@@ -11,12 +11,13 @@ All collaborators are injected, so it is fully testable without a network.
 Backward compatible: with no ``codecs`` map every transport uses the single
 default codec, exactly as before.
 """
+
 from __future__ import annotations
 
 import asyncio
 import collections
 import inspect
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import structlog
 
@@ -50,7 +51,7 @@ class Router:
         self.clock = clock or SystemClock()
         self.id_factory = id_factory or UuidFactory()
         self.config = config or RouterConfig()
-        self._seen: "collections.OrderedDict[str, bool]" = collections.OrderedDict()
+        self._seen: collections.OrderedDict[str, bool] = collections.OrderedDict()
         self._subscribers: list[Handler] = []
         self._tasks: list[asyncio.Task] = []
 

@@ -1,8 +1,16 @@
 import pytest
 
-from meshsa import (DuplicateRegistrationError, Envelope, IncompatibleSchemaError,
-                    JsonCodec, MeshSAError, MessageKind, Registry,
-                    UnknownComponentError, transport_registry)
+from meshsa import (
+    DuplicateRegistrationError,
+    Envelope,
+    IncompatibleSchemaError,
+    JsonCodec,
+    MeshSAError,
+    MessageKind,
+    Registry,
+    UnknownComponentError,
+    transport_registry,
+)
 from meshsa.version import SCHEMA_VERSION
 
 
@@ -34,15 +42,17 @@ def test_builtin_transports_registered():
 
 def test_codec_roundtrip():
     codec = JsonCodec()
-    env = Envelope(msg_id="m1", ts=1.0, source_uid="u", kind=MessageKind.CHAT,
-                   payload={"text": "hi"})
+    env = Envelope(
+        msg_id="m1", ts=1.0, source_uid="u", kind=MessageKind.CHAT, payload={"text": "hi"}
+    )
     assert codec.decode(codec.encode(env)) == env
 
 
 def test_codec_rejects_incompatible_schema():
     codec = JsonCodec()
-    bad = Envelope(schema_version=SCHEMA_VERSION + 5, msg_id="m", ts=1.0,
-                   source_uid="u", kind=MessageKind.PLI)
+    bad = Envelope(
+        schema_version=SCHEMA_VERSION + 5, msg_id="m", ts=1.0, source_uid="u", kind=MessageKind.PLI
+    )
     with pytest.raises(IncompatibleSchemaError):
         codec.decode(codec.encode(bad))
 
@@ -54,6 +64,7 @@ def test_codec_rejects_garbage():
 
 def test_codec_via_registry():
     from meshsa import codec_registry
+
     codec = codec_registry.create("json")
     assert codec.name == "json"
 
