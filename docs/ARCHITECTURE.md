@@ -19,22 +19,26 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 
 | Module                          | Purpose                                                              |
 |---------------------------------|----------------------------------------------------------------------|
-| `meshsa.version`                | `SCHEMA_VERSION`, `MIN_COMPATIBLE_SCHEMA`, `is_compatible()`         |
+| `meshsa.version`                | `SCHEMA_VERSION`, `MIN_COMPATIBLE_SCHEMA`, `is_compatible()`, `SUPPORTED_SCHEMAS`, `warn_deprecated()` |
 | `meshsa.errors`                 | Exception hierarchy rooted at `MeshSAError`                          |
 | `meshsa.protocols`              | `Transport`, `Codec`, `Clock`, `IdFactory` Protocols + defaults      |
-| `meshsa.models`                 | `Position`, `NodeInfo`, `Envelope`, `PliPayload`, `ChatPayload`      |
-| `meshsa.config`                 | `NodeConfig`, `MeshConfig`, `RouterConfig`, `TransportConfig`        |
+| `meshsa.models`                 | `Position`, `NodeInfo`, `Envelope`, `PliPayload`, `ChatPayload`, `UNKNOWN_ERROR_M` |
+| `meshsa.config`                 | `NodeConfig`, `MeshConfig`, `RouterConfig`, `HealthConfig`, `TransportConfig` |
 | `meshsa.registry`               | Generic `Registry[T]`; `transport_registry`, `codec_registry`        |
-| `meshsa.codec`                  | `JsonCodec` (Envelope <-> bytes)                                     |
+| `meshsa.plugins`                | `load_plugins()` — opt-in entry-point discovery of out-of-tree drivers |
+| `meshsa.codec`                  | `JsonCodec` (Envelope <-> bytes); per-codec `supported_schemas`      |
 | `meshsa.compact`                | `CompactCodec` (LoRa-sized binary, ~40 B)                            |
-| `meshsa.cot`                    | `CotCodec` (ATAK / TAK Cursor-on-Target XML)                         |
-| `meshsa.router`                 | Async broker: dedupe, bridge, per-transport codec selection         |
-| `meshsa.node`                   | `Node` dataclass + `build_node(config)` factory                      |
-| `meshsa.transports.base`        | `AbstractTransport` (async inbox, `stream()`, `send()`)              |
+| `meshsa.cot`                    | `CotCodec` (ATAK / TAK Cursor-on-Target XML; schema-agnostic)       |
+| `meshsa.router`                 | Async broker: dedupe, bridge, per-transport codec selection; `RouterMetrics` |
+| `meshsa.metrics`                | `RouterMetrics` counters (rx/tx/forwarded/dropped/schema-mismatch)  |
+| `meshsa.health`                 | `health_snapshot()` + opt-in `/healthz` aiohttp listener (`[health]`) |
+| `meshsa.node`                   | `Node` dataclass + `build_node(config)` factory (codec-instance injection) |
+| `meshsa.cli`                    | `meshsa-base` console entry point (argparse/build_config/run)        |
+| `meshsa.transports.base`        | `AbstractTransport` (async inbox, bounded drop-newest, `stream()`)  |
 | `meshsa.transports.loopback`    | `LoopbackBus`, `LoopbackTransport`, `NullTransport`                  |
-| `meshsa.transports.meshtastic_radio` | Real Meshtastic (USB / TCP / BLE) with reconnect supervisor    |
+| `meshsa.transports.meshtastic_radio` | Real Meshtastic (USB / TCP / BLE), reconnect supervisor + mesh provisioning |
 | `meshsa.transports.tak`         | `TakTcpTransport`, `TakMulticastTransport` for FreeTAKServer / ATAK  |
-| `meshsa.examples.base_node`     | Field-runnable bridge (`meshsa-base` console script)                 |
+| `meshsa.examples.base_node`     | Thin re-export of `meshsa.cli` (demonstrative only)                 |
 
 ## Patterns
 
