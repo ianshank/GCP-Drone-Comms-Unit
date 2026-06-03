@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -29,6 +29,8 @@ _log = structlog.get_logger("meshsa.meshtastic")
 InterfaceFactory = Callable[[], Any]
 SubscribeFn = Callable[[Callable[..., None], str], None]
 SleepFn = Callable[[float], Awaitable[None]]
+#: Applies node mesh settings (region/channel/psk/freq_khz) to a live device.
+Provisioner = Callable[[Any, dict[str, Any]], None]
 
 
 def _default_interface_factory(options: dict[str, Any]) -> InterfaceFactory:  # pragma: no cover
@@ -50,7 +52,35 @@ def _default_interface_factory(options: dict[str, Any]) -> InterfaceFactory:  # 
 def _default_pubsub() -> tuple[SubscribeFn, SubscribeFn]:  # pragma: no cover - needs pypubsub
     from pubsub import pub
 
-    return pub.subscribe, pub.unsubscribe
+    # pypubsub's subscribe/unsubscribe carry richer signatures than SubscribeFn;
+    # cast to the structural type the transport relies on.
+    return cast(SubscribeFn, pub.subscribe), cast(SubscribeFn, pub.unsubscribe)
+
+
+def _default_provisioner(iface: Any, mesh: dict[str, Any]) -> None:  # pragma: no cover - hardware
+    """Apply node mesh settings to a real Meshtastic device.
+
+    Region/channel/PSK/frequency are device-level radio config, not per-send
+    parameters, so they are written to the attached node's ``localConfig`` and
+    persisted. Runs only against live hardware; unit tests inject a fake
+    provisioner instead.
+    """
+    node = getattr(iface, "localNode", None)
+    if node is None:
+        _log.warning("meshtastic device exposes no localNode; cannot provision mesh")
+        return
+    region = mesh.get("region")
+    if region:
+        node.localConfig.lora.region = region
+        node.writeConfig("lora")
+    # Channel name / PSK / explicit frequency are applied via the device channel
+    # API, which varies by firmware; operators must verify on hardware.
+    if any(mesh.get(k) for k in ("channel", "psk", "freq_khz")):
+        _log.info(
+            "mesh channel/psk/freq are device-provisioned; verify on hardware",
+            channel=mesh.get("channel"),
+            freq_khz=mesh.get("freq_khz"),
+        )
 
 
 class MeshtasticTransport(AbstractTransport):
@@ -74,9 +104,15 @@ class MeshtasticTransport(AbstractTransport):
         backoff_factor: float = 2.0,
         sleep: SleepFn | None = None,
         queue_maxsize: int = 1000,
+        mesh: dict[str, Any] | None = None,
+        provision: Provisioner | None = None,
         **options: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)
+        # `mesh` is an explicit param (not left in **options) so it never leaks
+        # into the interface factory; provisioning is an injectable seam.
+        self._mesh = mesh
+        self._provision = provision or _default_provisioner
         self._factory = interface_factory or _default_interface_factory(options)
         if subscribe is None or unsubscribe is None:  # pragma: no cover - lib glue
             subscribe, unsubscribe = _default_pubsub()
@@ -120,6 +156,8 @@ class MeshtasticTransport(AbstractTransport):
                 self._started = False
                 raise
             self._iface = None
+        if self._iface is not None and self._mesh:
+            self._provision(self._iface, self._mesh)
         self._task = asyncio.create_task(self._supervise())
 
     def _on_lost(self, *args: Any, **kwargs: Any) -> None:

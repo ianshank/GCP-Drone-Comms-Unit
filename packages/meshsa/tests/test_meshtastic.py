@@ -245,3 +245,22 @@ async def test_supervisor_exits_on_stop_flag():
     await _wait(lambda: t._task.done())
     assert t._task.done()
     await t.stop()
+
+
+# ---- mesh device provisioning (Gap A) ----
+async def test_provisioner_called_with_mesh_on_start():
+    iface, pub = FakeIface(), FakePub()
+    seen = []
+    t = _make(
+        iface,
+        pub,
+        sleep=FakeSleep(),
+        mesh={"region": "EU", "channel": "ops", "psk": None, "freq_khz": 906500},
+        provision=lambda dev, mesh: seen.append((dev, mesh)),
+    )
+    await t.start()
+    assert len(seen) == 1
+    dev, mesh = seen[0]
+    assert dev is iface
+    assert mesh["region"] == "EU" and mesh["freq_khz"] == 906500
+    await t.stop()

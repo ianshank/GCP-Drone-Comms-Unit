@@ -10,6 +10,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from .version import SCHEMA_VERSION
 
+#: CoT/TAK "unknown / very large" sentinel for circular/linear error (metres).
+#: Shared so models and the CoT codec agree on a single value.
+UNKNOWN_ERROR_M = 9_999_999.0
+
 
 class NodeTier(str, enum.Enum):
     USER = "user"
@@ -30,8 +34,8 @@ class Position(BaseModel):
     lat: float
     lon: float
     hae: float = 0.0
-    ce: float = 9_999_999.0
-    le: float = 9_999_999.0
+    ce: float = UNKNOWN_ERROR_M
+    le: float = UNKNOWN_ERROR_M
 
     @field_validator("lat")
     @classmethod

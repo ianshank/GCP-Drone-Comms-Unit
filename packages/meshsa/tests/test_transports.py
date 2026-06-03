@@ -21,3 +21,13 @@ async def test_null_transport_drops():
     n = NullTransport(name="n")
     await n.send(b"x")
     assert n._inbox.empty()
+
+
+async def test_inbox_full_drops_newest_and_counts():
+    # Configurable queue_maxsize is now live; a full inbox drops + counts
+    # rather than blocking the reader.
+    t = NullTransport(name="n", queue_maxsize=1)
+    await t._ingest(b"a")  # fills the single slot
+    await t._ingest(b"b")  # full -> dropped, counted
+    assert t.dropped_inbox_full == 1
+    assert t._inbox.qsize() == 1

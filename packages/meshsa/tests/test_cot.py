@@ -110,3 +110,21 @@ def test_decode_without_point_uses_zero_position():
     out = CotCodec().decode(xml)
     assert out.payload["position"]["lat"] == 0.0
     assert out.payload["node"]["callsign"] == "QRU"
+
+
+def test_cot_sentinel_matches_position_default():
+    # The CoT "unknown error" sentinel and the Position ce/le default must stay
+    # in lockstep via the shared UNKNOWN_ERROR_M constant.
+    from meshsa import Position
+    from meshsa.models import UNKNOWN_ERROR_M
+
+    assert Position(lat=0.0, lon=0.0).ce == UNKNOWN_ERROR_M
+    chat = Envelope(
+        msg_id="m",
+        ts=1.0,
+        source_uid="u",
+        kind=MessageKind.CHAT,
+        payload={"text": "hi", "to": None},
+    )
+    xml = CotCodec().encode(chat).decode()
+    assert f'ce="{UNKNOWN_ERROR_M}"' in xml

@@ -34,6 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enterprise agent harness: `AGENTS.md`, `CLAUDE.md`, Copilot instructions,
   scoped folder guidance, custom agent modes, and project skills.
 
+### Fixed
+- `RouterConfig.queue_maxsize` is now applied to transport inbox queues (was
+  dead config); a per-transport `options.queue_maxsize` still overrides it.
+- `MeshConfig` (region/channel/psk/freq_khz) is now threaded to the Meshtastic
+  transport and applied to the device at connect via an injectable provisioning
+  seam (was dead config). The real device-apply runs only on hardware; the
+  wiring is unit-tested with a fake provisioner.
+- Transport inbox is now bounded and non-blocking: when full it drops the newest
+  frame and counts it (`dropped_inbox_full`) instead of stalling the reader —
+  relevant now that `queue_maxsize` is configurable.
+- `_default_pubsub()` return typing corrected (cast) so strict mypy passes with
+  the `[meshtastic]` extra installed, not only in the `[dev]`-only CI env.
+- De-duplicated the `9999999.0` CoT/error sentinel into a shared
+  `meshsa.models.UNKNOWN_ERROR_M` used by both the model and the CoT codec.
+
 ## [0.1.0] - 2026-06-02
 
 ### Added

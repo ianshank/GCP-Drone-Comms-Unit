@@ -85,6 +85,11 @@ def build_node(
             continue
         kwargs = dict(tc.options)
         kwargs["name"] = tc.name
+        # Apply node-level defaults that the transport can override per-config.
+        # setdefault so an explicit per-transport option (or a test override
+        # below) always wins. Non-consumers ignore these via **options/**_.
+        kwargs.setdefault("queue_maxsize", config.router.queue_maxsize)
+        kwargs.setdefault("mesh", config.mesh.model_dump())
         if transport_kwargs and tc.name in transport_kwargs:
             kwargs.update(transport_kwargs[tc.name])
         transports.append(reg.create(tc.type, **kwargs))

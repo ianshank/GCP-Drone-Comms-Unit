@@ -66,3 +66,43 @@ def test_build_node_per_transport_codec():
     node = build_node(cfg)
     assert "tak" in node.router.codecs
     assert node.router.codecs["tak"].stale_s == 60.0
+
+
+def test_router_queue_maxsize_wires_to_transport_inbox():
+    # RouterConfig.queue_maxsize was dead config; build_node now applies it.
+    cfg = NodeConfig(
+        uid="u",
+        callsign="U",
+        router={"queue_maxsize": 7},
+        transports=[{"name": "mesh", "type": "loopback"}],
+    )
+    node = build_node(cfg)
+    assert node.router.transports[0]._inbox.maxsize == 7
+
+
+def test_transport_option_overrides_router_queue_maxsize():
+    cfg = NodeConfig(
+        uid="u",
+        callsign="U",
+        router={"queue_maxsize": 7},
+        transports=[{"name": "mesh", "type": "loopback", "options": {"queue_maxsize": 3}}],
+    )
+    node = build_node(cfg)
+    assert node.router.transports[0]._inbox.maxsize == 3
+
+
+def test_build_node_forwards_mesh_config_to_meshtastic():
+    # MeshConfig was dead config; build_node now threads it to the radio transport.
+    cfg = NodeConfig(
+        uid="u",
+        callsign="U",
+        mesh={"region": "EU", "channel": "ops", "freq_khz": 906500},
+        transports=[{"name": "lora", "type": "meshtastic", "options": {"connection": "serial"}}],
+    )
+    node = build_node(cfg)
+    assert node.router.transports[0]._mesh == {
+        "channel": "ops",
+        "psk": None,
+        "region": "EU",
+        "freq_khz": 906500,
+    }

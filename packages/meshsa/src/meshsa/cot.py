@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .errors import MeshSAError
-from .models import Envelope, MessageKind
+from .models import UNKNOWN_ERROR_M, Envelope, MessageKind
 from .registry import codec_registry
 from .version import SCHEMA_VERSION
 
@@ -75,8 +75,8 @@ class CotCodec:
             lat=str(pos.get("lat", 0.0)),
             lon=str(pos.get("lon", 0.0)),
             hae=str(pos.get("hae", 0.0)),
-            ce=str(pos.get("ce", 9999999.0)),
-            le=str(pos.get("le", 9999999.0)),
+            ce=str(pos.get("ce", UNKNOWN_ERROR_M)),
+            le=str(pos.get("le", UNKNOWN_ERROR_M)),
         )
         detail = ET.SubElement(ev, "detail")
         ET.SubElement(detail, "contact", callsign=str(node.get("callsign", env.source_uid)))
@@ -86,7 +86,15 @@ class CotCodec:
     def _encode_chat(self, env: Envelope) -> bytes:
         text = env.payload.get("text", "")
         ev = self._event(env.msg_id, self.chat_type, env.ts)
-        ET.SubElement(ev, "point", lat="0.0", lon="0.0", hae="0.0", ce="9999999.0", le="9999999.0")
+        ET.SubElement(
+            ev,
+            "point",
+            lat="0.0",
+            lon="0.0",
+            hae="0.0",
+            ce=str(UNKNOWN_ERROR_M),
+            le=str(UNKNOWN_ERROR_M),
+        )
         detail = ET.SubElement(ev, "detail")
         chat = ET.SubElement(
             detail,
@@ -128,7 +136,7 @@ class CotCodec:
             )
 
         pt = ev.find("point")
-        pos = {"lat": 0.0, "lon": 0.0, "hae": 0.0, "ce": 9999999.0, "le": 9999999.0}
+        pos = {"lat": 0.0, "lon": 0.0, "hae": 0.0, "ce": UNKNOWN_ERROR_M, "le": UNKNOWN_ERROR_M}
         if pt is not None:
             for k in pos:
                 if k in pt.attrib:
