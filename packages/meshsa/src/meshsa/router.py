@@ -23,6 +23,8 @@ from collections.abc import Awaitable, Callable
 import structlog
 
 from .config import RouterConfig
+from .errors import IncompatibleSchemaError
+from .metrics import RouterMetrics
 from .models import Envelope
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
 
@@ -52,6 +54,7 @@ class Router:
         self.clock = clock or SystemClock()
         self.id_factory = id_factory or UuidFactory()
         self.config = config or RouterConfig()
+        self.metrics = RouterMetrics()
         self._seen: collections.OrderedDict[str, bool] = collections.OrderedDict()
         self._subscribers: list[Handler] = []
         self._tasks: list[asyncio.Task[None]] = []
@@ -75,6 +78,7 @@ class Router:
         self._mark_seen(envelope.msg_id)
         for transport in self.transports:
             await transport.send(self._codec_for(transport).encode(envelope))
+            self.metrics.tx += 1
 
     async def start(self) -> None:
         for transport in self.transports:
@@ -87,9 +91,15 @@ class Router:
         async for data in source.stream():
             try:
                 envelope = src_codec.decode(data)
-            except Exception:  # drop malformed/incompatible frames
+            except IncompatibleSchemaError:  # known-but-unsupported wire schema
+                self.metrics.schema_mismatch += 1
+                _log.warning("dropped schema-incompatible frame", transport=source.name)
+                continue
+            except Exception:  # malformed / undecodable wire data
+                self.metrics.dropped_undecodable += 1
                 _log.warning("dropped undecodable frame", transport=source.name)
                 continue
+            self.metrics.rx += 1
             if not self._mark_seen(envelope.msg_id):
                 continue
             for handler in list(self._subscribers):
@@ -97,6 +107,7 @@ class Router:
             for transport in self.transports:
                 if transport is not source:
                     await transport.send(self._codec_for(transport).encode(envelope))
+                    self.metrics.forwarded += 1
 
     async def stop(self) -> None:
         for task in self._tasks:

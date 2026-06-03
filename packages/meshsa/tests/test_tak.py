@@ -229,6 +229,7 @@ async def test_tcp_reconnects_after_eof():
     got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
     assert got.startswith(b"<event")
     assert conn.calls == 2
+    assert t.reconnects == 1  # one supervisor-driven reconnection
     await t.stop()
 
 

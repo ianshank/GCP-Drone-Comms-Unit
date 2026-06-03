@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `JsonCodec`/`CompactCodec` gate decode on membership; `CotCodec` is
   schema-agnostic (CoT XML carries no meshsa schema). Additive and
   behavior-preserving — no `SCHEMA_VERSION` bump.
+- Observability: `Router.metrics` (`RouterMetrics`: rx, tx, forwarded,
+  dropped_undecodable, schema_mismatch — the last two split via a dedicated
+  `IncompatibleSchemaError` branch in the pump) and per-transport `reconnects`
+  counters on the Meshtastic and TAK-TCP supervisors.
+- `meshsa.health.health_snapshot(node)` (pure, JSON-able status + metrics) and an
+  opt-in `/healthz` aiohttp listener (`serve_healthz`) behind a new `[health]`
+  extra; `aiohttp` is imported lazily so the module loads without it.
+- `HealthConfig` (`NodeConfig.health`: enabled/host/port).
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.

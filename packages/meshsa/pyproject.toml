@@ -34,6 +34,9 @@ meshtastic = [
     "pypubsub>=4.0",
 ]
 tak = []
+health = [
+    "aiohttp>=3.9",
+]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
@@ -95,7 +98,7 @@ warn_return_any = true
 disallow_untyped_decorators = true
 
 [[tool.mypy.overrides]]
-module = ["meshtastic.*", "pubsub.*", "pypubsub.*"]
+module = ["meshtastic.*", "pubsub.*", "pypubsub.*", "aiohttp.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

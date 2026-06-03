@@ -91,6 +91,8 @@ class TakTcpTransport(AbstractTransport):
         self._task: asyncio.Task[None] | None = None
         self._started = False
         self._stopping = False
+        #: Times the supervisor (re)established the connection (observability).
+        self.reconnects = 0
 
     async def start(self) -> None:
         await super().start()
@@ -119,6 +121,7 @@ class TakTcpTransport(AbstractTransport):
                     backoff = min(backoff * self._backoff_factor, self._backoff_max)
                     continue
                 backoff = self._backoff_initial
+                self.reconnects += 1
             try:
                 await self._read_loop(self._reader)
             except Exception:

@@ -34,6 +34,14 @@ class MeshConfig(BaseModel):
     freq_khz: int | None = None
 
 
+class HealthConfig(BaseModel):
+    """Opt-in /healthz listener (served by ``meshsa.health``)."""
+
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8088
+
+
 class NodeConfig(BaseModel):
     uid: str
     callsign: str
@@ -42,6 +50,7 @@ class NodeConfig(BaseModel):
     default_stale_s: float = 120.0
     mesh: MeshConfig = Field(default_factory=MeshConfig)
     router: RouterConfig = Field(default_factory=RouterConfig)
+    health: HealthConfig = Field(default_factory=HealthConfig)
     transports: list[TransportConfig] = Field(default_factory=list)
 
     @classmethod

@@ -183,6 +183,7 @@ async def test_reconnects_after_connection_lost():
     pub.emit("meshtastic.connection.lost")  # device drop
     await _wait(lambda: fac.calls >= 2)  # supervisor closes i1, rebuilds -> i2
     assert i1.closed and fac.calls == 2
+    assert t.reconnects == 1  # one supervisor-driven reconnection
     await t.stop()
 
 

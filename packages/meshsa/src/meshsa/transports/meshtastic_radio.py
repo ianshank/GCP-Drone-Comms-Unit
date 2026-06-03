@@ -140,6 +140,8 @@ class MeshtasticTransport(AbstractTransport):
         self._started = False
         self._stopping = False
         self._subscribed = False
+        #: Times the supervisor (re)established the interface (observability).
+        self.reconnects = 0
 
     async def start(self) -> None:
         await super().start()
@@ -188,6 +190,7 @@ class MeshtasticTransport(AbstractTransport):
                     backoff = min(backoff * self._backoff_factor, self._backoff_max)
                     continue
                 backoff = self._backoff_initial
+                self.reconnects += 1
                 self._apply_mesh()
             await self._lost.wait()
             self._lost.clear()

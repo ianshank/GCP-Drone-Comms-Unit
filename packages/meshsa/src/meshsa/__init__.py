@@ -2,7 +2,7 @@
 
 from .codec import JsonCodec
 from .compact import CompactCodec
-from .config import MeshConfig, NodeConfig, RouterConfig, TransportConfig
+from .config import HealthConfig, MeshConfig, NodeConfig, RouterConfig, TransportConfig
 from .cot import CotCodec
 from .errors import (
     DuplicateRegistrationError,
@@ -10,6 +10,8 @@ from .errors import (
     MeshSAError,
     UnknownComponentError,
 )
+from .health import health_snapshot
+from .metrics import RouterMetrics
 from .models import ChatPayload, Envelope, MessageKind, NodeInfo, NodeTier, PliPayload, Position
 from .node import Node, build_node
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
@@ -32,6 +34,7 @@ __all__ = [
     "NodeConfig",
     "MeshConfig",
     "RouterConfig",
+    "HealthConfig",
     "TransportConfig",
     "Position",
     "NodeInfo",
@@ -53,6 +56,8 @@ __all__ = [
     "CotCodec",
     "CompactCodec",
     "Router",
+    "RouterMetrics",
+    "health_snapshot",
     "Node",
     "build_node",
     "LoopbackBus",
