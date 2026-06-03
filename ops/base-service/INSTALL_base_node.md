@@ -8,13 +8,13 @@ and a reachable FreeTAKServer.
 sudo useradd -r -s /usr/sbin/nologin -G dialout meshsa   # service account, serial access
 sudo mkdir -p /opt/meshsa && sudo chown meshsa:meshsa /opt/meshsa
 
-# copy the framework + example into place
-sudo -u meshsa unzip meshsa_framework.zip -d /opt/meshsa     # gives /opt/meshsa/meshsa/...
+# copy the framework + example into place (from this repo's packages/meshsa/)
+sudo -u meshsa cp -r packages/meshsa /opt/meshsa/meshsa
 sudo -u meshsa cp /opt/meshsa/meshsa/examples/base_node.py /opt/meshsa/base_node.py
 
 # venv with the framework and the radio libs
 sudo -u meshsa python3 -m venv /opt/meshsa/venv
-sudo -u meshsa /opt/meshsa/venv/bin/pip install -e /opt/meshsa/meshsa meshtastic pypubsub
+sudo -u meshsa /opt/meshsa/venv/bin/pip install -e "/opt/meshsa/meshsa[meshtastic]"
 ```
 
 ## 2. Configuration
