@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CODE_OF_CONDUCT.md`, `SECURITY.md`.
 - `py.typed` marker (PEP 561) so downstream consumers get `meshsa`'s types;
   packaged via `[tool.setuptools.package-data]`.
+- Per-codec `supported_schemas` (`frozenset[int]`): codecs accept the full
+  compatibility window by default (`version.SUPPORTED_SCHEMAS`) but can be built
+  with an explicit set so multiple codec/schema versions can coexist on one node.
+  Additive and behavior-preserving — no `SCHEMA_VERSION` bump.
 - `docs/ARCHITECTURE.md`, `docs/AUDIT_REPORT.md`.
 - `.github/workflows/ci.yml` (matrix py3.10/3.11/3.12), `.github/workflows/release.yml`.
 - `.pre-commit-config.yaml`, `tools/Dockerfile`, `tools/Makefile`.

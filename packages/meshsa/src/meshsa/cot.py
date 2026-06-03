@@ -15,7 +15,7 @@ from typing import Any
 from .errors import MeshSAError
 from .models import UNKNOWN_ERROR_M, Envelope, MessageKind
 from .registry import codec_registry
-from .version import SCHEMA_VERSION
+from .version import SCHEMA_VERSION, SUPPORTED_SCHEMAS
 
 
 def _iso(ts: float) -> str:
@@ -29,6 +29,9 @@ def _parse_ts(iso: str) -> float:
 
 class CotCodec:
     name = "cot"
+    #: CoT carries no meshsa wire schema; it always emits SCHEMA_VERSION on decode.
+    #: Declared for API symmetry with the binary codecs.
+    supported_schemas: frozenset[int] = SUPPORTED_SCHEMAS
 
     def __init__(
         self,
