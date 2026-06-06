@@ -1,4 +1,4 @@
-# jetson-flight-control developer shortcuts.
+# GCP-Drone-Comms-Unit developer shortcuts.
 # Run from the repo root.
 
 PKG := packages/meshsa

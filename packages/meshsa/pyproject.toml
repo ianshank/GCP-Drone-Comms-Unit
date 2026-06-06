@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshsa"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modular framework for a distributable mesh situational-awareness network"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "jetson-flight-control contributors" }]
+authors = [{ name = "GCP-Drone-Comms-Unit contributors" }]
 keywords = ["mesh", "situational-awareness", "meshtastic", "tak", "atak", "lora"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -59,9 +59,9 @@ dev = [
 meshsa-base = "meshsa.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/your-org/jetson-flight-control"
-Source = "https://github.com/your-org/jetson-flight-control"
-Issues = "https://github.com/your-org/jetson-flight-control/issues"
+Homepage = "https://github.com/ianshank/GCP-Drone-Comms-Unit"
+Source = "https://github.com/ianshank/GCP-Drone-Comms-Unit"
+Issues = "https://github.com/ianshank/GCP-Drone-Comms-Unit/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

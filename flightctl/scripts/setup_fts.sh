@@ -47,5 +47,5 @@ Done. Next:
      interactive wizard and boots headless on env+defaults):
        set -a; . /etc/flightctl/fts.env; set +a
        $VENV/bin/python -m FreeTAKServer.controllers.services.FTS
-     CoT TCP comes up on :8087 (verified end-to-end with the meshsa gateway).
+     CoT TCP comes up on :8087 (manually verified on-device with the meshsa gateway).
 EOF

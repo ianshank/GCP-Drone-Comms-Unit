@@ -3,7 +3,9 @@
 The live orchestration (run/main) is integration glue (# pragma: no cover).
 """
 
-from meshsa.cli import _delimiter_bytes, build_config, parse_args
+import logging
+
+from meshsa.cli import _delimiter_bytes, build_config, log_level_num, parse_args
 
 
 def test_parse_args_defaults(monkeypatch):
@@ -25,6 +27,21 @@ def test_env_default_then_flag_wins(monkeypatch):
 def test_health_flag_enables(monkeypatch):
     monkeypatch.delenv("MESHSA_HEALTH", raising=False)
     assert parse_args(["--health"]).health is True
+
+
+def test_log_level_flag_and_env(monkeypatch):
+    monkeypatch.delenv("MESHSA_LOG_LEVEL", raising=False)
+    assert parse_args([]).log_level == "INFO"  # default
+    monkeypatch.setenv("MESHSA_LOG_LEVEL", "DEBUG")
+    assert parse_args([]).log_level == "DEBUG"  # env supplies default
+    assert parse_args(["--log-level", "WARNING"]).log_level == "WARNING"  # flag wins
+
+
+def test_log_level_num_maps_names():
+    assert log_level_num("DEBUG") == logging.DEBUG
+    assert log_level_num("info") == logging.INFO  # case-insensitive
+    assert log_level_num("ERROR") == logging.ERROR
+    assert log_level_num("bogus") == logging.INFO  # unknown -> INFO
 
 
 def test_delimiter_bytes_escapes():

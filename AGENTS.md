@@ -6,6 +6,12 @@ Tool-specific files such as [CLAUDE.md](CLAUDE.md) and
 avoid drift. When editing inside a subfolder, also read the nearest scoped
 `AGENTS.md`.
 
+**Read [docs/CHARTER.md](docs/CHARTER.md) first** — it is the stable long-term plan
+(vision, scope/non-goals, and invariants that must not drift) that keeps work on track.
+It changes rarely and only by deliberate decision. Put changeable, near-term to-dos in
+[docs/NEXTSTEPS.md](docs/NEXTSTEPS.md), not in the charter. Architecture detail lives in
+[docs/C4.md](docs/C4.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Repository Map
 
 | Path | Scope |

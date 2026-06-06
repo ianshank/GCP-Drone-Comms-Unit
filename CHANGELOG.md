@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-06-06
 
 ### Added
 - **Flight-control telemetry integration (backward-compatible, no schema bump).**
@@ -37,37 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `freetakserver`/`meshsa-gateway` systemd units + env examples, a stable-serial udev
   rule, an example gateway config, a config-driven `run_gateway.py`, and a
   `mavlink_fake.py` simulator.
-- **Verified the full on-device chain end-to-end:** a simulated MAVLink fix flowed
-  `mavlink_source` → `telemetry` → `tak_tcp`/`cot` → a **live FreeTAKServer** on `:8087`
-  → an ATAK-style viewer client, which received the **air** track (`a-f-A-M-F-Q`,
-  `uid=uav-1`). `flightctl/scripts/setup_fts.sh` captures the FTS dependency pins
+- **Manually verified on-device** (not part of the automated suite, which asserts the
+  bridge via loopback): a simulated MAVLink fix flowed `mavlink_source` → `telemetry`
+  → `tak_tcp`/`cot` → a **live FreeTAKServer** on `:8087` → an ATAK-style viewer client,
+  which received the **air** track (`a-f-A-M-F-Q`, `uid=uav-1`).
+  `flightctl/scripts/setup_fts.sh` captures the FTS dependency pins
   required to boot on Python 3.11 / aarch64 (`setuptools<81` for `pkg_resources`,
   the undeclared `requests`, and `opentelemetry==1.20.0` for digitalpy compatibility).
 
-### Changed
-- Repository reorganized into enterprise layout: `packages/`, `ops/`, `hardware/`,
-  `docs/`, `tools/`, `.github/`, `archive/`.
-- 22 duplicated root files removed (canonical copies live in their domain
-  subfolders); ZIP snapshots moved to `archive/`.
-- `meshsa` package now lives at `packages/meshsa/` (was `meshsa_framework/meshsa/`).
-- `examples/base_node.py` moved into the importable package at
-  `src/meshsa/examples/base_node.py` and exposed as the `meshsa-base` console script.
-- `meshsa-base.service` updated to call `meshsa-base` and use `KillSignal=SIGINT`.
-- Runtime dependencies pinned with upper bounds (`pydantic>=2,<3`, `structlog>=23,<26`).
-- `meshtastic` and `pypubsub` moved to the `[meshtastic]` optional extra.
-- CI now runs strict mypy as a required package-local check.
-- Type hints tightened across codecs, registry, router, node assembly, transports,
-  and the base-node example without changing runtime behavior.
-- Re-enabled the `SIM105` ruff rule and rewrote the 7 `try/except: pass` sites as
-  `contextlib.suppress(...)`; the rule is no longer ignored.
-- Confirmed the project license as Apache-2.0 (dropped the "placeholder" wording).
-- Moved the runnable CLI from `examples/base_node.py` into the importable
-  `meshsa.cli` module (the example is now a thin re-export so `examples/` stays
-  demonstrative-only); the `meshsa-base` console script targets `meshsa.cli:main`
-  (name unchanged, so the systemd unit is unaffected). Added
-  `--health/--healthz-host/--healthz-port` flags.
-
-### Added
 - `[dev]` extra (pytest, coverage, ruff, mypy, pre-commit, build, twine).
 - `LICENSE` (Apache-2.0), `CHANGELOG.md`, `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`.
@@ -115,6 +92,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NodeConfig` and `build_node`.
 - Enterprise agent harness: `AGENTS.md`, `CLAUDE.md`, Copilot instructions,
   scoped folder guidance, custom agent modes, and project skills.
+
+### Changed
+- Repository reorganized into enterprise layout: `packages/`, `ops/`, `hardware/`,
+  `docs/`, `tools/`, `.github/`, `archive/`.
+- 22 duplicated root files removed (canonical copies live in their domain
+  subfolders); ZIP snapshots moved to `archive/`.
+- `meshsa` package now lives at `packages/meshsa/` (was `meshsa_framework/meshsa/`).
+- `examples/base_node.py` moved into the importable package at
+  `src/meshsa/examples/base_node.py` and exposed as the `meshsa-base` console script.
+- `meshsa-base.service` updated to call `meshsa-base` and use `KillSignal=SIGINT`.
+- Runtime dependencies pinned with upper bounds (`pydantic>=2,<3`, `structlog>=23,<26`).
+- `meshtastic` and `pypubsub` moved to the `[meshtastic]` optional extra.
+- CI now runs strict mypy as a required package-local check.
+- Type hints tightened across codecs, registry, router, node assembly, transports,
+  and the base-node example without changing runtime behavior.
+- Re-enabled the `SIM105` ruff rule and rewrote the 7 `try/except: pass` sites as
+  `contextlib.suppress(...)`; the rule is no longer ignored.
+- Confirmed the project license as Apache-2.0 (dropped the "placeholder" wording).
+- Moved the runnable CLI from `examples/base_node.py` into the importable
+  `meshsa.cli` module (the example is now a thin re-export so `examples/` stays
+  demonstrative-only); the `meshsa-base` console script targets `meshsa.cli:main`
+  (name unchanged, so the systemd unit is unaffected). Added
+  `--health/--healthz-host/--healthz-port` flags.
 
 ### Fixed
 - `RouterConfig.queue_maxsize` is now applied to transport inbox queues (was

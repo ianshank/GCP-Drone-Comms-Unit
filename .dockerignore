@@ -1,0 +1,47 @@
+# Keep the Docker build context small and reproducible.
+# VCS / CI
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.whl
+*.tar.gz
+
+# Test / type / lint caches + coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local env files (examples are kept)
+*.env
+!*.env.example
+
+# Heavy / irrelevant-to-runtime trees
+archive/
+docs/
+hardware/
+flightctl/
+*.stl
+*.png
+*.zip

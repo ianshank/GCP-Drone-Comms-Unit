@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import logging
 import os
 import signal
 
@@ -77,7 +78,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--health", action="store_true", default=_env("HEALTH", "") != "")
     p.add_argument("--healthz-host", default=_env("HEALTHZ_HOST", "127.0.0.1"))
     p.add_argument("--healthz-port", type=int, default=_env_int("HEALTHZ_PORT", 8088))
+    p.add_argument(
+        "--log-level",
+        default=_env("LOG_LEVEL", "INFO"),
+        help="log verbosity: DEBUG/INFO/WARNING/ERROR (env MESHSA_LOG_LEVEL)",
+    )
     return p.parse_args(argv)
+
+
+def log_level_num(name: str) -> int:
+    """Map a level name (case-insensitive) to its numeric value; unknown -> INFO."""
+    value = logging.getLevelName(name.upper())
+    return value if isinstance(value, int) else logging.INFO
 
 
 def _delimiter_bytes(raw: str) -> bytes:
@@ -160,9 +172,12 @@ async def run(args: argparse.Namespace) -> None:  # pragma: no cover - live orch
 
 
 def main() -> None:  # pragma: no cover - process entry point
-    structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(20))
+    args = parse_args()
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(log_level_num(args.log_level))
+    )
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(run(parse_args()))
+        asyncio.run(run(args))
 
 
 if __name__ == "__main__":  # pragma: no cover

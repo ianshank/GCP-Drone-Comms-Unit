@@ -15,7 +15,8 @@
 set -euo pipefail
 
 SSD=/mnt/ssd
-SSD_UUID="07421890-e541-4a79-9515-2cd5fbf2250e"   # verify with: blkid /dev/nvme0n1p1
+# Auto-detected from whatever is mounted at $SSD (no machine-specific value baked in).
+SSD_UUID="$(findmnt -no UUID "$SSD" 2>/dev/null || echo '<run: blkid /dev/nvme0n1p1>')"
 ASSUME_YES=0
 DO_SAMPLES=0
 for a in "$@"; do

@@ -1,7 +1,8 @@
 # /etc/systemd/system/freetakserver.service — FreeTAKServer in a Python 3.11 SSD venv.
 #
-# VERIFIED END-TO-END ON THIS BOX (JetPack 6.2, aarch64): a MAVLink fix reached an
-# ATAK-style viewer through this server on :8087.
+# Manually verified on-device (JetPack 6.2, aarch64): a MAVLink fix reached an
+# ATAK-style viewer through this server on :8087. (The automated test suite asserts
+# the bridge via loopback, not against a live FTS — this is an ops/runbook note.)
 #   Setup the venv + the dependency pins FTS needs to boot (see the script for why):
 #     bash flightctl/scripts/setup_fts.sh
 #   FTS hardcodes a persistence dir at /opt/fts and creates it at import, so a one-time

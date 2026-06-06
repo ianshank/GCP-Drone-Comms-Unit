@@ -12,9 +12,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import signal
 
+import structlog
+
 from meshsa import NodeConfig, build_node
+from meshsa.cli import log_level_num
 
 
 async def _run(config_path: str) -> None:
@@ -31,9 +35,16 @@ async def _run(config_path: str) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Run a meshsa gateway node from a config file")
+    ap = argparse.ArgumentParser(
+        description="Run a meshsa gateway node from a config file"
+    )
     ap.add_argument("--config", required=True, help="path to a NodeConfig JSON file")
     args = ap.parse_args()
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(
+            log_level_num(os.environ.get("MESHSA_LOG_LEVEL", "INFO"))
+        )
+    )
     asyncio.run(_run(args.config))
 
 

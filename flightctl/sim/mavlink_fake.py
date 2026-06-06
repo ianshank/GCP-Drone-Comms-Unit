@@ -25,7 +25,9 @@ def main() -> None:
     ap.add_argument("--endpoint", default="udpout:127.0.0.1:14550")
     ap.add_argument("--hz", type=float, default=2.0, help="messages per second")
     ap.add_argument("--lat", type=float, default=37.7749, help="circle centre latitude")
-    ap.add_argument("--lon", type=float, default=-122.4194, help="circle centre longitude")
+    ap.add_argument(
+        "--lon", type=float, default=-122.4194, help="circle centre longitude"
+    )
     ap.add_argument("--radius-m", type=float, default=200.0)
     ap.add_argument("--alt-m", type=float, default=100.0)
     ap.add_argument("--system-id", type=int, default=1)
@@ -49,13 +51,19 @@ def main() -> None:
             conn.mav.heartbeat_send(
                 mavutil.mavlink.MAV_TYPE_QUADROTOR,
                 mavutil.mavlink.MAV_AUTOPILOT_GENERIC,
-                0, 0, 0,
+                0,
+                0,
+                0,
             )
             conn.mav.global_position_int_send(
                 int(elapsed * 1000) & 0xFFFFFFFF,  # time_boot_ms
-                int(lat * 1e7), int(lon * 1e7),    # lat, lon (degE7)
-                int(args.alt_m * 1000), int(args.alt_m * 1000),  # alt, relative_alt (mm)
-                0, 0, 0,                            # vx, vy, vz
+                int(lat * 1e7),
+                int(lon * 1e7),  # lat, lon (degE7)
+                int(args.alt_m * 1000),
+                int(args.alt_m * 1000),  # alt, relative_alt (mm)
+                0,
+                0,
+                0,  # vx, vy, vz
                 int(math.degrees(ang) * 100) % 36000,  # hdg (cdeg)
             )
             time.sleep(period)

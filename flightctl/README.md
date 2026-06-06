@@ -21,7 +21,7 @@ the deployment/runtime layer. See the approved plan for the full design and sequ
 ## Quick local test (no hardware, no services) — works today
 ```bash
 # the meshsa SSD venv already has pymavlink? if not: uv pip install pymavlink (after Phase 1)
-cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # 155 tests, 100% cov
+cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # 163 tests, 100% cov
 ```
 
 ## What is already done vs. what needs root
