@@ -1,15 +1,15 @@
 # /etc/systemd/system/freetakserver.service — FreeTAKServer in a Python 3.11 SSD venv.
 #
-# VERIFIED ON THIS BOX (JetPack 6.2, aarch64):
-#   FTS 2.x requires Python >=3.11 (box has 3.10) — use uv to fetch a standalone 3.11:
-#     uv venv --python 3.11 /mnt/ssd/venvs/fts
-#     UV_CACHE_DIR=/mnt/ssd/caches/uv TMPDIR=/mnt/ssd/tmp \
-#       uv pip install --python /mnt/ssd/venvs/fts/bin/python 'FreeTAKServer[ui]'
+# VERIFIED END-TO-END ON THIS BOX (JetPack 6.2, aarch64): a MAVLink fix reached an
+# ATAK-style viewer through this server on :8087.
+#   Setup the venv + the dependency pins FTS needs to boot (see the script for why):
+#     bash flightctl/scripts/setup_fts.sh
 #   FTS hardcodes a persistence dir at /opt/fts and creates it at import, so a one-time
 #   sudo step is required (point it at the SSD to keep eMMC free):
 #     sudo mkdir -p /mnt/ssd/data/fts && sudo ln -sfn /mnt/ssd/data/fts /opt/fts
 #     sudo chown -h flightctl:flightctl /opt/fts /mnt/ssd/data/fts
-#   Entrypoint (no console script is installed; run the module):
+#   Entrypoint (no console script is installed; run the module). FTS_FIRST_START=false
+#   in fts.env boots headless (the wizard hangs under systemd).
 [Unit]
 Description=FreeTAKServer (CoT server for ATAK)
 After=network-online.target mnt-ssd.mount

@@ -33,9 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     no network). Suite is **163 passing, 100% line+branch coverage**; mypy `--strict`
     clean (`pymavlink.*`, `yamspy.*` added to the missing-imports override). A live
     pymavlink-over-UDP smoke run confirmed the end-to-end source→telemetry→CoT-air path.
-- `flightctl/` ops area: SSD-relocation script, `mavp2p`/`freetakserver`/`meshsa-gateway`
-  systemd units + env examples, a stable-serial udev rule, an example gateway config,
-  a config-driven `run_gateway.py`, and a `mavlink_fake.py` simulator.
+- `flightctl/` ops area: SSD-relocation script, an FTS setup script, `mavp2p`/
+  `freetakserver`/`meshsa-gateway` systemd units + env examples, a stable-serial udev
+  rule, an example gateway config, a config-driven `run_gateway.py`, and a
+  `mavlink_fake.py` simulator.
+- **Verified the full on-device chain end-to-end:** a simulated MAVLink fix flowed
+  `mavlink_source` → `telemetry` → `tak_tcp`/`cot` → a **live FreeTAKServer** on `:8087`
+  → an ATAK-style viewer client, which received the **air** track (`a-f-A-M-F-Q`,
+  `uid=uav-1`). `flightctl/scripts/setup_fts.sh` captures the FTS dependency pins
+  required to boot on Python 3.11 / aarch64 (`setuptools<81` for `pkg_resources`,
+  the undeclared `requests`, and `opentelemetry==1.20.0` for digitalpy compatibility).
 
 ### Changed
 - Repository reorganized into enterprise layout: `packages/`, `ops/`, `hardware/`,

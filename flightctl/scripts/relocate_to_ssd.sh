@@ -112,13 +112,20 @@ else
   echo "docker not installed; skipping."
 fi
 
-# --- 5. optional: purge CUDA samples/docs (~1 GB) ----------------------------
+# --- 5. optional: purge ONLY genuinely-leaf sample packages ------------------
+# DANGER (learned the hard way): NVIDIA meta-packages `cuda-toolkit-12-6` and
+# `tensorrt` *Depend on* their -samples/-documentation sub-packages. Purging
+# cuda-documentation-12-6 / libcudnn9-samples / libnvinfer-samples therefore
+# removes the meta, and a follow-up `autoremove --purge` then cascades to the
+# ENTIRE CUDA toolkit (nvcc, cuBLAS, cuFFT, ...) and TensorRT. So:
+#   * do NOT purge any cuda-*/cudnn/nvinfer sample/doc package, and
+#   * do NOT run autoremove here.
+# Only these standalone sample packages are safe (verified to not pull metas):
 if [ "$DO_SAMPLES" -eq 1 ]; then
-  say "5. Purge CUDA sample/doc packages (~1 GB)"
+  say "5. Purge standalone sample packages only (safe; ~0.3 GB)"
   apt-get remove --purge -y \
-    cuda-documentation-12-6 libcudnn9-samples libnvinfer-samples \
     libopencv-samples opencv-samples-data vpi3-samples nvidia-l4t-vulkan-sc-samples || true
-  apt-get autoremove --purge -y || true
+  echo "Skipped cuda/cudnn/nvinfer samples on purpose (purging them removes the whole CUDA+TensorRT toolkit)."
 fi
 
 say "Done. Recovered space:"
