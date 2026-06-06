@@ -18,9 +18,11 @@ from .plugins import load_plugins
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
 from .registry import Registry, codec_registry, transport_registry
 from .router import Router
+from .telemetry import TelemetryCodec
 from .transports import (
     LoopbackBus,
     LoopbackTransport,
+    MavlinkSourceTransport,
     MeshtasticTransport,
     NullTransport,
     TakMulticastTransport,
@@ -56,6 +58,7 @@ __all__ = [
     "JsonCodec",
     "CotCodec",
     "CompactCodec",
+    "TelemetryCodec",
     "Router",
     "RouterMetrics",
     "health_snapshot",
@@ -65,6 +68,7 @@ __all__ = [
     "LoopbackBus",
     "LoopbackTransport",
     "NullTransport",
+    "MavlinkSourceTransport",
     "MeshtasticTransport",
     "TakTcpTransport",
     "TakMulticastTransport",

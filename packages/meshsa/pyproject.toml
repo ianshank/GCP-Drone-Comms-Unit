@@ -102,7 +102,7 @@ warn_return_any = true
 disallow_untyped_decorators = true
 
 [[tool.mypy.overrides]]
-module = ["meshtastic.*", "pubsub.*", "pypubsub.*", "aiohttp.*"]
+module = ["meshtastic.*", "pubsub.*", "pypubsub.*", "aiohttp.*", "pymavlink.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -1,0 +1,15 @@
+# /etc/udev/rules.d/99-flightctl-serial.rules — stable names for flight hardware.
+# USB enumeration order is non-deterministic with multiple devices; these symlinks
+# give mavp2p/meshsa a fixed path regardless of /dev/ttyACM* ordering.
+#
+# Find your device's attributes first:
+#   udevadm info -a -n /dev/ttyACM0 | grep -E 'idVendor|idProduct|serial'
+# then set the VENDOR/PRODUCT (and optional serial) below and:
+#   sudo cp 99-flightctl-serial.rules.example /etc/udev/rules.d/99-flightctl-serial.rules
+#   sudo udevadm control --reload && sudo udevadm trigger
+#
+# Examples (VERIFY ids for your boards):
+#   Pixhawk/Cube (3DR/ArduPilot CDC):
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", SYMLINK+="flightctl-autopilot", GROUP="dialout", MODE="0660"
+#   STM32-based Betaflight FC:
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", SYMLINK+="flightctl-fc", GROUP="dialout", MODE="0660"

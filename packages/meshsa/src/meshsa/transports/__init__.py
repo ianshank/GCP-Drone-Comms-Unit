@@ -2,6 +2,7 @@
 
 from .base import AbstractTransport
 from .loopback import LoopbackBus, LoopbackTransport, NullTransport
+from .mavlink_source import MavlinkSourceTransport
 from .meshtastic_radio import MeshtasticTransport
 from .tak import TakMulticastTransport, TakTcpTransport
 
@@ -10,6 +11,7 @@ __all__ = [
     "LoopbackBus",
     "LoopbackTransport",
     "NullTransport",
+    "MavlinkSourceTransport",
     "MeshtasticTransport",
     "TakTcpTransport",
     "TakMulticastTransport",

@@ -1,0 +1,34 @@
+{
+  "uid": "jetson-gw-1",
+  "callsign": "GW1",
+  "tier": "base",
+  "pli_interval_s": 30.0,
+  "default_stale_s": 120.0,
+  "transports": [
+    {
+      "name": "drone",
+      "type": "mavlink_source",
+      "codec": "telemetry",
+      "options": {
+        "endpoint": "udpin:127.0.0.1:14550",
+        "source_uid": "uav-1",
+        "callsign": "UAV1",
+        "message_type": "GLOBAL_POSITION_INT"
+      }
+    },
+    {
+      "name": "tak",
+      "type": "tak_tcp",
+      "codec": "cot",
+      "options": { "host": "127.0.0.1", "port": 8087 },
+      "codec_options": { "pli_type": "a-f-A-M-F-Q", "stale_s": 15 }
+    },
+    {
+      "name": "atak_mesh",
+      "type": "tak_multicast",
+      "codec": "cot",
+      "options": { "group": "239.2.3.1", "port": 6969 },
+      "codec_options": { "pli_type": "a-f-A-M-F-Q", "stale_s": 15 }
+    }
+  ]
+}

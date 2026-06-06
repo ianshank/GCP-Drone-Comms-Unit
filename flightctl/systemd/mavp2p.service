@@ -1,0 +1,23 @@
+# /etc/systemd/system/mavp2p.service — MAVLink router (mavp2p).
+# Install: download mavp2p_*_linux_arm64v8 to /usr/local/bin/mavp2p, then
+#   sudo cp flightctl/systemd/mavp2p.service /etc/systemd/system/
+#   sudo cp flightctl/systemd/mavp2p.env.example /etc/flightctl/mavp2p.env  (edit it)
+#   sudo systemctl enable --now mavp2p
+[Unit]
+Description=mavp2p MAVLink router
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/flightctl/mavp2p.env
+# $MAVP2P_ENDPOINTS is intentionally unquoted so systemd splits it into args.
+ExecStart=/usr/local/bin/mavp2p $MAVP2P_ENDPOINTS
+Restart=always
+RestartSec=3
+User=flightctl
+SupplementaryGroups=dialout
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# /etc/systemd/system/meshsa-gateway.service — meshsa flight-control gateway.
+# Bridges MAVLink (and later MSP) telemetry to CoT for ATAK, per a JSON config.
+#   sudo install -d /opt/flightctl && sudo cp flightctl/run_gateway.py /opt/flightctl/
+#   sudo cp flightctl/configs/jetson_gateway.json /etc/flightctl/
+#   sudo cp flightctl/systemd/meshsa-gateway.service /etc/systemd/system/
+#   sudo systemctl enable --now meshsa-gateway
+[Unit]
+Description=meshsa flight-control gateway (MAVLink/MSP -> CoT/TAK)
+After=network-online.target mnt-ssd.mount freetakserver.service mavp2p.service
+Wants=network-online.target
+RequiresMountsFor=/mnt/ssd
+
+[Service]
+Type=simple
+ExecStart=/mnt/ssd/venvs/meshsa/bin/python /opt/flightctl/run_gateway.py --config /etc/flightctl/jetson_gateway.json
+Environment=MESHSA_LOG_LEVEL=INFO
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=10
+User=flightctl
+SupplementaryGroups=dialout
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

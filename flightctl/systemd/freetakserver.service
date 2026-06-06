@@ -1,0 +1,26 @@
+# /etc/systemd/system/freetakserver.service — FreeTAKServer in a Python 3.11 SSD venv.
+# Setup (FTS 2.x requires Python >=3.11; the box has only 3.10 -> use uv to fetch 3.11):
+#   uv venv --python 3.11 /mnt/ssd/venvs/fts
+#   uv pip install --python /mnt/ssd/venvs/fts/bin/python 'FreeTAKServer[ui]'
+#   sudo install -d /etc/flightctl && sudo cp flightctl/systemd/fts.env.example /etc/flightctl/fts.env
+# VERIFY the ExecStart entrypoint for your installed FTS version (it has changed across
+# releases); `ls /mnt/ssd/venvs/fts/bin | grep -i fts` and the FTS docs are authoritative.
+[Unit]
+Description=FreeTAKServer (CoT server for ATAK)
+After=network-online.target mnt-ssd.mount
+Wants=network-online.target
+RequiresMountsFor=/mnt/ssd
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/flightctl/fts.env
+WorkingDirectory=/mnt/ssd/data/fts
+# VERIFY: current FTS 2.x is typically launched via its console script; adjust if needed.
+ExecStart=/mnt/ssd/venvs/fts/bin/FreeTAKServer-API
+Restart=on-failure
+RestartSec=5
+User=flightctl
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

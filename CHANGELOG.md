@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flight-control telemetry integration (backward-compatible, no schema bump).**
+  - `telemetry` codec (`meshsa.telemetry.TelemetryCodec`): stateless map from a
+    structured telemetry frame to a `PLI` `Envelope` (and back). Registered as
+    `"telemetry"`.
+  - `mavlink_source` transport (`meshsa.transports.MavlinkSourceTransport`):
+    receive-only MAVLink source that parses `GLOBAL_POSITION_INT` in a reader
+    thread (injectable pymavlink connection; real link builder `# pragma: no cover`)
+    and ingests one telemetry frame per fix via the shared drop-counting inbox —
+    same threading pattern as the Meshtastic transport. Each fix gets a unique
+    `msg_id` so the router's dedupe does not collapse a track.
+  - Drone/UAS tracks reach ATAK as **air** CoT by configuring a per-transport
+    `cot` codec instance with an air `pli_type` via `codec_options` — no new
+    `MessageKind`, no `schema_version` change. A source-omitted node is byte-for-byte
+    the previous mesh node.
+  - Tests: `test_telemetry_codec.py`, `test_mavlink_source.py`, and
+    `test_mavlink_bridge_e2e.py` (config-driven MAVLink-fix → CoT-air-track bridge,
+    no network). Suite is **155 passing, 100% line+branch coverage**; mypy `--strict`
+    clean (`pymavlink.*` added to the missing-imports override).
+- `flightctl/` ops area: SSD-relocation script, `mavp2p`/`freetakserver`/`meshsa-gateway`
+  systemd units + env examples, a stable-serial udev rule, an example gateway config,
+  a config-driven `run_gateway.py`, and a `mavlink_fake.py` simulator.
+
 ### Changed
 - Repository reorganized into enterprise layout: `packages/`, `ops/`, `hardware/`,
   `docs/`, `tools/`, `.github/`, `archive/`.
