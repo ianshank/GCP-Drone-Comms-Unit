@@ -34,6 +34,12 @@ meshtastic = [
     "pypubsub>=4.0",
 ]
 tak = []
+mavlink = [
+    "pymavlink>=2.4",
+]
+msp = [
+    "yamspy>=0.3",
+]
 health = [
     "aiohttp>=3.9",
 ]
@@ -102,7 +108,7 @@ warn_return_any = true
 disallow_untyped_decorators = true
 
 [[tool.mypy.overrides]]
-module = ["meshtastic.*", "pubsub.*", "pypubsub.*", "aiohttp.*", "pymavlink.*"]
+module = ["meshtastic.*", "pubsub.*", "pypubsub.*", "aiohttp.*", "pymavlink.*", "yamspy.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

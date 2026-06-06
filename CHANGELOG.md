@@ -18,14 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and ingests one telemetry frame per fix via the shared drop-counting inbox —
     same threading pattern as the Meshtastic transport. Each fix gets a unique
     `msg_id` so the router's dedupe does not collapse a track.
+  - `msp_source` transport (`meshsa.transports.MspSourceTransport`): receive-only
+    Betaflight **MSP** (YAMSPy) source — polls GPS fixes on a reader thread (injectable
+    board + `poll`; real YAMSPy glue `# pragma: no cover`) and reuses the `telemetry`
+    codec. Configurable coordinate/altitude scaling (MSP units vary by firmware).
   - Drone/UAS tracks reach ATAK as **air** CoT by configuring a per-transport
     `cot` codec instance with an air `pli_type` via `codec_options` — no new
     `MessageKind`, no `schema_version` change. A source-omitted node is byte-for-byte
     the previous mesh node.
-  - Tests: `test_telemetry_codec.py`, `test_mavlink_source.py`, and
-    `test_mavlink_bridge_e2e.py` (config-driven MAVLink-fix → CoT-air-track bridge,
-    no network). Suite is **155 passing, 100% line+branch coverage**; mypy `--strict`
-    clean (`pymavlink.*` added to the missing-imports override).
+  - `[mavlink]` (`pymavlink`) and `[msp]` (`yamspy`) optional extras; both verified
+    to install and import on aarch64 / JetPack 6.
+  - Tests: `test_telemetry_codec.py`, `test_mavlink_source.py`, `test_msp_source.py`,
+    and `test_mavlink_bridge_e2e.py` (config-driven MAVLink-fix → CoT-air-track bridge,
+    no network). Suite is **163 passing, 100% line+branch coverage**; mypy `--strict`
+    clean (`pymavlink.*`, `yamspy.*` added to the missing-imports override). A live
+    pymavlink-over-UDP smoke run confirmed the end-to-end source→telemetry→CoT-air path.
 - `flightctl/` ops area: SSD-relocation script, `mavp2p`/`freetakserver`/`meshsa-gateway`
   systemd units + env examples, a stable-serial udev rule, an example gateway config,
   a config-driven `run_gateway.py`, and a `mavlink_fake.py` simulator.
