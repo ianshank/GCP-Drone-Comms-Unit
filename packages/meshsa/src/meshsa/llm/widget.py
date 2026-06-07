@@ -36,7 +36,8 @@ CHAT_WIDGET_HTML = """<!doctype html>
 <header>Situational-Awareness Assistant <span class="meta">(read-only)</span></header>
 <div id="log"></div>
 <form id="f">
-  <input id="q" autocomplete="off" placeholder="Ask about the drone or TAK tracks..." />
+  <input id="q" autocomplete="off" aria-label="Ask the situational-awareness assistant"
+         placeholder="Ask about the drone or TAK tracks..." />
   <button id="send" type="submit">Send</button>
 </form>
 <script>

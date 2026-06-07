@@ -99,11 +99,26 @@ class StaticTrackSource:
 
 
 def _as_float(value: Any) -> float | None:
-    """Best-effort numeric coercion; non-numeric or missing values become None."""
+    """Best-effort numeric coercion; non-numeric or missing values become None.
+
+    Accepts numeric strings (some JSON APIs send numbers as strings to avoid
+    precision loss); ``bool`` is rejected so ``True``/``False`` are never read as
+    ``1``/``0``.
+    """
     if isinstance(value, bool) or value is None:
         return None
-    if isinstance(value, (int, float)):
+    try:
         return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _first_present(row: Mapping[str, Any], *keys: str) -> Any:
+    """First value among ``keys`` that is present and not ``None`` (0/0.0-safe)."""
+    for key in keys:
+        value = row.get(key)
+        if value is not None:
+            return value
     return None
 
 
@@ -128,7 +143,7 @@ def parse_global_position_int(payload: Mapping[str, Any], uid: str) -> DroneStat
         ground_speed = math.hypot(vx, vy) / _CM_PER_M
 
     heading = None
-    if hdg_raw is not None and int(hdg_raw) != _HDG_UNKNOWN:
+    if hdg_raw is not None and hdg_raw != _HDG_UNKNOWN:
         heading = hdg_raw / _CDEG
 
     return DroneState(
@@ -176,19 +191,25 @@ def parse_fts_tracks(data: Any) -> list[Track]:
                 uid=str(uid),
                 callsign=_first_str(row, "callsign", "name", "detail_callsign"),
                 cot_type=_first_str(row, "cot_type", "type", "how"),
-                lat=_as_float(row.get("lat") or row.get("latitude")),
-                lon=_as_float(row.get("lon") or row.get("longitude")),
-                stale_s=_as_float(row.get("stale_s") or row.get("stale")),
+                # None-aware field selection: a valid 0.0 lat/lon (equator /
+                # prime meridian) or stale of 0 must not fall through to the alias.
+                lat=_as_float(_first_present(row, "lat", "latitude")),
+                lon=_as_float(_first_present(row, "lon", "longitude")),
+                stale_s=_as_float(_first_present(row, "stale_s", "stale")),
             )
         )
     return tracks
 
 
 def _first_str(row: Mapping[str, Any], *keys: str) -> str | None:
+    """First non-empty value among ``keys``, stringified (numeric labels allowed)."""
     for key in keys:
         value = row.get(key)
-        if isinstance(value, str) and value:
-            return value
+        if value is None or isinstance(value, bool):
+            continue
+        text = str(value).strip()
+        if text:
+            return text
     return None
 
 

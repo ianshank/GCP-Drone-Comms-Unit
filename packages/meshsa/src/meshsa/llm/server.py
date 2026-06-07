@@ -16,8 +16,15 @@ from __future__ import annotations
 import os
 from typing import Any, Protocol
 
+import structlog
+
 from .agent import AgentReply
 from .widget import CHAT_WIDGET_HTML
+
+_log = structlog.get_logger(__name__)
+
+#: Stable, non-sensitive message returned to the browser on an upstream failure.
+_UPSTREAM_ERROR = "assistant unavailable; check the server logs"
 
 
 class _Agent(Protocol):
@@ -28,8 +35,9 @@ async def chat_reply(agent: _Agent, payload: Any) -> tuple[dict[str, Any], int]:
     """Validate a chat payload, run the agent, and return ``(body, status)``.
 
     Pure of any web framework: tested directly with a fake agent. A missing or
-    empty ``prompt`` yields a 400; a model/transport error yields a 502 with the
-    message rather than leaking a stack trace to the browser.
+    empty ``prompt`` yields a 400; an upstream model/transport error yields a 502
+    with a **generic** message (the detail is logged server-side, never returned
+    to the browser, so internal URLs/IDs can't leak).
     """
     if not isinstance(payload, dict):
         return {"error": "expected a JSON object"}, 400
@@ -38,8 +46,9 @@ async def chat_reply(agent: _Agent, payload: Any) -> tuple[dict[str, Any], int]:
         return {"error": "missing 'prompt'"}, 400
     try:
         reply = await agent.ask(prompt.strip())
-    except Exception as exc:  # surface upstream failures as a clean 502
-        return {"error": f"assistant error: {exc}"}, 502
+    except Exception as exc:
+        _log.warning("sa_assistant_error", error=str(exc), error_type=type(exc).__name__)
+        return {"error": _UPSTREAM_ERROR}, 502
     return {"reply": reply.text, "tools": reply.tool_calls, "stop_reason": reply.stop_reason}, 200
 
 

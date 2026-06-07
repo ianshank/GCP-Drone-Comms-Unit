@@ -58,12 +58,23 @@ def test_parse_global_position_int_missing_velocity_has_no_speed() -> None:
     assert state.ground_speed_ms is None
 
 
-def test_as_float_rejects_bool_and_strings() -> None:
-    assert _as_float(True) is None
-    assert _as_float("nope") is None
+def test_as_float_coerces_numbers_and_numeric_strings() -> None:
+    assert _as_float(True) is None  # bool never read as 1/0
     assert _as_float(None) is None
+    assert _as_float("nope") is None  # non-numeric string
+    assert _as_float([1]) is None  # non-coercible type
     assert _as_float(3) == 3.0
     assert _as_float(2.5) == 2.5
+    assert _as_float("1.5") == 1.5  # numeric string coerced
+    assert _as_float("0") == 0.0
+
+
+def test_parse_global_position_int_heading_float_sentinel_and_nan() -> None:
+    # Float-typed sentinel still reads as unknown (no int() round-trip).
+    assert parse_global_position_int({"hdg": 65535.0}, "x").heading_deg is None
+    # A NaN heading must not raise (int(nan) previously would have).
+    nan_state = parse_global_position_int({"hdg": float("nan")}, "x")
+    assert nan_state.heading_deg is not None and math.isnan(nan_state.heading_deg)
 
 
 def test_parse_fts_tracks_from_list() -> None:
@@ -84,6 +95,26 @@ def test_parse_fts_tracks_from_list() -> None:
 def test_parse_fts_tracks_from_wrapped_dict() -> None:
     tracks = parse_fts_tracks({"results": [{"uid": "Z"}]})
     assert len(tracks) == 1 and tracks[0].uid == "Z"
+
+
+def test_parse_fts_tracks_preserves_zero_coordinates() -> None:
+    # 0.0 lat/lon (equator / prime meridian) and a stale of 0 must be kept,
+    # not treated as falsy and dropped in favor of a missing alias field.
+    tracks = parse_fts_tracks([{"uid": "T0", "lat": 0.0, "lon": 0.0, "stale_s": 0}])
+    assert tracks[0].lat == 0.0
+    assert tracks[0].lon == 0.0
+    assert tracks[0].stale_s == 0.0
+
+
+def test_parse_fts_tracks_stringifies_numeric_callsign() -> None:
+    tracks = parse_fts_tracks([{"uid": "T", "callsign": 42}])
+    assert tracks[0].callsign == "42"
+
+
+def test_parse_fts_tracks_skips_blank_callsign_for_next_alias() -> None:
+    # A whitespace-only primary field must be skipped in favor of the next alias.
+    tracks = parse_fts_tracks([{"uid": "T", "callsign": "   ", "name": "REAL"}])
+    assert tracks[0].callsign == "REAL"
 
 
 def test_parse_fts_tracks_unknown_shapes_yield_empty() -> None:

@@ -51,11 +51,12 @@ async def test_chat_reply_non_object_payload() -> None:
     assert "JSON object" in body["error"]
 
 
-async def test_chat_reply_agent_error_becomes_502() -> None:
-    agent = _FakeAgent(raises=RuntimeError("model down"))
+async def test_chat_reply_agent_error_becomes_502_without_leaking_detail() -> None:
+    agent = _FakeAgent(raises=RuntimeError("internal url https://secret:9/x"))
     body, status = await chat_reply(agent, {"prompt": "hi"})
     assert status == 502
-    assert "model down" in body["error"]
+    assert body["error"] == "assistant unavailable; check the server logs"
+    assert "secret" not in body["error"]  # upstream detail logged, not returned
 
 
 def test_widget_html_is_self_contained() -> None:
