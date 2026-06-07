@@ -26,7 +26,8 @@
         "tls": true,
         "tls_cafile": "/etc/flightctl/certs/ca.pem",
         "tls_certfile": "/etc/flightctl/certs/gateway-client.pem",
-        "tls_server_hostname": "freetakserver"
+        "tls_server_hostname": "freetakserver",
+        "pace_min_interval_s": 0.2
       },
       "codec_options": {
         "pli_type": "a-f-A-M-F-Q",

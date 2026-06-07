@@ -15,6 +15,12 @@ and no explicit ``connector`` is injected, the TCP connector is built with an
 ``ssl.SSLContext`` from :func:`_build_ssl_context`. The context is built (and a bad
 or missing cert raises) at construction time — fail-fast, not deferred to
 ``start()``. The plain ``:8087`` path is unchanged when ``tls`` is left ``False``.
+
+Pacing: set ``pace_min_interval_s`` to enforce a minimum hold between outbound CoT
+frames (PyTAK ``FTS_COMPAT`` style) so a fast telemetry source does not overrun a
+rate-limited FreeTAKServer. Pacing is inline in ``send()`` (the router's send path is
+already serial and blocking), disabled by default, and applies only to the TCP
+server link — multicast is a fan-out group with no such rate limit.
 """
 
 from __future__ import annotations
@@ -27,6 +33,8 @@ from typing import Any, Protocol
 
 import structlog
 
+from ..pacing import Pacer
+from ..protocols import Clock, SleepFn, SystemClock
 from ..registry import transport_registry
 from .base import AbstractTransport
 
@@ -58,7 +66,6 @@ class CotFramer:
 
 
 Connector = Callable[[], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
-SleepFn = Callable[[float], Awaitable[None]]
 
 
 def _default_connector(host: str, port: int) -> Connector:  # pragma: no cover - real network
@@ -128,6 +135,8 @@ class TakTcpTransport(AbstractTransport):
         backoff_max_s: float = 30.0,
         backoff_factor: float = 2.0,
         sleep: SleepFn | None = None,
+        pace_min_interval_s: float = 0.0,
+        clock: Clock | None = None,
         queue_maxsize: int = 1000,
         **_: Any,
     ) -> None:
@@ -155,6 +164,17 @@ class TakTcpTransport(AbstractTransport):
         self._backoff_max = backoff_max_s
         self._backoff_factor = backoff_factor
         self._sleep = sleep or asyncio.sleep
+        # Optional outbound pacing (minimum-hold) so a fast source does not overrun a
+        # rate-limited FTS. Disabled by default -> send() is byte-for-byte unchanged.
+        self._pacer = (
+            Pacer(
+                min_interval_s=pace_min_interval_s,
+                clock=clock or SystemClock(),
+                sleep=self._sleep,
+            )
+            if pace_min_interval_s > 0
+            else None
+        )
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._task: asyncio.Task[None] | None = None
@@ -230,6 +250,8 @@ class TakTcpTransport(AbstractTransport):
         writer = self._writer
         if writer is None:
             return  # transiently disconnected; best-effort drop
+        if self._pacer is not None:
+            await self._pacer.wait()  # minimum-hold so a fast source doesn't overrun FTS
         try:
             writer.write(data + self._delimiter)
             await writer.drain()

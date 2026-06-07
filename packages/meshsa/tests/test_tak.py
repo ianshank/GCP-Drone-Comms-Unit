@@ -151,6 +151,16 @@ class FakeSleep:
         self.calls.append(secs)
 
 
+class ManualClock:
+    """Settable, non-advancing clock for deterministic pacing assertions."""
+
+    def __init__(self, t=0.0):
+        self.t = t
+
+    def now(self):
+        return self.t
+
+
 def _conn(reader, writer):
     async def connect():
         return reader, writer
@@ -489,6 +499,40 @@ def test_default_plaintext_connector_when_no_tls_and_no_connector():
     # (closure only; no socket opened until start()).
     t = TakTcpTransport(host="10.0.0.1", port=8087)
     assert t._connector is not None
+
+
+# ============================ pacing ============================
+async def test_tcp_send_paces_between_frames():
+    # A fixed clock means no virtual time passes between sends, so the second frame
+    # waits the full minimum-hold; frames still go out in order.
+    reader, writer = QueueReader(), FakeWriter()
+    sl = FakeSleep()
+    t = TakTcpTransport(
+        connector=lambda: _conn(reader, writer),
+        sleep=sl,
+        pace_min_interval_s=0.5,
+        clock=ManualClock(0.0),
+    )
+    await t.start()
+    await t.send(b"<a></event>")  # first frame: no hold
+    await t.send(b"<b></event>")  # second frame: full hold
+    assert writer.buf == b"<a></event><b></event>"  # paced, not reordered/dropped
+    assert sl.calls == [pytest.approx(0.5)]
+    reader.push(b"")
+    await t.stop()
+
+
+async def test_tcp_send_unpaced_by_default():
+    reader, writer = QueueReader(), FakeWriter()
+    sl = FakeSleep()
+    t = TakTcpTransport(connector=lambda: _conn(reader, writer), sleep=sl)
+    assert t._pacer is None  # no pacing configured
+    await t.start()
+    await t.send(b"<a></event>")
+    await t.send(b"<b></event>")
+    assert sl.calls == []  # no minimum-hold sleeps
+    reader.push(b"")
+    await t.stop()
 
 
 async def test_e2e_tls_option_plumbs_through_build_node(clock, ids):
