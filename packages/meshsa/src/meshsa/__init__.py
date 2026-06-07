@@ -16,6 +16,26 @@ from .models import ChatPayload, Envelope, MessageKind, NodeInfo, NodeTier, PliP
 from .node import Node, build_node
 from .plugins import load_plugins
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
+from .rc import (
+    ArmSpec,
+    AxisChannel,
+    ButtonChannel,
+    ButtonGroupChannel,
+    ChannelSource,
+    JoystickChannelSource,
+    JoystickReader,
+    JoystickState,
+    JsEvent,
+    MspPilot,
+    RcMapping,
+    RcSink,
+    RoundRobinTelemetry,
+    axis_to_us,
+    default_mapping,
+    load_mapping,
+    make_cot_publisher,
+    parse_js_event,
+)
 from .registry import Registry, codec_registry, transport_registry
 from .router import Router
 from .telemetry import TelemetryCodec
@@ -62,6 +82,24 @@ __all__ = [
     "TelemetryCodec",
     "Router",
     "RouterMetrics",
+    "JsEvent",
+    "JoystickState",
+    "parse_js_event",
+    "axis_to_us",
+    "AxisChannel",
+    "ButtonChannel",
+    "ButtonGroupChannel",
+    "ArmSpec",
+    "RcMapping",
+    "default_mapping",
+    "ChannelSource",
+    "RcSink",
+    "JoystickReader",
+    "JoystickChannelSource",
+    "MspPilot",
+    "RoundRobinTelemetry",
+    "make_cot_publisher",
+    "load_mapping",
     "health_snapshot",
     "Node",
     "build_node",

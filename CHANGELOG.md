@@ -5,6 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-07
+
+Pilot the FC from the host: a joystick → MSP RC control path with combined live telemetry.
+Additive — no `Envelope`/schema change; existing transports/codecs are reused, not modified
+(only a pure-function extraction in `msp_source`).
+
+### Added
+- **`meshsa.rc`** — tested, hardware-free control logic: Linux joystick event parsing
+  (`parse_js_event`, `JoystickState`), stick/switch → RC channel mapping (`AxisChannel`,
+  `ButtonChannel`, `ButtonGroupChannel` for N-position switches, `RcMapping`, `axis_to_us`),
+  a pluggable `ChannelSource` (with `JoystickChannelSource`) for HITL/autonomy reuse, and the
+  fixed-rate `MspPilot` loop (`RcSink`/`JoystickReader` seams). Safety: starts disarmed /
+  throttle-min, never auto-arms, fails safe on stale input, disarms on stop.
+- **`flightctl/rc_bridge.py`** + **`flightctl/configs/jetson_rc.json`** — the daemon that owns
+  the FC serial, streams `MSP_SET_RAW_RC` from `/dev/input/js0`, and decimates the same handle
+  to poll telemetry → CoT to FreeTAKServer. `--dry-run` (calibrate, no FC writes) and
+  `--monitor` (MSP_RC read-back) for safe bring-up.
+- **`FC_MODE=pilot`** in `start_all.sh` — runs FTS + FTS-UI + WebMap + rc_bridge, skipping the
+  gateway and the whole MAVLink chain (rc_bridge owns the exclusive FC serial).
+
+### Changed
+- `transports/msp_source.py`: extracted the pure `build_telemetry_frame(..., seq=…)` helper and
+  per-message readers (`DEFAULT_MSP_READERS`) reused by the RC bridge; `_to_frame`/`_default_poll`
+  delegate to them. No behaviour change.
+- Combined pilot telemetry uses `RoundRobinTelemetry` (one MSP read per call) so the poll never
+  blocks the RC loop for three round-trips at once; `make_cot_publisher`/`load_mapping` keep the
+  daemon's telemetry logic in the tested package.
+
+### Hardened (pre-release audit)
+- **Arm safety:** after any failsafe, the arm switch must be physically re-cycled before motors
+  can spin again (no silent re-arm when stale input resumes with the switch still held).
+- `RcMapping` validates `arm.channel`/`throttle_channel` at construction; `MspPilot` rejects
+  `hz <= 0`; the daemon closes the FC serial and logs CoT-send failures on shutdown; `start_all`
+  no longer pins a `0,0` "Null Island" track and gives `rc-bridge` extra shutdown grace so the
+  final disarm completes.
+
+### Tests
+- New integration/e2e/regression suites (no hardware — injected board/poll/readers/connectors):
+  `test_msp_bridge_e2e.py` (MSP fix/fallback/remarks → CoT air track through `build_node`),
+  `test_flightctl_configs.py` (the shipped `jetson_gateway.msp.json`/`jetson_rc.json` build and
+  honour the **Betaflight AETR** channel order — pins the throttle/yaw bug found on the bench),
+  plus pilot-lifecycle-through-the-loop and round-robin→CoT-XML regressions in `test_rc.py`.
+  Suite is **233 tests at 100% line+branch**; `mypy --strict` + `ruff` clean.
+
+## [0.4.0] - 2026-06-07
+
+Bring a real **Betaflight flight controller over USB** all the way to an ATAK track,
+including a GPS-less bench FC. Additive and backward-compatible — no `Envelope` shape
+change, `SCHEMA_VERSION` stays `1`; the new `remarks` payload key is optional and a
+config that omits the `fallback_*`/`remarks` features behaves exactly as before.
+
+### Added
+- **`msp_source` fixed-position fallback** — `fallback_lat`, `fallback_lon`,
+  `fallback_hae` options. When the FC has no GPS fix and a fallback is set, the FC still
+  appears as a stationary track (a GPS fix, when present, always wins). With no fix and
+  no fallback, nothing is emitted — the original behaviour.
+- **MSP telemetry remarks** — `_default_poll` now also reads `MSP_ANALOG`
+  (battery voltage, current, RSSI) and `MSP_ATTITUDE` (roll/pitch/yaw); the transport
+  renders the present fields into an optional `remarks` string. The `telemetry` and
+  `cot` codecs carry `remarks` through (payload root → CoT `<detail><remarks>`), with
+  round-trip on decode. Enrichment reads are isolated so a slow/absent MSP message
+  degrades to "no remarks" rather than dropping the position.
+- **Ops:** `flightctl/configs/jetson_gateway.msp.json` (Betaflight-over-USB gateway
+  config) and an `FC_MODE=msp` mode in `flightctl/scripts/start_all.sh` that polls the
+  FC directly and skips the MAVLink-only services (sim/mavp2p/mavlink2rest).
+
 ## [0.3.0] - 2026-06-06
 
 Additive, backward-compatible hardening of the CoT/TAK link. No `Envelope` shape

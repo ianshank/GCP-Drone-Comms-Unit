@@ -53,6 +53,9 @@ class TelemetryCodec:
             "lon": pos.get("lon", 0.0),
             "hae": pos.get("hae", 0.0),
         }
+        remarks = envelope.payload.get("remarks")
+        if remarks:
+            frame["remarks"] = remarks
         return json.dumps(frame).encode("utf-8")
 
     def decode(self, data: bytes) -> Envelope:
@@ -77,16 +80,21 @@ class TelemetryCodec:
         except (TypeError, ValueError) as exc:  # bad types / out-of-range lat/lon
             raise MeshSAError(f"invalid telemetry frame: {exc}") from exc
         callsign = str(frame.get("callsign", src))
+        payload: dict[str, Any] = {
+            "node": {"uid": src, "callsign": callsign},
+            "position": position.model_dump(),
+        }
+        # Optional, additive: free-text telemetry (battery/RSSI/attitude) for CoT remarks.
+        # Lives at the payload root so it never perturbs the node/position sub-dicts.
+        if frame.get("remarks"):
+            payload["remarks"] = str(frame["remarks"])
         return Envelope(
             schema_version=SCHEMA_VERSION,
             msg_id=msg_id,
             ts=ts,
             source_uid=src,
             kind=MessageKind.PLI,
-            payload={
-                "node": {"uid": src, "callsign": callsign},
-                "position": position.model_dump(),
-            },
+            payload=payload,
         )
 
 

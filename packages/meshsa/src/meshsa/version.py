@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import warnings
 
-__version__ = "0.3.0"
+__version__ = "0.5.0"
 
 #: Wire schema this build emits.
 SCHEMA_VERSION = 1

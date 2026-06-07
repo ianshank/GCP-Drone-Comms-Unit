@@ -21,6 +21,32 @@
 - [x] **Pacing / rate-limit** to FTS — inline minimum-hold (`pace_min_interval_s`, PyTAK
       `FTS_COMPAT` contract) via `meshsa.pacing.Pacer`. Off by default.
 
+## Shipped in 0.4.0 — MSP telemetry for a GPS-less FC
+- [x] **`msp_source` fixed-position fallback** (`fallback_lat`/`lon`/`hae`) so a bench FC with no
+      GPS still appears as a track; a real fix always wins.
+- [x] **MSP telemetry remarks** — battery voltage / current / RSSI (`MSP_ANALOG`) + attitude
+      (`MSP_ATTITUDE`) rendered into the CoT `<remarks>` (additive `payload["remarks"]`, no schema
+      bump). `FC_MODE=msp` in `start_all.sh` + `configs/jetson_gateway.msp.json`.
+- [x] Verified live on the Mobula7 1S (BTFL 4.4.2, STM32F411): real MSP poll → fallback track +
+      live attitude remarks decoded end-to-end.
+
+## Shipped in 0.5.0 — pilot the FC from the Jetson (MSP RC), HITL-ready
+- [x] **`meshsa.rc`** — joystick→RC mapping + arm/failsafe state machine + `MspPilot` loop behind
+      a pluggable `ChannelSource` (joystick now; sim/autonomy later). `flightctl/rc_bridge.py`
+      daemon + `FC_MODE=pilot` (RC + telemetry on one serial-owning thread via `RoundRobinTelemetry`).
+- [x] **Verified on the bench** (props off where motors could spin): radio calibrated
+      (gimbals axes 0-3, throttle axis 2; switches as axes; ARM=axis 7), FC switched to **MSP RX**
+      over MSP, and the FC's `MSP_RC` read-back confirmed correct **AETR** channel mapping with
+      `armingDisableFlags=0`.
+
+## Immediate next (pending hardware/operator)
+- [ ] **Props-off pilot test:** arm on the bench via `FC_MODE=pilot`, confirm motor spin direction
+      + throttle response, and the `FC1` track on the WebMap simultaneously. (Held: props were on.)
+- [ ] **ELRS handoff:** when the ELRS gear arrives, revert the FC to RF control
+      (`feature -RX_MSP` + **`feature RX_SPI`** + `save` — this board's ELRS is SPI, not serial) and
+      fly over RF; the Jetson reverts to `FC_MODE=msp` telemetry. The `rc_bridge` `ChannelSource`
+      seam stays for HITL/autonomy.
+
 ## Near-term (M2 hardening)
 - [ ] **Automated FTS e2e** (non-coverage job): bring up FTS in CI on a self-hosted Jetson
       runner; assert a track via the FTS REST API and a multicast CoT listener.

@@ -14,7 +14,9 @@ the deployment/runtime layer. See the approved plan for the full design and sequ
 | `scripts/start_all.sh` | **One-command bring-up** of the whole stack in dependency order (`start`/`stop`/`status`/`restart`). No sudo. |
 | `scripts/relocate_to_ssd.sh` | **Phase 1** — conservative eMMC→SSD relocation (Docker data-root, caches, mount hardening, cleanup). **Run with sudo after reviewing.** |
 | `configs/jetson_gateway.json` | Example meshsa node: `mavlink_source`(telemetry) → `tak_tcp`(cot, air type). Direct (no proxy): MAVLink in on `udpin:…:14550`. |
-| `configs/jetson_gateway.proxy.json` | Same node behind the mavp2p proxy: MAVLink in on `udpin:127.0.0.1:14551` (mavp2p fans the autopilot stream to the gateway, mavlink2rest, and any GCS). Used by `start_all.sh`. |
+| `configs/jetson_gateway.proxy.json` | Same node behind the mavp2p proxy: MAVLink in on `udpin:127.0.0.1:14551` (mavp2p fans the autopilot stream to the gateway, mavlink2rest, and any GCS). Used by `start_all.sh` (default `FC_MODE=sim`). |
+| `configs/jetson_gateway.msp.json` | Real **Betaflight FC over USB**: `msp_source`(telemetry) → `tak_tcp`/`tak_multicast`(cot). Used by `start_all.sh` when `FC_MODE=msp`. See [Real Betaflight FC over USB](#real-betaflight-fc-over-usb-msp-mode). |
+| `rc_bridge.py` + `configs/jetson_rc.json` | **Pilot the FC from the Jetson** (joystick → MSP RC) + telemetry. Used by `start_all.sh` when `FC_MODE=pilot`. See [Pilot from the Jetson](#pilot-from-the-jetson-msp-rc). |
 | `configs/jetson_gateway.tls.json` | Node that talks **TLS CoT** to FreeTAKServer `:8089` (client cert) with outbound **pacing** — see [TLS CoT + pacing](#tls-cot--rate-limit-pacing). |
 | `scripts/gen_certs.sh` | **Template** — generate a CA + server + client certs and an importable ATAK data-package zip. Edit CN/SAN/`OUT_DIR` before running. |
 | `sim/mavlink_fake.py` | pymavlink `udpout` simulator — emits HEARTBEAT + GLOBAL_POSITION_INT for dev/e2e (no autopilot needed). |
@@ -59,6 +61,86 @@ sim and point mavp2p at `serial:/dev/flightctl-autopilot:<baud>`.
    mavp2p latches `ECONNREFUSED` and the channel flaps. The script binds the consumers first.
 2. **MAVLink v2 only.** `mavlink2rest` ignores MAVLink v1, so the simulator runs with
    `MAVLINK20=1` (pymavlink and the gateway parse v2 fine). Sim is system id `1`, component `0`.
+
+## Real Betaflight FC over USB (MSP mode)
+
+A Betaflight FC speaks **MSP**, not MAVLink, so it has its own path: the `msp_source`
+transport polls the FC over the USB serial VCP and feeds the same `telemetry → cot/tak`
+chain. Run it with `FC_MODE=msp` — the gateway polls the FC directly, and the
+MAVLink-only services (sim, mavp2p, mavlink2rest) are skipped:
+
+```bash
+FC_MODE=msp flightctl/scripts/start_all.sh start     # add --browser for the web UIs
+FC_MODE=msp flightctl/scripts/start_all.sh status
+FC_MODE=msp flightctl/scripts/start_all.sh stop
+```
+
+Config: `configs/jetson_gateway.msp.json` (FC → `tak_tcp` :8087 + `tak_multicast`).
+The FC shows up as the **`FC1`** track in ATAK / WebMap / the FTS UI.
+
+- **No GPS? It still appears.** A GPS-less bench FC has no position, so set
+  `fallback_lat`/`fallback_lon` (decimal degrees, the FC's location) in the config —
+  that places the track. A real GPS fix, when present, always overrides the fallback.
+  Remove the `fallback_*` keys to suppress the track until a fix arrives. **Edit the
+  placeholder `0.0/0.0` coordinates in `jetson_gateway.msp.json` before use.**
+- **Live telemetry as remarks.** The poll also reads battery voltage, current, RSSI
+  (`MSP_ANALOG`) and attitude (`MSP_ATTITUDE`); present fields render into the track's
+  CoT `<remarks>` (e.g. `VBAT 11.8V RSSI 1023 ROLL 2`).
+- **Stable device name (one-time, sudo).** USB enumeration is non-deterministic; install
+  the udev rule so the FC is always `/dev/flightctl-fc` (the config's default `device`).
+  The bundled rule already matches Betaflight's `0483:5740`:
+
+  ```bash
+  sudo cp flightctl/udev/99-flightctl-serial.rules.example \
+          /etc/udev/rules.d/99-flightctl-serial.rules
+  sudo udevadm control --reload && sudo udevadm trigger
+  sudo usermod -aG dialout "$USER"   # open the port without sudo (re-login to apply)
+  ```
+
+  To skip udev entirely, set `"device": "/dev/ttyACM0"` in the config.
+- **Serial is exclusive — one user at a time.** Betaflight Configurator (WebSerial) and
+  the gateway's `yamspy` poller both need exclusive access to the FC's serial port; they
+  **cannot run together**. Workflow: configure/tune in the Configurator
+  (`/snap/bin/chromium` → `https://app.betaflight.com`) → **Disconnect** → then start
+  `FC_MODE=msp`. Confirm battery and RSSI sources are configured in Betaflight so those
+  remarks have data.
+
+## Pilot from the Jetson (MSP RC)
+
+`FC_MODE=pilot` flies the FC **from the Jetson over USB**: `rc_bridge.py` reads the
+RadioMaster/EdgeTX radio at `/dev/input/js0` (USB-joystick mode), maps the sticks/switches
+to RC channels, and streams `MSP_SET_RAW_RC` to the FC — while the *same* serial handle is
+decimated to also poll telemetry and publish the FC's CoT track. One process owns the one
+exclusive FC serial, so this **cannot run with `FC_MODE=msp`** (both want the port). This is
+a **bench / HITL** path (USB-tethered, no range) — a precursor to ELRS and a reusable
+computer-in-the-loop seam; for real flight, use the ELRS RF link.
+
+> 🚨 **SAFETY — PROPS OFF.** This drives real motors. The bridge starts **disarmed /
+> throttle-min**, **never auto-arms** (the arm switch must be seen released once first),
+> **fails safe** (disarm + throttle-min) on stale joystick input, and **disarms on shutdown**.
+> Always `--dry-run` first.
+
+**Betaflight setup (Configurator, then Disconnect):** Receiver tab → Serial RX provider =
+**MSP**; set the channel map (AETR) and **failsafe**; map **ARM** to the AUX the bridge drives
+(`arm.channel` in the mapping). Confirm battery/RSSI sources so the telemetry remarks have data.
+
+```bash
+# 1) Calibrate the mapping with NO writes to the FC — move each stick/switch, watch channels:
+rc_bridge.py --dry-run --mapping flightctl/configs/jetson_rc.json
+#    Edit configs/jetson_rc.json (axis/button indices are hardware-specific) until correct.
+
+# 2) Prove the FC sees the channels (sends RC + logs MSP_RC read-back; no Configurator):
+rc_bridge.py --device /dev/flightctl-fc --monitor
+
+# 3) Full: pilot + telemetry track to FTS (props off!):
+FC_MODE=pilot flightctl/scripts/start_all.sh start    # FC1 track appears at :1880/tak-map
+```
+
+`jetson_rc.json` is an `RcMapping`: channels in MSP order `[roll, pitch, yaw, throttle,
+aux…]`; each channel is an `axis`, a `button` (2-pos), or `buttons` (N-position group, e.g. a
+3-pos mode switch → 1000/1500/2000). `arm.source_button` must be a **toggle** switch, not a
+momentary button. Override `RC_DEVICE`/`RC_JS`/`RC_MAPPING`/`RC_FALLBACK_LAT`/`RC_FALLBACK_LON`
+via env. Like MSP mode, the FC serial needs `dialout` group membership.
 
 ## TLS CoT + rate-limit pacing
 
@@ -141,4 +223,7 @@ sudo apt-get install -y chromium-browser
 2. **MAVLink** — install mavp2p, enable `mavp2p.service`; run `sim/mavlink_fake.py` to generate traffic.
 3. **FreeTAKServer** — `uv venv --python 3.11 /mnt/ssd/venvs/fts && uv pip install 'FreeTAKServer[ui]'`; enable `freetakserver.service`.
 4. **Gateway** — run a meshsa node with `configs/jetson_gateway.json`; drone tracks appear in ATAK.
-5. **Betaflight** — install Chromium, open `https://app.betaflight.com` (WebSerial) for tuning; the `msp_source` transport (Phase 5) ingests MSP telemetry headlessly.
+5. **Betaflight** — install the udev rule (above), tune via Chromium/`https://app.betaflight.com`
+   (WebSerial), **Disconnect**, then `FC_MODE=msp flightctl/scripts/start_all.sh start` — the
+   `msp_source` transport ingests MSP telemetry headlessly and the FC appears as a CoT track.
+   See [Real Betaflight FC over USB](#real-betaflight-fc-over-usb-msp-mode).

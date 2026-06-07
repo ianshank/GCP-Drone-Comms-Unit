@@ -38,6 +38,22 @@ def test_pli_roundtrip_semantic():
     assert out.payload["node"]["callsign"] == "FOX1"
 
 
+def test_pli_remarks_encoded_and_roundtrip():
+    env = _pli()
+    env.payload["remarks"] = "VBAT 11.8V RSSI 1023"
+    c = CotCodec()
+    xml = c.encode(env).decode()
+    assert "<remarks>VBAT 11.8V RSSI 1023</remarks>" in xml
+    out = c.decode(xml.encode())
+    assert out.payload["remarks"] == "VBAT 11.8V RSSI 1023"
+
+
+def test_pli_without_remarks_has_no_remarks_element():
+    xml = CotCodec().encode(_pli()).decode()
+    assert "<remarks" not in xml
+    assert "remarks" not in CotCodec().decode(xml.encode()).payload
+
+
 def test_chat_roundtrip():
     c = CotCodec()
     env = Envelope(

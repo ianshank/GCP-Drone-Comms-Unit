@@ -8,6 +8,9 @@ dist/
 .venv/
 venv/
 
+# yamspy writes this when the MSP transport / rc_bridge talks to a board
+MSPy.log
+
 # Test / coverage / type / lint caches
 .pytest_cache/
 .coverage

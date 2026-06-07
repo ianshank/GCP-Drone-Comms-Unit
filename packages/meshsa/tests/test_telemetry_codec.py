@@ -53,6 +53,24 @@ def test_decode_uses_defaults_for_optional_fields():
     assert env.payload["position"]["hae"] == pytest.approx(0.0)
 
 
+def test_decode_carries_optional_remarks():
+    env = TelemetryCodec().decode(_frame(remarks="VBAT 11.8V RSSI 1023"))
+    assert env.payload["remarks"] == "VBAT 11.8V RSSI 1023"
+    # remarks lives at the payload root, not inside node/position
+    assert env.payload["node"] == {"uid": "uav-1", "callsign": "UAV1"}
+
+
+def test_decode_without_remarks_omits_key():
+    assert "remarks" not in TelemetryCodec().decode(_frame()).payload
+
+
+def test_remarks_roundtrips():
+    codec = TelemetryCodec()
+    env = codec.decode(_frame(remarks="CUR 2.5A"))
+    again = codec.decode(codec.encode(env))
+    assert again.payload["remarks"] == "CUR 2.5A"
+
+
 def test_encode_then_decode_roundtrips():
     codec = TelemetryCodec()
     env = codec.decode(_frame())
