@@ -123,6 +123,14 @@ def test_parse_fts_tracks_unknown_shapes_yield_empty() -> None:
     assert parse_fts_tracks({"results": "notalist"}) == []
 
 
+def test_parse_fts_tracks_preserves_zero_uid_and_skips_blank() -> None:
+    # A falsy-but-valid identifier (0) must be kept, stringified to "0".
+    kept = parse_fts_tracks([{"id": 0, "lat": 1.0}])
+    assert len(kept) == 1 and kept[0].uid == "0"
+    # None / blank / whitespace identifiers are skipped, not emitted as "".
+    assert parse_fts_tracks([{"uid": "   "}, {"name": ""}, {"lat": 1.0}]) == []
+
+
 async def test_static_telemetry_source_roundtrip() -> None:
     src = StaticTelemetrySource(DroneState(uid="a"))
     assert (await src.drone_state()).uid == "a"

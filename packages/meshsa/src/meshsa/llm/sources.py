@@ -28,6 +28,12 @@ _CM_PER_M = 100.0  # vx/vy: centimeters per second
 _CDEG = 100.0  # hdg: centidegrees
 _HDG_UNKNOWN = 65535  # MAVLink sentinel for "heading not available"
 
+# Default endpoints for the HTTP sources — the single source of truth, reused by
+# ``meshsa.llm.server`` when resolving configuration from the environment.
+DEFAULT_MAVLINK2REST_URL = "http://127.0.0.1:8088"
+DEFAULT_DRONE_UID = "uav-1"
+DEFAULT_FTS_TRACKS_URL = "http://127.0.0.1:19023/ManageGeoObject/getCoTGeoObject"
+
 
 class DroneState(BaseModel):
     """A point-in-time snapshot of one vehicle's telemetry.
@@ -183,12 +189,17 @@ def parse_fts_tracks(data: Any) -> list[Track]:
     for row in rows:
         if not isinstance(row, Mapping):
             continue
-        uid = row.get("uid") or row.get("id") or row.get("name")
+        # None-aware selection (a valid 0 identifier must not be skipped as falsy);
+        # then reject only None / blank-string uids.
+        uid = _first_present(row, "uid", "id", "name")
         if uid is None:
+            continue
+        uid_str = str(uid).strip()
+        if not uid_str:
             continue
         tracks.append(
             Track(
-                uid=str(uid),
+                uid=uid_str,
                 callsign=_first_str(row, "callsign", "name", "detail_callsign"),
                 cot_type=_first_str(row, "cot_type", "type", "how"),
                 # None-aware field selection: a valid 0.0 lat/lon (equator /
@@ -223,9 +234,9 @@ class Mavlink2RestSource:  # pragma: no cover - real HTTP I/O
 
     def __init__(
         self,
-        base_url: str = "http://127.0.0.1:8088",
+        base_url: str = DEFAULT_MAVLINK2REST_URL,
         *,
-        uid: str = "uav-1",
+        uid: str = DEFAULT_DRONE_UID,
         vehicle_id: int = 1,
         component_id: int = 1,
         timeout_s: float = 3.0,
@@ -261,7 +272,7 @@ class FtsTrackSource:  # pragma: no cover - real HTTP I/O
 
     def __init__(
         self,
-        url: str = "http://127.0.0.1:19023/ManageGeoObject/getCoTGeoObject",
+        url: str = DEFAULT_FTS_TRACKS_URL,
         *,
         timeout_s: float = 3.0,
     ) -> None:

@@ -14,17 +14,59 @@ requires the ``[llm]`` extra.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 import structlog
+from pydantic import BaseModel
 
 from .agent import AgentReply
+from .sources import (
+    DEFAULT_DRONE_UID,
+    DEFAULT_FTS_TRACKS_URL,
+    DEFAULT_MAVLINK2REST_URL,
+)
 from .widget import CHAT_WIDGET_HTML
 
 _log = structlog.get_logger(__name__)
 
 #: Stable, non-sensitive message returned to the browser on an upstream failure.
 _UPSTREAM_ERROR = "assistant unavailable; check the server logs"
+
+# Server bind defaults + the environment-variable names that override every
+# setting. Centralized so there are no scattered magic strings/ports.
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_PORT = 8090
+ENV_HOST = "MESHSA_LLM_HOST"
+ENV_PORT = "MESHSA_LLM_PORT"
+ENV_MAVLINK2REST_URL = "MESHSA_MAVLINK2REST_URL"
+ENV_DRONE_UID = "MESHSA_DRONE_UID"
+ENV_FTS_TRACKS_URL = "MESHSA_FTS_TRACKS_URL"
+
+
+class ServerConfig(BaseModel):
+    """Resolved runtime configuration for the SA-assistant server."""
+
+    host: str = DEFAULT_HOST
+    port: int = DEFAULT_PORT
+    mavlink2rest_url: str = DEFAULT_MAVLINK2REST_URL
+    drone_uid: str = DEFAULT_DRONE_UID
+    fts_tracks_url: str = DEFAULT_FTS_TRACKS_URL
+
+
+def resolve_config(env: Mapping[str, str]) -> ServerConfig:
+    """Build a :class:`ServerConfig` from an environment mapping (pure/testable).
+
+    Every field falls back to its module-level default when the corresponding
+    ``MESHSA_*`` variable is unset; ``port`` is parsed to ``int``.
+    """
+    return ServerConfig(
+        host=env.get(ENV_HOST, DEFAULT_HOST),
+        port=int(env.get(ENV_PORT, str(DEFAULT_PORT))),
+        mavlink2rest_url=env.get(ENV_MAVLINK2REST_URL, DEFAULT_MAVLINK2REST_URL),
+        drone_uid=env.get(ENV_DRONE_UID, DEFAULT_DRONE_UID),
+        fts_tracks_url=env.get(ENV_FTS_TRACKS_URL, DEFAULT_FTS_TRACKS_URL),
+    )
 
 
 class _Agent(Protocol):
@@ -81,27 +123,29 @@ def main() -> None:  # pragma: no cover - process entry point
     """Console entry point (``meshsa-llm``): serve the SA assistant.
 
     Wires real HTTP sources from the environment and the real Anthropic client.
-    Requires the ``[llm]`` extra and ``ANTHROPIC_API_KEY``.
+    Requires the ``[llm]`` extra and ``ANTHROPIC_API_KEY``. Missing optional
+    dependencies produce a clear install hint rather than a raw import traceback.
     """
+    try:
+        import aiohttp  # noqa: F401  # presence check; web imported below
+        import anthropic  # noqa: F401  # presence check; used lazily by build_agent
+    except ImportError as exc:
+        raise SystemExit(
+            "meshsa-llm needs the optional [llm] extra (aiohttp + anthropic).\n"
+            "Install it with:  pip install -e 'packages/meshsa[llm]'\n"
+            f"(missing dependency: {exc.name})"
+        ) from exc
+
     from aiohttp import web
 
     from .agent import build_agent
     from .sources import FtsTrackSource, Mavlink2RestSource
 
-    host = os.environ.get("MESHSA_LLM_HOST", "0.0.0.0")
-    port = int(os.environ.get("MESHSA_LLM_PORT", "8090"))
-    telemetry = Mavlink2RestSource(
-        os.environ.get("MESHSA_MAVLINK2REST_URL", "http://127.0.0.1:8088"),
-        uid=os.environ.get("MESHSA_DRONE_UID", "uav-1"),
-    )
-    tracks = FtsTrackSource(
-        os.environ.get(
-            "MESHSA_FTS_TRACKS_URL",
-            "http://127.0.0.1:19023/ManageGeoObject/getCoTGeoObject",
-        )
-    )
+    cfg = resolve_config(os.environ)
+    telemetry = Mavlink2RestSource(cfg.mavlink2rest_url, uid=cfg.drone_uid)
+    tracks = FtsTrackSource(cfg.fts_tracks_url)
     agent = build_agent(telemetry, tracks)
-    web.run_app(build_app(agent), host=host, port=port)
+    web.run_app(build_app(agent), host=cfg.host, port=cfg.port)
 
 
 if __name__ == "__main__":  # pragma: no cover

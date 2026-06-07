@@ -17,6 +17,7 @@ Public surface:
 from __future__ import annotations
 
 from .agent import DEFAULT_MODEL, AgentReply, SAAgent, build_agent
+from .server import ServerConfig, chat_reply, resolve_config
 from .sources import (
     DroneState,
     FtsTrackSource,
@@ -38,6 +39,7 @@ __all__ = [
     "FtsTrackSource",
     "Mavlink2RestSource",
     "SAAgent",
+    "ServerConfig",
     "StaticTelemetrySource",
     "StaticTrackSource",
     "TelemetrySource",
@@ -46,9 +48,11 @@ __all__ = [
     "Track",
     "TrackSource",
     "build_agent",
+    "chat_reply",
     "format_drone_state",
     "format_tracks",
     "parse_fts_tracks",
     "parse_global_position_int",
+    "resolve_config",
     "tool_specs",
 ]

@@ -5,7 +5,17 @@ from __future__ import annotations
 from typing import Any
 
 from meshsa.llm.agent import AgentReply
-from meshsa.llm.server import chat_reply
+from meshsa.llm.server import (
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    chat_reply,
+    resolve_config,
+)
+from meshsa.llm.sources import (
+    DEFAULT_DRONE_UID,
+    DEFAULT_FTS_TRACKS_URL,
+    DEFAULT_MAVLINK2REST_URL,
+)
 from meshsa.llm.widget import CHAT_WIDGET_HTML
 
 
@@ -57,6 +67,32 @@ async def test_chat_reply_agent_error_becomes_502_without_leaking_detail() -> No
     assert status == 502
     assert body["error"] == "assistant unavailable; check the server logs"
     assert "secret" not in body["error"]  # upstream detail logged, not returned
+
+
+def test_resolve_config_defaults_when_env_empty() -> None:
+    cfg = resolve_config({})
+    assert cfg.host == DEFAULT_HOST
+    assert cfg.port == DEFAULT_PORT
+    assert cfg.mavlink2rest_url == DEFAULT_MAVLINK2REST_URL
+    assert cfg.drone_uid == DEFAULT_DRONE_UID
+    assert cfg.fts_tracks_url == DEFAULT_FTS_TRACKS_URL
+
+
+def test_resolve_config_applies_env_overrides() -> None:
+    cfg = resolve_config(
+        {
+            "MESHSA_LLM_HOST": "127.0.0.1",
+            "MESHSA_LLM_PORT": "9999",
+            "MESHSA_MAVLINK2REST_URL": "http://gw:8088",
+            "MESHSA_DRONE_UID": "uav-42",
+            "MESHSA_FTS_TRACKS_URL": "http://fts/tracks",
+        }
+    )
+    assert cfg.host == "127.0.0.1"
+    assert cfg.port == 9999  # parsed to int
+    assert cfg.mavlink2rest_url == "http://gw:8088"
+    assert cfg.drone_uid == "uav-42"
+    assert cfg.fts_tracks_url == "http://fts/tracks"
 
 
 def test_widget_html_is_self_contained() -> None:
