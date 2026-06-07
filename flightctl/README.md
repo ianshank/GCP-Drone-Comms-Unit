@@ -11,22 +11,62 @@ the deployment/runtime layer. See the approved plan for the full design and sequ
 ## Layout
 | Path | What |
 | ---- | ---- |
+| `scripts/start_all.sh` | **One-command bring-up** of the whole stack in dependency order (`start`/`stop`/`status`/`restart`). No sudo. |
 | `scripts/relocate_to_ssd.sh` | **Phase 1** — conservative eMMC→SSD relocation (Docker data-root, caches, mount hardening, cleanup). **Run with sudo after reviewing.** |
-| `configs/jetson_gateway.json` | Example meshsa node: `mavlink_source`(telemetry) → `tak_tcp`(cot, air type). |
+| `configs/jetson_gateway.json` | Example meshsa node: `mavlink_source`(telemetry) → `tak_tcp`(cot, air type). Direct (no proxy): MAVLink in on `udpin:…:14550`. |
+| `configs/jetson_gateway.proxy.json` | Same node behind the mavp2p proxy: MAVLink in on `udpin:127.0.0.1:14551` (mavp2p fans the autopilot stream to the gateway, mavlink2rest, and any GCS). Used by `start_all.sh`. |
 | `sim/mavlink_fake.py` | pymavlink `udpout` simulator — emits HEARTBEAT + GLOBAL_POSITION_INT for dev/e2e (no autopilot needed). |
 | `systemd/mavp2p.service` + `mavp2p.env.example` | MAVLink proxy (mavp2p) unit. |
 | `systemd/freetakserver.service` + `fts.env.example` | FreeTAKServer unit (Python 3.11 venv). |
 | `udev/99-flightctl-serial.rules.example` | Stable `/dev/flightctl-*` serial symlinks for autopilot/FC. |
 
+## Bring up the whole stack (one command)
+
+Once the prerequisites are staged on the SSD (mavp2p binary, the `meshsa`/`fts` venvs,
+Node 20 + Node-RED for the WebMap, and `mavlink2rest`), start everything in the correct
+dependency order:
+
+```bash
+flightctl/scripts/start_all.sh start          # add --browser to open the web UIs
+flightctl/scripts/start_all.sh status         # per-service pid + port health
+flightctl/scripts/start_all.sh stop
+```
+
+Order is: **FreeTAKServer → FTS Web UI → WebMap → meshsa gateway → mavlink2rest → mavp2p
+→ simulator**, with a readiness wait on each. Paths/ports are env-overridable at the top of
+the script. By default it runs the bundled MAVLink **simulator**; for real hardware, drop the
+sim and point mavp2p at `serial:/dev/flightctl-autopilot:<baud>`.
+
+### Endpoints it exposes
+
+| UI / service | URL / endpoint | Notes |
+| ------------ | -------------- | ----- |
+| TAK / CoT (ATAK) | `<jetson-ip>:8087` | point ATAK's TAK Server stream here |
+| FreeTAKServer Web UI | `http://<jetson-ip>:5000/` | admin dashboard; default login `admin` / `password` (change for prod) |
+| WebMap (Node-RED worldmap) | `http://<jetson-ip>:1880/tak-map/` | FreeTAKHub flow; in-browser moving map of CoT tracks |
+| mavlink2rest | `http://<jetson-ip>:8088/` | browser/REST/WS view of the raw MAVLink stream off the proxy |
+
+> **MAVLink GCS UI:** `mavp2p` has no native UI. mavlink2rest is the browser GCS here;
+> QGroundControl ships **x86_64 only** (no arm64), and the MAVProxy map/HUD GUI needs
+> `python3-wxgtk4.0` (apt/sudo).
+
+### Two wiring gotchas (encoded in `start_all.sh`)
+
+1. **Start order.** mavp2p's `udpc` outputs are *connected* UDP sockets — each consumer
+   (gateway `:14551`, mavlink2rest `:14552`) must be **listening before mavp2p starts**, or
+   mavp2p latches `ECONNREFUSED` and the channel flaps. The script binds the consumers first.
+2. **MAVLink v2 only.** `mavlink2rest` ignores MAVLink v1, so the simulator runs with
+   `MAVLINK20=1` (pymavlink and the gateway parse v2 fine). Sim is system id `1`, component `0`.
+
 ## Quick local test (no hardware, no services) — works today
 ```bash
 # the meshsa SSD venv already has pymavlink? if not: uv pip install pymavlink (after Phase 1)
-cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # 163 tests, 100% cov
+cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # 165 tests, 100% cov
 ```
 
 ## What is already done vs. what needs root
 
-**Done & verified (no sudo, all on the SSD):** branch + code + 163 tests at 100% cov;
+**Done & verified (no sudo, all on the SSD):** branch + code + 165 tests at 100% cov;
 `mavp2p` v1.3.3 arm64 staged at `/mnt/ssd/flightctl/bin/mavp2p`; `pymavlink`+`yamspy`
 installed in `/mnt/ssd/venvs/meshsa` (live MAVLink→CoT run confirmed); FreeTAKServer
 installed in a uv-built Python-3.11 venv at `/mnt/ssd/venvs/fts` (entrypoint

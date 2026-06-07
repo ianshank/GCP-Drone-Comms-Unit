@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-06-06
 
 ### Added
+- **Stack orchestration + browser UIs (ops).**
+  - `flightctl/scripts/start_all.sh` — one-command `start`/`stop`/`status`/`restart`
+    that brings the whole edge node up in dependency order (FreeTAKServer → FTS Web UI
+    → WebMap → meshsa gateway → mavlink2rest → mavp2p → simulator) with a per-service
+    readiness wait. Encodes two hard constraints: (1) `udpc` consumers must bind before
+    mavp2p connects (else its connected-UDP socket latches `ECONNREFUSED`), and (2) the
+    simulator emits MAVLink **v2** (`MAVLINK20=1`) because mavlink2rest ignores v1.
+  - `flightctl/configs/jetson_gateway.proxy.json` — gateway behind the proxy
+    (`mavlink_source` on `udpin:127.0.0.1:14551`) so mavp2p can fan one autopilot
+    stream to the gateway, mavlink2rest, and any GCS.
+  - Browser UIs wired in: FreeTAKServer Web UI (`:5000`), FreeTAKHub **WebMap** Node-RED
+    flow (`:1880/tak-map/`), and **mavlink2rest** (`:8088`) as the in-browser MAVLink GCS
+    (QGroundControl is x86_64-only on arm64; MAVProxy's wx GUI needs apt/sudo).
 - **Flight-control telemetry integration (backward-compatible, no schema bump).**
   - `telemetry` codec (`meshsa.telemetry.TelemetryCodec`): stateless map from a
     structured telemetry frame to a `PLI` `Envelope` (and back). Registered as
