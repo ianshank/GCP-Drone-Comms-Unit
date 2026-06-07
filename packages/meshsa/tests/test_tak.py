@@ -1,6 +1,8 @@
 import asyncio
+import ssl
 
 import pytest
+import trustme
 
 from meshsa import (
     CotCodec,
@@ -16,7 +18,7 @@ from meshsa import (
     build_node,
     transport_registry,
 )
-from meshsa.transports.tak import CotFramer
+from meshsa.transports.tak import CotFramer, _build_ssl_context
 
 
 # ============================ framer ============================
@@ -411,3 +413,114 @@ async def test_multicast_joins_on_start_and_leaves_on_stop():
     assert made["n"] == 1 and not io.closed  # joined exactly once
     await t.stop()
     assert io.closed  # left the group
+
+
+# ============================ TLS ============================
+@pytest.fixture
+def tls_certs(tmp_path):
+    """An ephemeral CA + client cert chain on disk (in-test, no committed PEM)."""
+    ca = trustme.CA()
+    leaf = ca.issue_cert("client.local")
+    ca_path = tmp_path / "ca.pem"
+    chain_path = tmp_path / "client.pem"  # combined key + cert chain
+    ca.cert_pem.write_to_path(str(ca_path))
+    leaf.private_key_and_cert_chain_pem.write_to_path(str(chain_path))
+    return {"ca": str(ca_path), "chain": str(chain_path)}
+
+
+def test_build_ssl_context_defaults_verify_and_check_hostname():
+    ctx = _build_ssl_context()
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True
+
+
+def test_build_ssl_context_verify_without_hostname_check():
+    ctx = _build_ssl_context(check_hostname=False)
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is False
+
+
+def test_build_ssl_context_insecure_disables_verification():
+    # check_hostname must be cleared before CERT_NONE or stdlib ssl raises.
+    ctx = _build_ssl_context(verify=False)
+    assert ctx.verify_mode == ssl.CERT_NONE
+    assert ctx.check_hostname is False
+
+
+def test_build_ssl_context_loads_ca_and_client_chain(tls_certs):
+    ctx = _build_ssl_context(cafile=tls_certs["ca"], certfile=tls_certs["chain"])
+    assert ctx.cert_store_stats()["x509"] >= 1  # CA trusted; client chain loaded w/o error
+
+
+async def test_tls_injected_connector_wins():
+    # tls=True but an explicit connector is injected -> no SSL context, no real socket.
+    reader, writer = QueueReader(), FakeWriter()
+    t = TakTcpTransport(tls=True, connector=lambda: _conn(reader, writer), sleep=FakeSleep())
+    await t.start()
+    await t.send(b"<event/></event>")
+    assert writer.buf  # used the injected connector
+    reader.push(b"")
+    await t.stop()
+
+
+def test_tls_builds_tls_connector(monkeypatch):
+    captured = {}
+
+    def fake_tls_connector(host, port, context, server_hostname):
+        captured.update(host=host, port=port, context=context, server_hostname=server_hostname)
+        return lambda: _conn(QueueReader(), FakeWriter())
+
+    monkeypatch.setattr("meshsa.transports.tak._default_tls_connector", fake_tls_connector)
+    TakTcpTransport(tls=True, host="fts.local", port=8089, tls_server_hostname="fts.local")
+    assert captured["host"] == "fts.local"
+    assert captured["port"] == 8089
+    assert captured["server_hostname"] == "fts.local"
+    assert isinstance(captured["context"], ssl.SSLContext)
+
+
+def test_tls_bad_cert_fails_fast(tmp_path):
+    # A missing cert raises at construction (fail-fast), not at start().
+    with pytest.raises((FileNotFoundError, ssl.SSLError, OSError)):
+        TakTcpTransport(tls=True, tls_certfile=str(tmp_path / "missing.pem"))
+
+
+def test_default_plaintext_connector_when_no_tls_and_no_connector():
+    # No injected connector and tls=False -> plaintext default connector is built
+    # (closure only; no socket opened until start()).
+    t = TakTcpTransport(host="10.0.0.1", port=8087)
+    assert t._connector is not None
+
+
+async def test_e2e_tls_option_plumbs_through_build_node(clock, ids):
+    # The `tls` option round-trips through TransportConfig -> registry -> constructor;
+    # the injected connector keeps it hermetic (no real TLS socket).
+    bus = LoopbackBus()
+    reader, writer = QueueReader(), FakeWriter()
+    cfg = NodeConfig(
+        uid="base",
+        callsign="BASE",
+        tier="base",
+        transports=[
+            {"name": "mesh", "type": "loopback"},
+            {
+                "name": "tak",
+                "type": "tak_tcp",
+                "codec": "cot",
+                "options": {"tls": True, "port": 8089, "tls_verify": False},
+            },
+        ],
+    )
+    node = build_node(
+        cfg,
+        clock=clock,
+        id_factory=ids,
+        transport_kwargs={
+            "mesh": {"bus": bus},
+            "tak": {"connector": lambda: _conn(reader, writer), "sleep": FakeSleep()},
+        },
+    )
+    await node.start()
+    await node.publish_position(Position(lat=1.0, lon=2.0))
+    assert writer.buf.startswith(b"<event")
+    reader.push(b"")
+    await node.stop()
