@@ -1,0 +1,15 @@
+# /etc/udev/rules.d/99-meshsa-serial.rules — stable name for the base-node radio.
+# USB enumeration order is non-deterministic, so /dev/ttyUSB* / /dev/ttyACM* can
+# move between boots; this symlink gives base_node.py (MESHSA_PORT) a fixed path.
+#
+# Find your radio's attributes first:
+#   udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'
+# then set the VENDOR/PRODUCT (and optional serial) below and:
+#   sudo cp 99-meshsa-serial.rules.example /etc/udev/rules.d/99-meshsa-serial.rules
+#   sudo udevadm control --reload && sudo udevadm trigger
+#
+# Examples (VERIFY ids for your board — common Meshtastic USB-serial bridges):
+#   Silicon Labs CP210x (T-Beam / Heltec):
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="meshsa-radio", GROUP="dialout", MODE="0660"
+#   CH340 (some clones):
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="meshsa-radio", GROUP="dialout", MODE="0660"

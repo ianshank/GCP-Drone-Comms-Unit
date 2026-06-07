@@ -117,10 +117,11 @@ class MeshtasticTransport(AbstractTransport):
         self._mesh = mesh
         self._provision = provision or _default_provisioner
         self._factory = interface_factory or _default_interface_factory(options)
-        if subscribe is None or unsubscribe is None:  # pragma: no cover - lib glue
-            subscribe, unsubscribe = _default_pubsub()
-        self._subscribe = subscribe
-        self._unsubscribe = unsubscribe
+        # pubsub is resolved lazily in start() so constructing a meshtastic
+        # transport never requires pypubsub to be installed; callers/tests may
+        # still inject subscribe/unsubscribe explicitly.
+        self._subscribe: SubscribeFn | None = subscribe
+        self._unsubscribe: SubscribeFn | None = unsubscribe
         self._topic = topic
         self._lost_topic = lost_topic
         self.portnum = portnum
@@ -149,8 +150,12 @@ class MeshtasticTransport(AbstractTransport):
         self._started = True
         self._stopping = False
         self._lost = asyncio.Event()
-        self._subscribe(self._on_receive, self._topic)
-        self._subscribe(self._on_lost, self._lost_topic)
+        subscribe, unsubscribe = self._subscribe, self._unsubscribe
+        if subscribe is None or unsubscribe is None:  # pragma: no cover - lib glue
+            subscribe, unsubscribe = _default_pubsub()
+            self._subscribe, self._unsubscribe = subscribe, unsubscribe
+        subscribe(self._on_receive, self._topic)
+        subscribe(self._on_lost, self._lost_topic)
         self._subscribed = True
         try:
             self._iface = self._factory()
@@ -210,8 +215,11 @@ class MeshtasticTransport(AbstractTransport):
 
     def _teardown_subs(self) -> None:
         if self._subscribed:
-            self._unsubscribe(self._on_receive, self._topic)
-            self._unsubscribe(self._on_lost, self._lost_topic)
+            # _subscribed is only set True after start() resolves pubsub, so both
+            # are non-None here; cast keeps mypy strict happy without a branch.
+            unsubscribe = cast(SubscribeFn, self._unsubscribe)
+            unsubscribe(self._on_receive, self._topic)
+            unsubscribe(self._on_lost, self._lost_topic)
             self._subscribed = False
 
     async def send(self, data: bytes) -> None:

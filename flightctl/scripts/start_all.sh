@@ -23,6 +23,9 @@
 #   flightctl/scripts/start_all.sh status
 #   flightctl/scripts/start_all.sh restart [--browser]
 # =============================================================================
+# -e is intentionally omitted: this orchestrator treats many non-zero exits as
+# normal flow (port probes via `grep -q`, `kill -0` liveness checks, `pkill` with
+# no match), and each fatal step is guarded explicitly. -u and pipefail stay on.
 set -uo pipefail
 
 # --- paths / config (override via env) ---------------------------------------
@@ -207,6 +210,7 @@ do_status() {
   for p in "$FTS_COT_PORT tcp FTS-CoT" "$FTS_API_PORT tcp FTS-API" "$FTS_UI_PORT tcp FTS-UI" \
            "$WEBMAP_PORT tcp WebMap" "$M2R_PORT tcp mavlink2rest" \
            "$MAVP2P_IN_PORT udp mavp2p-in" "$GW_PORT udp gateway" "$M2R_UDP_PORT udp m2r-udp"; do
+    # shellcheck disable=SC2086  # intentional split of the "port proto label" triplet
     set -- $p
     if { [ "$2" = tcp ] && tcp_up "$1"; } || { [ "$2" = udp ] && udp_up "$1"; }; then
       printf '   %s %-5s %s\n' "$c_grn✓$c_off" "$2/$1" "$3"
