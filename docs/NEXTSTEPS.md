@@ -12,12 +12,18 @@
 - Manually verified on-device: fake MAVLink → gateway → live FreeTAKServer `:8087` → ATAK
   viewer received the air track.
 
+## Shipped in 0.3.0
+- [x] **TLS CoT (`:8089`)** — config-driven TLS on the `tak_tcp` transport
+      (`tls`/`tls_cafile`/`tls_certfile`/`tls_keyfile`/`tls_verify`/`tls_check_hostname`/
+      `tls_server_hostname`), `flightctl/scripts/gen_certs.sh` (CA/server/client + ATAK
+      data-package template), and `flightctl/configs/jetson_gateway.tls.json`. Plain `:8087`
+      unchanged for closed dev nets.
+- [x] **Pacing / rate-limit** to FTS — inline minimum-hold (`pace_min_interval_s`, PyTAK
+      `FTS_COMPAT` contract) via `meshsa.pacing.Pacer`. Off by default.
+
 ## Near-term (M2 hardening)
 - [ ] **Automated FTS e2e** (non-coverage job): bring up FTS in CI on a self-hosted Jetson
       runner; assert a track via the FTS REST API and a multicast CoT listener.
-- [ ] **TLS CoT (`:8089`)** + signed ATAK data-package / cert generation flow; document the
-      client import. Keep plain `:8087` for closed dev nets.
-- [ ] **Pacing / rate-limit** to FTS (PyTAK-style `FTS_COMPAT`) so fast tracks aren't dropped.
 - [ ] **Transport observability:** periodic rx-count / link-state structlog fields on
       `mavlink_source` / `msp_source`; surface `dropped_inbox_full` per transport; export
       `RouterMetrics` (Prometheus/JSON).

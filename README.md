@@ -40,7 +40,7 @@ real time.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e "packages/meshsa[dev]"
-cd packages/meshsa && pytest          # 165 tests, 100% line+branch coverage
+cd packages/meshsa && pytest          # 181 tests, 100% line+branch coverage
 ```
 
 Drone/FC telemetry → CoT (no hardware needed — uses the bundled simulator):

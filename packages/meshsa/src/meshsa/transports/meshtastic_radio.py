@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from typing import Any, cast
 
 import structlog
 
+from ..protocols import SleepFn
 from ..registry import transport_registry
 from .base import AbstractTransport
 
@@ -29,7 +30,6 @@ _log = structlog.get_logger("meshsa.meshtastic")
 
 InterfaceFactory = Callable[[], Any]
 SubscribeFn = Callable[[Callable[..., None], str], None]
-SleepFn = Callable[[float], Awaitable[None]]
 #: Applies node mesh settings (region/channel/psk/freq_khz) to a live device.
 Provisioner = Callable[[Any, dict[str, Any]], None]
 

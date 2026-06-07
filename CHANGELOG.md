@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-06
+
+Additive, backward-compatible hardening of the CoT/TAK link. No `Envelope` shape
+change — `SCHEMA_VERSION` stays `1`; both features are off by default, so a node that
+omits the new options behaves byte-for-byte as in 0.2.0.
+
+### Added
+- **TLS CoT for the `tak_tcp` transport** (typically FreeTAKServer `:8089`).
+  Config-driven options on the transport: `tls`, `tls_cafile`, `tls_certfile`,
+  `tls_keyfile`, `tls_verify`, `tls_check_hostname`, `tls_server_hostname`. The SSL
+  context is built via a pure `_build_ssl_context` helper (covered by tests) and the
+  context is validated at construction time (fail-fast on a bad/missing cert); the
+  real socket builder is the only added `# pragma: no cover`. An injected `connector`
+  still overrides everything. Plain `:8087` is unchanged when `tls=False`.
+- **FTS rate-limit pacing** — `meshsa.pacing.Pacer`, an inline minimum-hold pacer
+  (PyTAK `FTS_COMPAT` contract) so a fast telemetry source does not overrun a
+  rate-limited FreeTAKServer. Enable per transport with `pace_min_interval_s`
+  (`0` = disabled, the default). `clock` is injectable for testing.
+- **Ops:** `flightctl/scripts/gen_certs.sh` (CA + server + client certs and an ATAK
+  data-package template), `flightctl/configs/jetson_gateway.tls.json` (TLS + pacing
+  example on `:8089`), and a TLS pointer in `flightctl/systemd/fts.env.example`.
+- `trustme` added to the `[dev]` extra for hermetic in-test TLS cert generation.
+
+### Changed
+- `SleepFn` is now defined once in `meshsa.protocols` (was duplicated in the TAK and
+  Meshtastic transports).
+
 ## [0.2.0] - 2026-06-06
 
 ### Added

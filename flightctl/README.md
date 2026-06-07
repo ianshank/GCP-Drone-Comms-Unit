@@ -15,6 +15,8 @@ the deployment/runtime layer. See the approved plan for the full design and sequ
 | `scripts/relocate_to_ssd.sh` | **Phase 1** — conservative eMMC→SSD relocation (Docker data-root, caches, mount hardening, cleanup). **Run with sudo after reviewing.** |
 | `configs/jetson_gateway.json` | Example meshsa node: `mavlink_source`(telemetry) → `tak_tcp`(cot, air type). Direct (no proxy): MAVLink in on `udpin:…:14550`. |
 | `configs/jetson_gateway.proxy.json` | Same node behind the mavp2p proxy: MAVLink in on `udpin:127.0.0.1:14551` (mavp2p fans the autopilot stream to the gateway, mavlink2rest, and any GCS). Used by `start_all.sh`. |
+| `configs/jetson_gateway.tls.json` | Node that talks **TLS CoT** to FreeTAKServer `:8089` (client cert) with outbound **pacing** — see [TLS CoT + pacing](#tls-cot--rate-limit-pacing). |
+| `scripts/gen_certs.sh` | **Template** — generate a CA + server + client certs and an importable ATAK data-package zip. Edit CN/SAN/`OUT_DIR` before running. |
 | `sim/mavlink_fake.py` | pymavlink `udpout` simulator — emits HEARTBEAT + GLOBAL_POSITION_INT for dev/e2e (no autopilot needed). |
 | `systemd/mavp2p.service` + `mavp2p.env.example` | MAVLink proxy (mavp2p) unit. |
 | `systemd/freetakserver.service` + `fts.env.example` | FreeTAKServer unit (Python 3.11 venv). |
@@ -58,15 +60,48 @@ sim and point mavp2p at `serial:/dev/flightctl-autopilot:<baud>`.
 2. **MAVLink v2 only.** `mavlink2rest` ignores MAVLink v1, so the simulator runs with
    `MAVLINK20=1` (pymavlink and the gateway parse v2 fine). Sim is system id `1`, component `0`.
 
+## TLS CoT + rate-limit pacing
+
+For a hardened FreeTAKServer, the `tak_tcp` transport can talk TLS CoT (default
+`:8089`) with a client cert, and pace outbound tracks so a fast source doesn't
+overrun FTS. Both are config-driven and **off by default** — plain `:8087` is
+unchanged. See `configs/jetson_gateway.tls.json` for a complete example.
+
+```jsonc
+// transport "options" for the tak_tcp entry:
+"options": {
+  "host": "127.0.0.1", "port": 8089,
+  "tls": true,
+  "tls_cafile":   "/etc/flightctl/certs/ca.pem",            // trust anchor
+  "tls_certfile": "/etc/flightctl/certs/gateway-client.pem", // client key+chain (combined PEM)
+  "tls_server_hostname": "freetakserver",                   // must match the server cert SAN
+  // "tls_verify": false,        // closed dev net only — disables cert verification
+  "pace_min_interval_s": 0.2     // >=0.2 s between CoT frames (0 = unpaced)
+}
+```
+
+**Generate certs + the ATAK data-package** (edit the CN/SAN/`OUT_DIR` first):
+
+```bash
+OUT_DIR=/etc/flightctl/certs SERVER_SAN="DNS:freetakserver,IP:<jetson-lan-ip>" \
+  bash flightctl/scripts/gen_certs.sh
+```
+
+This writes `ca.pem` + `server.pem` (for FTS, under `FTS_CERTS_PATH`; FTS serves TLS
+on `FTS_SSLCOT_PORT=8089`), `gateway-client.pem` (for the gateway options above), and
+`flightctl-tls.zip` — import that data-package into ATAK (default p12 password
+`atakatak`) to trust the CA and load the client identity. Keep all keys **out of the
+repo**.
+
 ## Quick local test (no hardware, no services) — works today
 ```bash
 # the meshsa SSD venv already has pymavlink? if not: uv pip install pymavlink (after Phase 1)
-cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # 165 tests, 100% cov
+cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # 181 tests, 100% cov
 ```
 
 ## What is already done vs. what needs root
 
-**Done & verified (no sudo, all on the SSD):** branch + code + 165 tests at 100% cov;
+**Done & verified (no sudo, all on the SSD):** branch + code + 181 tests at 100% cov;
 `mavp2p` v1.3.3 arm64 staged at `/mnt/ssd/flightctl/bin/mavp2p`; `pymavlink`+`yamspy`
 installed in `/mnt/ssd/venvs/meshsa` (live MAVLink→CoT run confirmed); FreeTAKServer
 installed in a uv-built Python-3.11 venv at `/mnt/ssd/venvs/fts` (entrypoint
