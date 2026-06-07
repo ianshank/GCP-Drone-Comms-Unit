@@ -49,3 +49,19 @@ jobs:
         run: |
           pip install build
           python -m build
+
+  shell:
+    name: shell lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check (bash -n)
+        run: |
+          files=$(git ls-files '*.sh')
+          for f in $files; do bash -n "$f"; done
+
+      - name: ShellCheck
+        run: |
+          files=$(git ls-files '*.sh')
+          shellcheck -x --severity=warning $files
