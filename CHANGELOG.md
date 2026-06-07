@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Read-only LLM situational-awareness assistant (`meshsa.llm`, opt-in `[llm]` extra).**
+  - A natural-language assistant over live drone telemetry and TAK tracks. Strictly
+    advisory: every tool is read-only, so it can observe and summarize but never command
+    the vehicle or alter the SA picture.
+  - `sources` — `DroneState`/`Track` models, `TelemetrySource`/`TrackSource` protocols,
+    in-memory `Static*` sources (tests/sim), and lazy-import HTTP sources
+    (`Mavlink2RestSource` reads mavlink2rest `:8088`; `FtsTrackSource` reads FreeTAKServer).
+    Wire parsing (`parse_global_position_int`, `parse_fts_tracks`) is pure and unit-tested.
+  - `tools` — read-only `get_drone_state` / `list_tracks` tool specs + `ToolDispatcher`
+    over the source protocols; pure formatters.
+  - `agent` — `SAAgent`, a manual Anthropic tool-use loop (Claude Opus, adaptive thinking)
+    with the Messages API injected behind a `Protocol` so the loop is fully testable with a
+    scripted fake client (no network, no key). `build_agent` lazy-imports `anthropic`.
+  - `server` — tiny aiohttp chat endpoint (`POST /chat`) + a self-contained chat widget for
+    embedding in a Cockpit iframe; the `meshsa-llm` console script serves it. Request
+    handling (`chat_reply`) is framework-free and unit-tested.
+  - Ops: `flightctl/llm/` runbook + `llm.env.example`. Model defaults to `claude-opus-4-8`,
+    overridable via `MESHSA_LLM_MODEL`. 33 new tests; suite stays at 100% line+branch.
+
 ## [0.2.0] - 2026-06-06
 
 ### Added
