@@ -175,6 +175,21 @@ def test_writer_flush_paths_with_zero_interval(tmp_path):
     assert len(_read_lines(os.path.join(logger.session_dir, "rc.jsonl"))) == 2
 
 
+def test_writer_survives_unserializable_record(tmp_path):
+    # A poison record (json can't serialize) must be logged-and-dropped, never
+    # kill the writer thread — otherwise close() could wedge. A valid record
+    # enqueued after it is still written.
+    logger = _logger(tmp_path)
+    logger.start()
+    logger._queue.put(("rc", {"bad": object()}))
+    logger.record_rc([1500] * 4, t=1.0)
+    logger.close()  # must return promptly; the writer survived the poison record
+    rc = _read_lines(os.path.join(logger.session_dir, "rc.jsonl"))
+    good = [r for r in rc if "ch" in r]
+    assert good and good[0]["ch"] == [1500, 1500, 1500, 1500]
+    assert logger.dropped_records["rc"] >= 1
+
+
 def test_zero_span_telemetry_rate_falls_back_to_count(tmp_path):
     logger = _logger(tmp_path)
     logger.start()

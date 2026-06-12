@@ -147,16 +147,29 @@ class FlightLogger:
         _log.debug("flight logger started", session_dir=self.session_dir)
 
     def close(self) -> None:
-        """Drain the queue, stop the writer, finalize the manifest (idempotent)."""
+        """Drain the queue, stop the writer, finalize the manifest (idempotent).
+
+        Shutdown is bounded by ``logger_shutdown_timeout_s`` on both the sentinel
+        enqueue and the thread join, so a wedged writer can never hang the caller
+        indefinitely. The writer itself is crash-resilient (a failed record is
+        logged and dropped, never fatal), so under normal operation it always
+        drains to the sentinel and exits cleanly.
+        """
         if self._closed or not self._started:
             return
         # Never join ourselves from inside the writer thread (deadlock guard).
         if threading.current_thread() is self._thread:  # pragma: no cover - defensive
             return
         self._closed = True
-        self._queue.put(_SENTINEL)
         assert self._thread is not None  # always set by start()
-        self._thread.join()
+        timeout = self._s.logger_shutdown_timeout_s
+        try:
+            self._queue.put(_SENTINEL, timeout=timeout)
+        except queue.Full:  # pragma: no cover - writer wedged (e.g. stuck disk)
+            _log.warning("logger queue full; could not enqueue shutdown sentinel")
+        self._thread.join(timeout=timeout)
+        if self._thread.is_alive():  # pragma: no cover - writer wedged (e.g. stuck disk)
+            _log.warning("logger writer thread did not terminate within timeout")
         for fh in self._files.values():
             fh.close()
         self._write_manifest()  # rewrite with final drop counts + telemetry rates
@@ -238,8 +251,16 @@ class FlightLogger:
                 self._queue.task_done()
                 break
             stream, rec = item
-            self._files[stream].write(json.dumps(rec) + "\n")
-            self._queue.task_done()
+            try:
+                self._files[stream].write(json.dumps(rec) + "\n")
+            except (OSError, TypeError, ValueError):
+                # A disk error or an unserialisable record must never kill the
+                # writer thread — that would wedge close(). Log, count it as a
+                # drop, and keep draining so shutdown stays bounded.
+                self.dropped_records[stream] = self.dropped_records.get(stream, 0) + 1
+                _log.exception("logger write failed; dropping record", stream=stream)
+            finally:
+                self._queue.task_done()
             if time.monotonic() - last_flush >= self._s.flush_every_s:
                 self._flush()
                 last_flush = time.monotonic()

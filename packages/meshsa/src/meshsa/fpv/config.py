@@ -73,6 +73,10 @@ class LoggerSettings(BaseModel):
 
     logger_queue_len: int = 4096
     logger_event_timeout_s: float = 0.5
+    #: Upper bound on shutdown: the sentinel enqueue and the writer-thread join in
+    #: ``close()`` each wait at most this long, so a wedged writer (e.g. a stuck
+    #: disk) can never hang the caller indefinitely.
+    logger_shutdown_timeout_s: float = 2.0
     flush_every_s: float = 1.0
     sessions_root: str = "sessions"
     #: Telemetry history ring length; also consumed by ``TelemetryStore`` (§5.2).

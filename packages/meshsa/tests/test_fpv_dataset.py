@@ -50,6 +50,15 @@ def test_missing_schema_version_raises(tmp_path):
         read_jsonl(p)
 
 
+def test_single_torn_line_raises_descriptive_error(tmp_path):
+    # The sole line is truncated -> no header readable -> descriptive error, not
+    # a raw IndexError on objs[0].
+    p = tmp_path / "rc.jsonl"
+    p.write_text('{"t": 1.0, "ch": [1')
+    with pytest.raises(IncompatibleDatasetError, match="no valid JSON records"):
+        read_jsonl(str(p))
+
+
 def test_torn_final_line_is_tolerated(tmp_path):
     p = tmp_path / "rc.jsonl"
     p.write_text(

@@ -142,11 +142,18 @@ class LinkHealthMonitor:
             reasons.append("downlink_degrading")
             state = self._escalate(state, HealthState.WARN)
 
-        # RSSI-vs-sensitivity-floor co-signal, version-keyed (§4.3).
+        # RSSI-vs-sensitivity-floor co-signal, version-keyed (§4.3). On diversity
+        # receivers (common in ELRS) judge the link by the *active* antenna
+        # (active_antenna: 0 = ant1, 1 = ant2) so a shadowed idle antenna never
+        # raises a false degradation warning.
         floor = self._s.sensitivity_floor(self._s.elrs_major_version, msg.rf_mode)
-        if floor is not None and msg.uplink_rssi_ant1_dbm < floor + self._s.health_rssi_margin_db:
-            reasons.append("rssi_below_margin")
-            state = self._escalate(state, HealthState.WARN)
+        if floor is not None:
+            active_rssi = (
+                msg.uplink_rssi_ant2_dbm if msg.active_antenna == 1 else msg.uplink_rssi_ant1_dbm
+            )
+            if active_rssi < floor + self._s.health_rssi_margin_db:
+                reasons.append("rssi_below_margin")
+                state = self._escalate(state, HealthState.WARN)
 
         return state, tuple(reasons)
 

@@ -35,6 +35,9 @@ def read_jsonl(path: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             if i == len(lines) - 1:
                 break  # tolerate only a torn final line
             raise
+    if not objs:
+        # The sole line was torn/corrupt — no header could be read.
+        raise IncompatibleDatasetError(f"no valid JSON records in dataset file: {path}")
     header = objs[0]
     _check_schema(header, path)
     return header, objs[1:]

@@ -13,6 +13,7 @@ def test_defaults_are_present_and_typed():
     assert s.health.health_lq_warn == 70
     assert s.health.health_lq_critical == 50
     assert s.logger.logger_queue_len == 4096
+    assert s.logger.logger_shutdown_timeout_s == 2.0
     assert s.arm_guard.arm_threshold_us == 1500
     # Corrected half-duplex handset baud (peer-review M-echo).
     assert s.crsf.crsf_baud == 400000

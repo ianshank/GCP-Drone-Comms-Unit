@@ -150,6 +150,24 @@ def test_version_keyed_floor_selection_changes_outcome():
     assert "rssi_below_margin" not in r2.reasons
 
 
+def test_rssi_uses_active_antenna_for_diversity():
+    # ELRS 3, rf_mode 2 -> floor -112; +10 margin => threshold -102. The RSSI
+    # co-signal must judge the *active* antenna, not always antenna 1.
+    s = HealthSettings(elrs_major_version=3)
+
+    def reasons_for(ant1: int, ant2: int, active: int) -> tuple[str, ...]:
+        mon, store, clock = _make(s)
+        store.update(LinkStatistics(ant1, ant2, 100, 8, active, 2, 100, -50, 100, 8), clock.now())
+        return mon.evaluate().reasons
+
+    # Active antenna = ant2: a strong ant2 keeps the link clean even if ant1 is weak.
+    assert "rssi_below_margin" not in reasons_for(-105, -50, active=1)
+    # Active antenna = ant2: a weak ant2 warns, ignoring a strong (idle) ant1.
+    assert "rssi_below_margin" in reasons_for(-50, -105, active=1)
+    # Active antenna = ant1: a weak ant1 warns.
+    assert "rssi_below_margin" in reasons_for(-105, -50, active=0)
+
+
 def test_recovery_is_hysteresis_damped():
     mon, store, clock = _make()
     _drive_to_ok(mon, store, clock)
