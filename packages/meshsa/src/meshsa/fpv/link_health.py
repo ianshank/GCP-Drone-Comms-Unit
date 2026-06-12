@@ -11,6 +11,7 @@ the worst moment.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -42,6 +43,16 @@ _SEVERITY: dict[HealthState, int] = {
     HealthState.CRITICAL: 2,
     HealthState.NO_DATA: 3,
 }
+
+
+def worst_state(states: Iterable[HealthState]) -> HealthState:
+    """Return the most severe of ``states`` (by :data:`_SEVERITY`), NO_DATA if empty.
+
+    Ranking by severity — not by the string value — matters: ``"warn"`` sorts
+    above ``"critical"`` lexicographically, so a naive ``max(state.value)`` would
+    mis-report a run containing CRITICAL as merely WARN.
+    """
+    return max(states, key=lambda s: _SEVERITY[s], default=HealthState.NO_DATA)
 
 
 @dataclass(frozen=True)

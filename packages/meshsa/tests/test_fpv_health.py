@@ -208,6 +208,18 @@ def test_sink_receives_only_transitions():
     assert sink.events[-1] == (HealthState.OK, HealthState.NO_DATA)
 
 
+def test_worst_state_ranks_by_severity_not_string():
+    from meshsa.fpv.link_health import worst_state
+
+    # "warn" sorts above "critical" lexicographically, but CRITICAL is worse.
+    assert (
+        worst_state([HealthState.OK, HealthState.WARN, HealthState.CRITICAL])
+        is HealthState.CRITICAL
+    )
+    assert worst_state([HealthState.OK, HealthState.WARN]) is HealthState.WARN
+    assert worst_state([]) is HealthState.NO_DATA  # empty -> no data observed
+
+
 def test_console_sink_is_non_blocking_and_safe():
     # ConsoleAlertSink only logs; it must accept a None previous without error.
     sink = ConsoleAlertSink()

@@ -15,12 +15,12 @@ from meshsa.fpv.errors import CrcError
 
 
 def test_crc8_known_vector():
-    # CRC8/DVB-S2 of a known byte sequence (poly 0xD5, init 0x00).
-    assert crc8_dvb_s2(b"\x16\x00\x00") == crc8_dvb_s2(bytes([0x16, 0x00, 0x00]))
+    # Standard CRC-8/DVB-S2 check value for the ASCII string "123456789" (poly
+    # 0xD5, init 0x00, no reflection) — validates polynomial and bit order, not
+    # just self-consistency.
+    assert crc8_dvb_s2(b"123456789") == 0xBC
     # Empty input -> init value.
     assert crc8_dvb_s2(b"") == 0
-    # Determinism + single-byte sanity.
-    assert 0 <= crc8_dvb_s2(b"\xc8") <= 0xFF
 
 
 def test_frame_roundtrip_to_from_bytes():

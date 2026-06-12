@@ -16,7 +16,7 @@ from ...cli import log_level_num
 from ..config import HealthSettings
 from ..crsf.telemetry import message_from_record
 from ..dataset import read_jsonl
-from ..link_health import HealthReport, LinkHealthMonitor
+from ..link_health import HealthReport, LinkHealthMonitor, worst_state
 from ..telemetry_store import TelemetryStore
 
 _log = structlog.get_logger("meshsa.fpv.replay")
@@ -74,6 +74,6 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - entry poin
     )
     health = FpvSettings.from_file(args.config).health if args.config else HealthSettings()
     reports = replay_file(args.telemetry_jsonl, health_settings=health)
-    worst = max((r.state.value for r in reports), default="no_data")
-    _log.info("replay complete", records=len(reports), worst_state=worst)
+    worst = worst_state(r.state for r in reports)
+    _log.info("replay complete", records=len(reports), worst_state=worst.value)
     return 0
