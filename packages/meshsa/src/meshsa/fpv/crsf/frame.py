@@ -18,6 +18,7 @@ type IDs, and the framing layout are fixed by the CRSF wire spec.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -130,8 +131,13 @@ class CrsfFrame:
 #: Device addresses a frame may legitimately start with. Resync gates on this so
 #: a misaligned window inside corrupt data cannot masquerade as a frame start
 #: (an all-zero or random window has only a 1/256 chance of a valid CRC, and the
-#: address gate removes essentially all of those false positives).
-_SYNC_ADDRESSES: frozenset[int] = frozenset(int(a) for a in CrsfAddress)
+#: address gate removes essentially all of those false positives). BROADCAST
+#: (0x00) is excluded: a zero byte is far too common inside payloads to be a
+#: reliable frame delimiter, and the module never originates broadcast frames on
+#: the handset line.
+_SYNC_ADDRESSES: frozenset[int] = frozenset(
+    int(a) for a in CrsfAddress if a is not CrsfAddress.BROADCAST
+)
 
 
 def extract_frames(
@@ -139,6 +145,7 @@ def extract_frames(
     *,
     max_frame_len: int = CRSF_MAX_FRAME_LEN,
     sync_addresses: frozenset[int] = _SYNC_ADDRESSES,
+    on_crc_error: Callable[[], None] | None = None,
 ) -> list[CrsfFrame]:
     """Drain all complete, CRC-valid frames from ``buffer`` in place.
 
@@ -147,8 +154,9 @@ def extract_frames(
     frame may only start on a byte in ``sync_addresses`` (CRSF frames always lead
     with a device address), so a CRC-bad or truncated frame is skipped by
     advancing to the next plausible address rather than blindly byte-walking into
-    the following good frame. Pure with respect to the bytes (no I/O); the link
-    layer owns CRC-error accounting.
+    the following good frame. ``on_crc_error`` (if given) is called once per
+    CRC-failed candidate so the link layer can maintain a ``crc_errors`` counter.
+    Pure with respect to the bytes (no I/O).
     """
     frames: list[CrsfFrame] = []
     while len(buffer) >= _OVERHEAD:
@@ -166,8 +174,13 @@ def extract_frames(
         candidate = bytes(buffer[:total])
         try:
             frames.append(CrsfFrame.from_bytes(candidate))
-        except (CrcError, ValueError):
+        except CrcError:
+            if on_crc_error is not None:
+                on_crc_error()
             del buffer[0]  # bad frame: resync from the next byte
+            continue
+        except ValueError:  # pragma: no cover - candidate length is validated above
+            del buffer[0]
             continue
         del buffer[:total]
     return frames

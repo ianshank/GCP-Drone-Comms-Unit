@@ -108,6 +108,16 @@ class CrsfLinkSettings(BaseModel):
     crsf_max_frame_len: int = 64
     #: Inbound frame queue bound; overflow is dropped-and-counted.
     crsf_queue_len: int = 1000
+    #: Bytes to request per non-blocking serial read in ``poll_inbound``.
+    crsf_read_chunk: int = 256
+    #: RC frame channel count and the microsecond<->11-bit-tick linear mapping
+    #: endpoints (TBS/CRSF default: 988us->172, 2012us->1811). Configurable so a
+    #: non-standard handset range never needs a code change.
+    rc_channel_count: int = 16
+    rc_us_min: int = 988
+    rc_us_max: int = 2012
+    rc_ticks_min: int = 172
+    rc_ticks_max: int = 1811
 
 
 class ProberSettings(BaseModel):
