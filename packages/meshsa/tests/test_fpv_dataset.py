@@ -63,6 +63,14 @@ def test_missing_schema_version_raises(tmp_path):
         read_jsonl(p)
 
 
+def test_non_int_schema_version_raises_not_typeerror(tmp_path):
+    # A string schema_version must yield a clean IncompatibleDatasetError, not a
+    # TypeError leaking from the int comparison in is_dataset_compatible.
+    p = _write(tmp_path / "f.jsonl", [json.dumps({"schema_version": "1", "file": "rc"})])
+    with pytest.raises(IncompatibleDatasetError, match="outside supported window"):
+        read_jsonl(p)
+
+
 def test_single_torn_line_raises_descriptive_error(tmp_path):
     # The sole line is truncated -> no header readable -> descriptive error, not
     # a raw IndexError on objs[0].

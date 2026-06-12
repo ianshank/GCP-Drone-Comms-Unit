@@ -12,6 +12,7 @@ import argparse
 import structlog
 
 from ...cli import log_level_num
+from ...protocols import Clock
 from ..config import FpvSettings
 from ..crsf.link import CrsfLink
 from ..crsf.telemetry import TelemetryParser
@@ -53,11 +54,15 @@ def pump_once(
     parser: TelemetryParser,
     store: TelemetryStore,
     monitor: LinkHealthMonitor,
-    clock: MonotonicClock,
+    clock: Clock,
     *,
     logger: FlightLogger | None = None,
 ) -> HealthReport:
     """One ingest cycle: poll -> parse -> store (+log) -> evaluate health.
+
+    ``clock`` is any :class:`meshsa.protocols.Clock` (the production
+    ``MonotonicClock`` or an injected fake), keeping this helper genuinely pure
+    and unit-testable.
 
     Returns the freshly evaluated :class:`HealthReport`. Echo suppression and CRC
     accounting happen inside ``link.poll_inbound``; this function never sees echoes.

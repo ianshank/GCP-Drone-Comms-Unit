@@ -63,9 +63,11 @@ def read_jsonl(path: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
 def _check_schema(header: dict[str, Any], path: str) -> None:
     schema = header.get("schema_version")
-    if schema is None or not is_dataset_compatible(schema):
+    # ``schema`` is Any from JSON; a non-int (missing, string, …) is treated as
+    # incompatible rather than allowed to raise a TypeError inside the comparison.
+    if not isinstance(schema, int) or not is_dataset_compatible(schema):
         raise IncompatibleDatasetError(
-            f"{path}: schema_version {schema} outside supported window "
+            f"{path}: schema_version {schema!r} outside supported window "
             f"[{MIN_COMPATIBLE_DATASET}, {DATASET_SCHEMA}]"
         )
     if schema < DATASET_SCHEMA:
