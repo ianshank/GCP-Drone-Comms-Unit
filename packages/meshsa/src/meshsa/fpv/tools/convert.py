@@ -36,10 +36,18 @@ def to_parquet(records: list[dict[str, Any]], out_path: str) -> int:
     ``pyarrow`` is the optional ``[fpv]`` extra. It is imported lazily via
     ``importlib`` and typed as ``Any`` so mypy behaves identically whether or not
     the extra is installed — `[dev]`-only CI sees no untyped-call error and the
-    full-extras nightly sees no unused-ignore.
+    full-extras nightly sees no unused-ignore. The ``fpv-log-convert`` console
+    script is always installed, so a missing extra yields a clear, actionable
+    error rather than a bare ``ModuleNotFoundError`` traceback.
     """
-    pa: Any = importlib.import_module("pyarrow")
-    pq: Any = importlib.import_module("pyarrow.parquet")
+    try:
+        pa: Any = importlib.import_module("pyarrow")
+        pq: Any = importlib.import_module("pyarrow.parquet")
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "pyarrow is required for Parquet conversion; install the extra with: "
+            'pip install -e "packages/meshsa[fpv]"'
+        ) from exc
     rows = [flatten_record(r) for r in records]
     table = pa.Table.from_pylist(rows)
     pq.write_table(table, out_path)

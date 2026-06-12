@@ -157,6 +157,9 @@ def test_rssi_uses_active_antenna_for_diversity():
 
     def reasons_for(ant1: int, ant2: int, active: int) -> tuple[str, ...]:
         mon, store, clock = _make(s)
+        # Reach confirmed OK first (rf_mode 2, strong RSSI) so the next frame's
+        # reasons reflect the raw evaluation rather than a hysteresis hold.
+        _drive_to_ok(mon, store, clock, rf_mode=2, rssi=-50)
         store.update(LinkStatistics(ant1, ant2, 100, 8, active, 2, 100, -50, 100, 8), clock.now())
         return mon.evaluate().reasons
 
@@ -174,17 +177,23 @@ def test_recovery_is_hysteresis_damped():
     # Degrade to WARN immediately.
     store.update(_ls(uplink_lq=60), clock.now())
     assert mon.evaluate().state is HealthState.WARN
-    # Good frame again, but recovery must persist for the hysteresis window.
+    # Good frame again, but recovery must persist for the hysteresis window. The
+    # held WARN must carry an explicit reason rather than the (now-empty) raw OK
+    # reasons, so a held state is never reasonless.
     store.update(_ls(uplink_lq=100), clock.now())
-    assert mon.evaluate().state is HealthState.WARN  # pending OK just registered
+    held = mon.evaluate()
+    assert held.state is HealthState.WARN  # pending OK just registered
+    assert held.reasons == ("hysteresis_hold",)
     # Partial wait (< hysteresis): pending unchanged, still not upgraded.
     clock.advance(HealthSettings().health_hysteresis_s / 2)
     store.update(_ls(uplink_lq=100), clock.now())
     assert mon.evaluate().state is HealthState.WARN  # pending OK, time insufficient
-    # Remaining wait crosses the window -> upgrade to OK.
+    # Remaining wait crosses the window -> upgrade to OK (reasons now reflect OK).
     clock.advance(HealthSettings().health_hysteresis_s)
     store.update(_ls(uplink_lq=100), clock.now())
-    assert mon.evaluate().state is HealthState.OK
+    recovered = mon.evaluate()
+    assert recovered.state is HealthState.OK
+    assert recovered.reasons == ()
 
 
 def test_sink_receives_only_transitions():

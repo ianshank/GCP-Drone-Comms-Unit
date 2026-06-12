@@ -27,6 +27,25 @@ def test_parse_args():
     assert args.out_dir == "/tmp/out"
 
 
+def test_to_parquet_without_pyarrow_raises_clear_error(monkeypatch):
+    # The console script is always installed; a missing [fpv] extra must yield an
+    # actionable error, not a bare ModuleNotFoundError traceback.
+    import importlib as _importlib
+
+    from meshsa.fpv.tools import convert
+
+    real_import = _importlib.import_module
+
+    def fake_import(name, *args, **kwargs):
+        if name.startswith("pyarrow"):
+            raise ModuleNotFoundError("No module named 'pyarrow'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(convert.importlib, "import_module", fake_import)
+    with pytest.raises(RuntimeError, match=r"pyarrow is required.*\[fpv\]"):
+        convert.to_parquet([{"t": 0.0}], "/tmp/x.parquet")
+
+
 def _make_session(tmp_path) -> str:
     logger = FlightLogger(
         LoggerSettings(sessions_root=str(tmp_path)),

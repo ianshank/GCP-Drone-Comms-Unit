@@ -102,6 +102,13 @@ class LinkHealthMonitor:
         now = self._clock.now()
         raw_state, reasons = self._raw_state(now)
         confirmed = self._apply_hysteresis(raw_state, now)
+        if confirmed is not raw_state:
+            # Hysteresis is holding a more-severe confirmed state while the raw
+            # link recovers (degradation is immediate, so this is always a
+            # recovery hold). The raw reasons describe the *better* raw state, so
+            # report an explicit debounce reason instead — a held WARN/CRITICAL
+            # is never left reasonless.
+            reasons = ("hysteresis_hold",)
         report = HealthReport(
             state=confirmed,
             arm_permitted=confirmed is HealthState.OK,

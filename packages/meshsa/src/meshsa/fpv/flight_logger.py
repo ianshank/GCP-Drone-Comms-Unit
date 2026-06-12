@@ -201,6 +201,7 @@ class FlightLogger:
         MUST NOT be called on the asyncio loop thread (it can block). Events are
         never silently dropped.
         """
+        self._check_writable()
         rec = {"t": self._t(t), "event": event, "data": data or {}}
         try:
             self._queue.put(("events", rec), timeout=self._s.logger_event_timeout_s)
@@ -227,7 +228,17 @@ class FlightLogger:
     def _t(self, t: float | None) -> float:
         return self._clock.now() if t is None else t
 
+    def _check_writable(self) -> None:
+        """Reject records before ``start()`` / after ``close()``.
+
+        Without this, a record enqueued after the shutdown sentinel is consumed
+        would be silently lost while the caller believes logging succeeded.
+        """
+        if not self._started or self._closed:
+            raise RuntimeError("FlightLogger is not started or is already closed")
+
     def _enqueue_lossy(self, stream: str, rec: dict[str, Any]) -> None:
+        self._check_writable()
         try:
             self._queue.put_nowait((stream, rec))
         except queue.Full:

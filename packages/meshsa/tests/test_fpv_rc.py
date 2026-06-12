@@ -41,6 +41,12 @@ def test_pack_pads_short_and_truncates_long():
     assert len(unpack_channels(long, count=16)) == 16
 
 
+def test_unpack_short_payload_raises_valueerror():
+    # A truncated payload must fail with a clear ValueError, not an IndexError.
+    with pytest.raises(ValueError, match="payload too short"):
+        unpack_channels(b"\x00\x00", count=16)  # 16 channels need 22 bytes
+
+
 def test_pack_unpack_non_byte_aligned_count():
     # count=1 -> 11 bits -> 2 bytes (flushes the trailing partial byte).
     payload = pack_channels([1337], count=1)

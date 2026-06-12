@@ -31,6 +31,19 @@ def test_reads_header_and_records(tmp_path):
     assert [r["t"] for r in records] == [1.0, 2.0]
 
 
+def test_blank_lines_are_skipped(tmp_path):
+    p = tmp_path / "rc.jsonl"
+    p.write_text(
+        json.dumps({"schema_version": 1, "file": "rc"})
+        + "\n\n"  # blank line between header and record
+        + json.dumps({"t": 1.0, "ch": [1]})
+        + "\n"
+    )
+    header, records = read_jsonl(str(p))
+    assert header["file"] == "rc"
+    assert [r["t"] for r in records] == [1.0]
+
+
 def test_empty_file_raises(tmp_path):
     p = tmp_path / "empty.jsonl"
     p.write_text("")

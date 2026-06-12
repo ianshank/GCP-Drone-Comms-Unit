@@ -110,8 +110,6 @@ class CrsfLinkSettings(BaseModel):
     #: Maximum CRSF frame length in bytes (sync+len+type+payload+crc) used to
     #: bound the accumulator and reject corrupt length fields.
     crsf_max_frame_len: int = 64
-    #: Inbound frame queue bound; overflow is dropped-and-counted.
-    crsf_queue_len: int = 1000
     #: Bytes to request per non-blocking serial read in ``poll_inbound``.
     crsf_read_chunk: int = 256
     #: RC frame channel count and the microsecond<->11-bit-tick linear mapping

@@ -57,7 +57,17 @@ def pack_channels(ticks: Sequence[int], *, count: int = 16, pad: int = 992) -> b
 
 
 def unpack_channels(payload: bytes, *, count: int = 16) -> list[int]:
-    """Unpack an LSB-first 11-bit channel payload into ``count`` tick values."""
+    """Unpack an LSB-first 11-bit channel payload into ``count`` tick values.
+
+    Raises :class:`ValueError` (not a raw ``IndexError``) when ``payload`` is too
+    short for ``count`` channels — e.g. a corrupted frame or a mismatched
+    ``rc_channel_count``.
+    """
+    required = (count * 11 + 7) // 8
+    if len(payload) < required:
+        raise ValueError(
+            f"payload too short for {count} channels: {len(payload)} < {required} bytes"
+        )
     acc = 0
     nbits = 0
     channels: list[int] = []

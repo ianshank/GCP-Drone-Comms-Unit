@@ -130,6 +130,7 @@ def test_close_is_idempotent_and_supports_context_manager(tmp_path):
 
 def test_rc_and_telemetry_drop_and_count_on_overflow(tmp_path):
     logger = _logger(tmp_path, settings={"logger_queue_len": 1})
+    logger._started = True  # simulate a started logger with no writer draining
     logger._queue.put_nowait(("rc", {}))  # occupy the only slot
     logger.record_rc([1, 2, 3, 4], t=1.0)
     logger.record_telemetry(_ls(), t=1.0)
@@ -139,9 +140,26 @@ def test_rc_and_telemetry_drop_and_count_on_overflow(tmp_path):
 
 def test_event_overflow_blocks_then_raises(tmp_path):
     logger = _logger(tmp_path, settings={"logger_queue_len": 1, "logger_event_timeout_s": 0.01})
+    logger._started = True  # simulate a started logger with no writer draining
     logger._queue.put_nowait(("rc", {}))  # fill the queue; no writer draining it
     with pytest.raises(LoggerOverflowError, match="event stream blocked"):
         logger.record_event("must_not_drop", {"k": "v"}, t=1.0)
+
+
+def test_record_before_start_or_after_close_raises(tmp_path):
+    # Before start(): nothing is draining, so enqueuing would be silently lost.
+    logger = _logger(tmp_path)
+    with pytest.raises(RuntimeError, match="not started or is already closed"):
+        logger.record_rc([1500] * 4, t=0.0)
+    with pytest.raises(RuntimeError, match="not started or is already closed"):
+        logger.record_event("e", t=0.0)
+    # After close(): the writer is gone, so records would never be written.
+    logger.start()
+    logger.close()
+    with pytest.raises(RuntimeError, match="not started or is already closed"):
+        logger.record_telemetry(_ls(), t=0.0)
+    with pytest.raises(RuntimeError, match="not started or is already closed"):
+        logger.record_event("e", t=0.0)
 
 
 def test_default_monotonic_clock_used_when_none_injected(tmp_path):
