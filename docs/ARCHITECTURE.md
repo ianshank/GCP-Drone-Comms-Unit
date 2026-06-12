@@ -78,3 +78,46 @@ older builds load configs that contain transports they do not yet understand.
 
 See [docs/AUDIT_REPORT.md](AUDIT_REPORT.md) for known gaps and the prioritized
 backlog.
+
+## FPV ground-side telemetry subsystem
+
+`meshsa.fpv` (`packages/meshsa/src/meshsa/fpv/`) is a self-contained subsystem that
+ingests **CRSF** telemetry from an ELRS handset module over a single-wire half-duplex
+UART, evaluates link health, logs synchronized sessions, and enforces a pre-flight arm
+gate. It implements [Phase 0 Errata E1](specs/PHASE0_ERRATA.md) and
+[Phase 1 Spec v1.1](specs/PHASE1_SPEC_v1_1.md).
+
+```
+CrsfLink.poll_inbound()  -- echo-suppressed frames (Errata E1.2)
+        |
+TelemetryParser.parse()  -- pure, big-endian, typed | None
+        |
+TelemetryStore.update()  -- latest + bounded history ring
+        |                         |
+LinkHealthMonitor          FlightLogger (single writer thread)
+        |                         |
+ConsoleAlertSink           manifest.json + rc/telemetry/events/frames .jsonl
+        |
+ArmGuard wraps RCLink     -- pre-flight arm interlock only (CHARTER §3 carve-out)
+```
+
+Design choices that keep it consistent with the framework invariants:
+
+- **Reuses the framework seams, invents none.** Injected `Clock` (`MonotonicClock`),
+  `@runtime_checkable` Protocols (`RCLink`/`AlertSink`/`CrsfSerial`), pydantic `FpvSettings`
+  with explicit defaults (no magic numbers), `structlog.get_logger("meshsa.fpv.<x>")`, and
+  the `transports/msp_source.py` injection + `# pragma: no cover` hardware-factory pattern.
+- **Threading.** Only `FlightLogger` owns a thread (the writer). `CrsfLink` is poll-driven
+  (the consumer calls `poll_inbound`); the `CrsfSerial.read` seam is non-blocking.
+- **Dataset versioning is its own namespace.** `fpv/version.py` `DATASET_SCHEMA` and
+  `fpv/dataset.py` govern the on-disk session contract independently of the meshtastic wire
+  `SCHEMA_VERSION` — a logger format change never touches the wire window. Per-file JSONL
+  header records make field *additions* non-breaking; rename/remove/retype bumps
+  `DATASET_SCHEMA`.
+- **Deferred seam (not built):** CRSF telemetry could later surface as a meshsa **air**
+  track via an additive `@transport_registry.register("crsf_source")` wrapping `CrsfLink` —
+  no router/codec edits, per the open/closed invariant. Not registered now (no untested live
+  path). The `frames.jsonl`/`video` manifest field ship as a stable stub for the Phase 2
+  camera with **no** recording code.
+- **Command authority** is limited to a pre-flight arm interlock (`ArmGuard`) under the
+  CHARTER §3 carve-out; the monitor never intervenes in flight.

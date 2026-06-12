@@ -30,6 +30,20 @@
 - [ ] Sensor Point-of-Interest / field-of-view CoT; multiple simultaneous UAS with stable UIDs.
 - [ ] Betaflight ≥2025.12 MAVLink-on-UART path (reuse `mavlink_source`); MSP attitude/altitude.
 
+## FPV ground-side subsystem (`meshsa.fpv`)
+Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
+[docs/specs/](specs/) and the ARCHITECTURE section. Status:
+- [x] CRSF parsers, CRC framing, echo-suppressed `CrsfLink`, address prober (E1.2/E1.3).
+- [x] Telemetry store + co-signal link-health monitor (hysteresis, version-keyed floors).
+- [x] Flight logger (writer thread, drop-and-count, versioned manifest + JSONL headers).
+- [x] `ArmGuard` pre-flight interlock + CHARTER §3 carve-out.
+- [x] `fpv-telemetry-monitor` / `fpv-log-replay` / `fpv-log-convert`; 100% module coverage.
+- [x] **Human sign-off on the CHARTER §3 carve-out** (RC-TX scope expansion) — ratified 2026-06-12.
+- [ ] Bench validation (§8): live LinkStats on hardware, voltage calibration, ratio sweep,
+      antenna-removal transitions, `!FS!` end-to-end — thresholds remain provisional until then.
+- [ ] Phase 2: wire the camera into the existing `frames.jsonl`/`video` stub (no schema bump).
+- [ ] Optional additive `crsf_source` transport so CRSF telemetry becomes an ATAK air track.
+
 ## Ops / packaging (M4–M5)
 - [ ] systemd enablement with a dedicated `flightctl` service user + correct ownership of the
       SSD venvs (currently proven via manual run).
