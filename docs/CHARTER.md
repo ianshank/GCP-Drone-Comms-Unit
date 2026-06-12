@@ -26,9 +26,22 @@ ops layer (gateway, FreeTAKServer, MAVLink proxy, simulators, deployment scripts
 hardware enclosures.
 
 **Out of scope (non-goals):** flying/controlling aircraft (we are read-only on telemetry,
-not a ground control station that commands vehicles); running the ATAK Android app on the
-unit (ATAK runs on phones); becoming a general message broker; replacing the autopilot,
-FC firmware, or the TAK server.
+not a ground control station that commands vehicles — see the bounded pre-flight
+arm-gating carve-out below); running the ATAK Android app on the unit (ATAK runs on
+phones); becoming a general message broker; replacing the autopilot, FC firmware, or the
+TAK server.
+
+> **Carve-out (deliberate amendment, requires human sign-off per §6): pre-flight
+> arm-gating only.** The `meshsa.fpv` ground-side subsystem may transmit RC frames for the
+> single purpose of a **pre-flight safety interlock**: `ArmGuard` gates the arm RC channel
+> low until pre-flight health checks pass. Once the arm channel goes high, `ArmGuard` never
+> commands or modifies any RC channel thereafter (including arm); the latch resets only when
+> the operator commands the arm channel low (disarm). If health degrades after arm, clamping
+> resumes only after that operator-driven disarm. This is a pre-flight interlock only — it
+> **never disarms in flight** and performs **no in-flight intervention** (no auto-RTH,
+> auto-land, throttle, or auto-disarm; degraded-link authority stays with the ELRS RF
+> failsafe → Betaflight `failsafe_procedure`). This narrowly-scoped exception does not make
+> the unit a general ground control station; everything else in this non-goal stands.
 
 ## 4. Invariants (must not drift — enforce in review)
 1. **Open/closed extensibility.** New mediums and wire formats are added through

@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`meshsa.fpv` — ground-side FPV telemetry subsystem (Phase 0 Errata E1 + Phase 1).**
+  A self-contained subpackage under `packages/meshsa/src/meshsa/fpv/` that ingests CRSF
+  telemetry from an ELRS handset module, evaluates link health, logs synchronized
+  sessions, and enforces a pre-flight arm gate. Reuses the existing DI/Protocol, pydantic
+  config, structlog, and versioning conventions; **no `meshsa` wire `SCHEMA_VERSION`
+  change** (the dataset has its own `DATASET_SCHEMA`).
+  - `crsf/frame.py` + `crsf/telemetry.py`: CRC8/DVB-S2 framing, address-gated stream
+    resync, pure **big-endian** parsers (`LinkStatistics`/`BatterySensor`/`Attitude`/
+    `FlightMode`); unknown types count, malformed known types raise.
+  - `crsf/link.py`: poll-driven `CrsfLink` (no own thread) with self-echo suppression
+    (Errata E1.2 — exact-byte primary + self-addr-RC secondary, `echoes_suppressed`
+    counter) and an `AddressProber` with the `probe_margin` gate (E1.3). Injectable
+    `CrsfSerial` seam; the pyserial default factory is lazily imported and
+    `# pragma: no cover`.
+  - `telemetry_store.py` + `link_health.py`: bounded per-type history; co-signal health
+    model (stale LinkStats can never be OK; downlink-degrading early warning; version-keyed
+    sensitivity floors) with immediate degradation / hysteresis-damped recovery.
+  - `flight_logger.py`: single writer thread; `rc`/`telemetry` drop-and-count, durable
+    block-then-raise `record_event`; per-file `schema_version` headers; `manifest.json`
+    with git SHA, `capture_latency_ms`, wiring, drop counters, telemetry rates.
+  - `arm_guard.py`: `RCLink` decorator enforcing health-gated **pre-flight** arming with a
+    latch that never disarms in flight (see the CHARTER §3 carve-out).
+  - Tools / console scripts: `fpv-telemetry-monitor`, `fpv-log-replay`,
+    `fpv-log-convert` (JSONL → Parquet, schema-aware).
+  - New optional extra `fpv = ["pyserial>=3.5", "pyarrow>=15"]`; nightly installs it for
+    real-type mypy + the Parquet path. The subsystem imports cleanly without the extra.
+  - Dataset versioning: `fpv/version.py` `DATASET_SCHEMA = 1` with its own compat window;
+    `fpv/dataset.py` enforces it on replay/convert and tolerates a torn final JSONL line.
+  - Specs committed for traceability: `docs/specs/PHASE0_ERRATA.md`,
+    `docs/specs/PHASE1_SPEC_v1_1.md`.
+  - Tests: 117 new fpv tests; `meshsa.fpv` at 100% line+branch coverage (parsers, health,
+    ArmGuard included); full suite 282 passed; mypy `--strict` + ruff clean.
+
+### Changed
+- **CHARTER §3 carve-out (deliberate amendment — needs human sign-off).** Adds a bounded
+  exception to the "read-only / not a ground control station" non-goal: `ArmGuard` may
+  transmit RC frames **only** for a pre-flight arm interlock; no in-flight intervention.
+
 ## [0.2.0] - 2026-06-06
 
 ### Added
