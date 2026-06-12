@@ -31,8 +31,8 @@ arm-gating carve-out below); running the ATAK Android app on the unit (ATAK runs
 phones); becoming a general message broker; replacing the autopilot, FC firmware, or the
 TAK server.
 
-> **Carve-out (deliberate amendment, requires human sign-off per §6): pre-flight
-> arm-gating only.** The `meshsa.fpv` ground-side subsystem may transmit RC frames for the
+> **Carve-out (deliberate amendment — ratified by the maintainer on 2026-06-12 per §6):
+> pre-flight arm-gating only.** The `meshsa.fpv` ground-side subsystem may transmit RC frames for the
 > single purpose of a **pre-flight safety interlock**: `ArmGuard` gates the arm RC channel
 > low until pre-flight health checks pass. Once the arm channel goes high, `ArmGuard` never
 > commands or modifies any RC channel thereafter (including arm); the latch resets only when

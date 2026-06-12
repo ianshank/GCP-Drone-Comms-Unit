@@ -42,9 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     ArmGuard included); full suite 282 passed; mypy `--strict` + ruff clean.
 
 ### Changed
-- **CHARTER §3 carve-out (deliberate amendment — needs human sign-off).** Adds a bounded
-  exception to the "read-only / not a ground control station" non-goal: `ArmGuard` may
-  transmit RC frames **only** for a pre-flight arm interlock; no in-flight intervention.
+- **CHARTER §3 carve-out (deliberate amendment — ratified by the maintainer 2026-06-12).**
+  Adds a bounded exception to the "read-only / not a ground control station" non-goal:
+  `ArmGuard` may transmit RC frames **only** for a pre-flight arm interlock; no in-flight
+  intervention.
 
 ## [0.2.0] - 2026-06-06
 

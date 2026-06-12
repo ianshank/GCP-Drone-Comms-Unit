@@ -38,7 +38,7 @@ Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
 - [x] Flight logger (writer thread, drop-and-count, versioned manifest + JSONL headers).
 - [x] `ArmGuard` pre-flight interlock + CHARTER §3 carve-out.
 - [x] `fpv-telemetry-monitor` / `fpv-log-replay` / `fpv-log-convert`; 100% module coverage.
-- [ ] **Human sign-off on the CHARTER §3 carve-out** (RC-TX scope expansion).
+- [x] **Human sign-off on the CHARTER §3 carve-out** (RC-TX scope expansion) — ratified 2026-06-12.
 - [ ] Bench validation (§8): live LinkStats on hardware, voltage calibration, ratio sweep,
       antenna-removal transitions, `!FS!` end-to-end — thresholds remain provisional until then.
 - [ ] Phase 2: wire the camera into the existing `frames.jsonl`/`video` stub (no schema bump).
