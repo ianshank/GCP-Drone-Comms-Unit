@@ -9,6 +9,7 @@ one Parquet table can hold a whole heterogeneous stream.
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 from typing import Any
@@ -30,13 +31,18 @@ def flatten_record(rec: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_parquet(records: list[dict[str, Any]], out_path: str) -> int:
-    """Write ``records`` to ``out_path`` as Parquet; return the row count."""
-    import pyarrow as pa
-    import pyarrow.parquet as pq
+    """Write ``records`` to ``out_path`` as Parquet; return the row count.
 
+    ``pyarrow`` is the optional ``[fpv]`` extra. It is imported lazily via
+    ``importlib`` and typed as ``Any`` so mypy behaves identically whether or not
+    the extra is installed — `[dev]`-only CI sees no untyped-call error and the
+    full-extras nightly sees no unused-ignore.
+    """
+    pa: Any = importlib.import_module("pyarrow")
+    pq: Any = importlib.import_module("pyarrow.parquet")
     rows = [flatten_record(r) for r in records]
     table = pa.Table.from_pylist(rows)
-    pq.write_table(table, out_path)  # type: ignore[no-untyped-call]
+    pq.write_table(table, out_path)
     return len(rows)
 
 
