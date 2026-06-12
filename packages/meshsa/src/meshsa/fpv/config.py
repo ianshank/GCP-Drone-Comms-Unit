@@ -130,8 +130,8 @@ class ProberSettings(BaseModel):
     probe_min_telemetry_frames: int = 5
     #: Winner must exceed runner-up by this factor to guard against echo artifacts.
     probe_margin: float = 3.0
-    probe_duration_s: float = 2.0
-    #: Candidate addresses to probe (flight-controller, receiver, transmitter, …).
+    #: Candidate addresses the prober tallies; frames from other addresses are
+    #: treated as noise and ignored (flight-controller, receiver, transmitter, …).
     probe_addresses: list[int] = Field(default_factory=lambda: [0xC8, 0xEC, 0xEE, 0xEA])
 
 

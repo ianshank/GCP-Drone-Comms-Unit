@@ -54,6 +54,18 @@ def test_clear_winner_over_margin_is_confident():
     assert result.confident is True
 
 
+def test_non_candidate_addresses_are_ignored():
+    # An address outside probe_addresses is noise and must not be tallied.
+    prober = AddressProber(ProberSettings(probe_addresses=[0xC8, 0xEA]))
+    prober.observe(
+        [
+            CrsfFrame.from_bytes(link_statistics_bytes(addr=0xEA)),
+            CrsfFrame.from_bytes(link_statistics_bytes(addr=0x42)),  # not a candidate
+        ]
+    )
+    assert prober.counts == {0xEA: 1}
+
+
 def test_rc_frames_are_excluded_from_tally():
     prober = AddressProber(ProberSettings())
     rc = CrsfFrame(addr=0xEA, type=CrsfFrameType.RC_CHANNELS_PACKED, payload=bytes(22))

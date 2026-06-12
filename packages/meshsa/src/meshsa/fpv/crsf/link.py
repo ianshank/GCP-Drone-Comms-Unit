@@ -71,6 +71,15 @@ class CrsfLink:
         self._factory = serial_factory or _default_serial_factory(settings)
         self._buffer = bytearray()
         self._recent_tx: deque[bytes] = deque(maxlen=settings.echo_dedupe_len)
+        # The RC mid-stick tick is settings-derived and constant; compute it once
+        # rather than on every send_rc (called per RC cycle, 50-200 Hz).
+        self._center_tick = us_to_ticks(
+            (settings.rc_us_min + settings.rc_us_max) / 2,
+            us_min=settings.rc_us_min,
+            us_max=settings.rc_us_max,
+            ticks_min=settings.rc_ticks_min,
+            ticks_max=settings.rc_ticks_max,
+        )
         #: Echoed (self-transmitted) frames suppressed since construction (E1.2).
         self.echoes_suppressed = 0
         #: CRC-failed frame candidates seen (bench item #5 surfaces this).
@@ -109,14 +118,7 @@ class CrsfLink:
             )
             for us in channels
         ]
-        center = us_to_ticks(
-            (self._s.rc_us_min + self._s.rc_us_max) / 2,
-            us_min=self._s.rc_us_min,
-            us_max=self._s.rc_us_max,
-            ticks_min=self._s.rc_ticks_min,
-            ticks_max=self._s.rc_ticks_max,
-        )
-        payload = pack_channels(ticks, count=self._s.rc_channel_count, pad=center)
+        payload = pack_channels(ticks, count=self._s.rc_channel_count, pad=self._center_tick)
         frame = CrsfFrame(
             addr=self._s.crsf_address,
             type=CrsfFrameType.RC_CHANNELS_PACKED,
@@ -149,11 +151,15 @@ class CrsfLink:
         return result
 
     def _is_echo(self, frame: CrsfFrame) -> bool:
-        # Rule B (primary): exact-byte match against recently transmitted frames.
-        if frame.to_bytes() in self._recent_tx:
+        # Rule A first (cheap): our own RC frames by address. This short-circuits
+        # the common echo case — our transmitted RC frames carry crsf_address —
+        # without re-serialising the frame for the Rule B comparison.
+        if frame.type == CrsfFrameType.RC_CHANNELS_PACKED and frame.addr == self._s.crsf_address:
             return True
-        # Rule A (secondary): our own RC frames by address.
-        return frame.type == CrsfFrameType.RC_CHANNELS_PACKED and frame.addr == self._s.crsf_address
+        # Rule B (primary, reliable): exact-byte match against recently
+        # transmitted frames — catches echoes Rule A misses (e.g. a frame whose
+        # address no longer matches ours).
+        return frame.to_bytes() in self._recent_tx
 
     def _count_crc_error(self) -> None:
         self.crc_errors += 1
@@ -184,13 +190,16 @@ class AddressProber:
 
     def __init__(self, settings: ProberSettings) -> None:
         self._s = settings
+        self._candidates = frozenset(settings.probe_addresses)
         self.counts: dict[int, int] = {}
 
     def observe(self, frames: Iterable[CrsfFrame]) -> None:
-        """Accumulate counts for non-RC frames (RC echoes are excluded)."""
+        """Tally non-RC frames from candidate addresses (RC echoes excluded)."""
         for frame in frames:
             if frame.type == CrsfFrameType.RC_CHANNELS_PACKED:
                 continue
+            if frame.addr not in self._candidates:
+                continue  # frame from an address outside the candidate set: noise
             self.counts[frame.addr] = self.counts.get(frame.addr, 0) + 1
 
     def drain(self, link: CrsfLink, iterations: int) -> None:
