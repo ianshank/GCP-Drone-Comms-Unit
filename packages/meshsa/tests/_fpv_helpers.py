@@ -6,6 +6,8 @@ Importable as a plain module because pytest puts the ``tests/`` directory on
 
 from __future__ import annotations
 
+import struct
+
 from meshsa.fpv.crsf.frame import CrsfFrame, CrsfFrameType
 
 
@@ -54,3 +56,15 @@ def link_statistics_bytes(addr: int = 0xEA, *, uplink_lq: int = 100) -> bytes:
     """A valid LINK_STATISTICS frame on the wire (for prober/link tests)."""
     payload = bytes([60, 60, uplink_lq, 8, 0, 0, 3, 60, 100, 8])
     return CrsfFrame(addr=addr, type=CrsfFrameType.LINK_STATISTICS, payload=payload).to_bytes()
+
+
+def battery_bytes(addr: int = 0xC8) -> bytes:
+    """A valid BATTERY_SENSOR frame (16.8 V, 5.2 A, 1234 mAh, 87%)."""
+    payload = struct.pack(">HH", 168, 52) + (1234).to_bytes(3, "big") + bytes([87])
+    return CrsfFrame(addr=addr, type=CrsfFrameType.BATTERY_SENSOR, payload=payload).to_bytes()
+
+
+def attitude_bytes(addr: int = 0xC8) -> bytes:
+    """A valid ATTITUDE frame (level)."""
+    payload = struct.pack(">hhh", 0, 0, 0)
+    return CrsfFrame(addr=addr, type=CrsfFrameType.ATTITUDE, payload=payload).to_bytes()

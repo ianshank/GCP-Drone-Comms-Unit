@@ -26,6 +26,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from typing import cast
 
 import structlog
 
@@ -50,7 +51,7 @@ def _default_serial_factory(settings: CrsfLinkSettings) -> SerialFactory:  # pra
             baudrate=settings.crsf_baud,
             timeout=0,  # non-blocking reads
         )
-        return port  # pyserial's Serial satisfies the CrsfSerial Protocol
+        return cast(CrsfSerial, port)  # pyserial's Serial satisfies the Protocol
 
     return factory
 
@@ -152,10 +153,7 @@ class CrsfLink:
         if frame.to_bytes() in self._recent_tx:
             return True
         # Rule A (secondary): our own RC frames by address.
-        return (
-            frame.type == CrsfFrameType.RC_CHANNELS_PACKED
-            and frame.addr == self._s.crsf_address
-        )
+        return frame.type == CrsfFrameType.RC_CHANNELS_PACKED and frame.addr == self._s.crsf_address
 
     def _count_crc_error(self) -> None:
         self.crc_errors += 1

@@ -35,3 +35,7 @@ class LoggerOverflowError(FpvError):
 
 class ArmGuardError(FpvError):
     """Invalid :class:`meshsa.fpv.arm_guard.ArmGuard` configuration or usage."""
+
+
+class IncompatibleDatasetError(FpvError):
+    """A logged dataset declares a schema this build cannot read."""

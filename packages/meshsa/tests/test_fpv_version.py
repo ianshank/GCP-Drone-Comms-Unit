@@ -11,8 +11,9 @@ from meshsa.fpv import version as fv
 
 def test_window_is_self_consistent():
     assert fv.MIN_COMPATIBLE_DATASET <= fv.DATASET_SCHEMA
-    assert fv.SUPPORTED_DATASET_SCHEMAS == frozenset(
-        range(fv.MIN_COMPATIBLE_DATASET, fv.DATASET_SCHEMA + 1)
+    assert (
+        frozenset(range(fv.MIN_COMPATIBLE_DATASET, fv.DATASET_SCHEMA + 1))
+        == fv.SUPPORTED_DATASET_SCHEMAS
     )
 
 

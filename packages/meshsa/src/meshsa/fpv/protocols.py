@@ -9,11 +9,24 @@ seam is reused as-is for every injected timebase — it is **not** redefined her
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from .link_health import HealthReport
+
+
+class MonotonicClock:
+    """Default intra-session timebase (``time.monotonic``).
+
+    Satisfies :class:`meshsa.protocols.Clock`. Used wherever staleness matters
+    (the store ages, health evaluation, the flight logger) — never the wall clock,
+    which appears once in the manifest.
+    """
+
+    def now(self) -> float:
+        return time.monotonic()
 
 
 @runtime_checkable

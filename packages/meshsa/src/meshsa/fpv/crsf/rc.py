@@ -15,9 +15,7 @@ from collections.abc import Sequence
 _CH_MASK = 0x7FF
 
 
-def us_to_ticks(
-    us: float, *, us_min: int, us_max: int, ticks_min: int, ticks_max: int
-) -> int:
+def us_to_ticks(us: float, *, us_min: int, us_max: int, ticks_min: int, ticks_max: int) -> int:
     """Map a microsecond value to an 11-bit CRSF tick (clamped to 0..2047)."""
     span_us = us_max - us_min
     if span_us == 0:  # pragma: no cover - guarded by settings validation
@@ -27,9 +25,7 @@ def us_to_ticks(
     return max(0, min(0x7FF, tick))
 
 
-def ticks_to_us(
-    tick: int, *, us_min: int, us_max: int, ticks_min: int, ticks_max: int
-) -> float:
+def ticks_to_us(tick: int, *, us_min: int, us_max: int, ticks_min: int, ticks_max: int) -> float:
     """Inverse of :func:`us_to_ticks` (for round-trip tests / display)."""
     span_ticks = ticks_max - ticks_min
     if span_ticks == 0:  # pragma: no cover - guarded by settings validation

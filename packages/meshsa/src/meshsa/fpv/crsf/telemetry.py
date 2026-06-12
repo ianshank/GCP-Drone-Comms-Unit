@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
@@ -83,6 +84,23 @@ class FlightMode:
 
 #: The closed set of telemetry messages the parser can emit.
 TelemetryMessage = LinkStatistics | BatterySensor | Attitude | FlightMode
+
+#: Reconstruction registry: message class by name (for dataset replay).
+_BY_NAME: dict[str, type] = {
+    cls.__name__: cls for cls in (LinkStatistics, BatterySensor, Attitude, FlightMode)
+}
+
+
+def message_from_record(type_name: str, data: dict[str, Any]) -> TelemetryMessage:
+    """Rebuild a telemetry message from a logged ``{type, data}`` record.
+
+    Raises :class:`TelemetryParseError` for an unknown type name so a forward
+    dataset (a type this build does not model) fails loudly rather than silently.
+    """
+    cls = _BY_NAME.get(type_name)
+    if cls is None:
+        raise TelemetryParseError(f"unknown telemetry record type: {type_name!r}")
+    return cls(**data)  # type: ignore[no-any-return]
 
 
 class TelemetryParser:

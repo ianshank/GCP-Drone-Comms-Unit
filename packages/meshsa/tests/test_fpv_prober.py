@@ -28,9 +28,7 @@ def test_picks_correct_address_and_reports_zero_for_others():
 
 def test_below_min_frames_is_not_confident():
     prober = AddressProber(ProberSettings(probe_min_telemetry_frames=10, probe_margin=3.0))
-    prober.observe(
-        [CrsfFrame.from_bytes(link_statistics_bytes(addr=0xEA)) for _ in range(4)]
-    )
+    prober.observe([CrsfFrame.from_bytes(link_statistics_bytes(addr=0xEA)) for _ in range(4)])
     result = prober.result()
     assert result.confident is False
     assert result.winner is None
