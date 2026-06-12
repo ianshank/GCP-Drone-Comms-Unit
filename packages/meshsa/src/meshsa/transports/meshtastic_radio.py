@@ -117,8 +117,9 @@ class MeshtasticTransport(AbstractTransport):
         self._mesh = mesh
         self._provision = provision or _default_provisioner
         self._factory = interface_factory or _default_interface_factory(options)
-        if subscribe is None or unsubscribe is None:  # pragma: no cover - lib glue
-            subscribe, unsubscribe = _default_pubsub()
+        # pypubsub is resolved lazily in start() (not here), so constructing the
+        # transport — e.g. for config validation in build_node — never requires
+        # the optional pypubsub dependency.
         self._subscribe = subscribe
         self._unsubscribe = unsubscribe
         self._topic = topic
@@ -149,8 +150,14 @@ class MeshtasticTransport(AbstractTransport):
         self._started = True
         self._stopping = False
         self._lost = asyncio.Event()
-        self._subscribe(self._on_receive, self._topic)
-        self._subscribe(self._on_lost, self._lost_topic)
+        # Resolve the pubsub pair now (importing pypubsub lazily if not injected).
+        subscribe = self._subscribe
+        unsubscribe = self._unsubscribe
+        if subscribe is None or unsubscribe is None:  # pragma: no cover - lib glue
+            subscribe, unsubscribe = _default_pubsub()
+            self._subscribe, self._unsubscribe = subscribe, unsubscribe
+        subscribe(self._on_receive, self._topic)
+        subscribe(self._on_lost, self._lost_topic)
         self._subscribed = True
         try:
             self._iface = self._factory()
@@ -210,6 +217,7 @@ class MeshtasticTransport(AbstractTransport):
 
     def _teardown_subs(self) -> None:
         if self._subscribed:
+            assert self._unsubscribe is not None  # resolved in start() before _subscribed
             self._unsubscribe(self._on_receive, self._topic)
             self._unsubscribe(self._on_lost, self._lost_topic)
             self._subscribed = False

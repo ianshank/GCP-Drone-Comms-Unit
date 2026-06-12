@@ -47,6 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ArmGuard` may transmit RC frames **only** for a pre-flight arm interlock; no in-flight
   intervention.
 
+### Fixed
+- **`meshtastic_radio`: resolve pypubsub lazily in `start()`, not `__init__`.** Constructing
+  a `MeshtasticTransport` (e.g. for config validation in `build_node`) no longer imports the
+  optional `pypubsub` dependency, matching the lazy-optional-dep pattern used by
+  `health`/`msp_source`/`mavlink_source`. Fixes `test_build_node_forwards_mesh_config_to_meshtastic`
+  under the `[dev]`-only CI install.
+
 ## [0.2.0] - 2026-06-06
 
 ### Added
