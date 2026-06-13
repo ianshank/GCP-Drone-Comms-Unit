@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-13
+
 ### Added
 - **`meshsa.fpv` — ground-side FPV telemetry subsystem (Phase 0 Errata E1 + Phase 1).**
   A self-contained subpackage under `packages/meshsa/src/meshsa/fpv/` that ingests CRSF
@@ -34,18 +36,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `fpv-log-convert` (JSONL → Parquet, schema-aware).
   - New optional extra `fpv = ["pyserial>=3.5", "pyarrow>=15"]`; nightly installs it for
     real-type mypy + the Parquet path. The subsystem imports cleanly without the extra.
-  - Dataset versioning: `fpv/version.py` `DATASET_SCHEMA = 1` with its own compat window;
-    `fpv/dataset.py` enforces it on replay/convert and tolerates a torn final JSONL line.
+  - Dataset versioning: `fpv/version.py` `DATASET_SCHEMA` with its own compat window
+    (ships at `2` in this release — see Changed); `fpv/dataset.py` enforces it on
+    replay/convert and tolerates a torn final JSONL line.
   - Specs committed for traceability: `docs/specs/PHASE0_ERRATA.md`,
     `docs/specs/PHASE1_SPEC_v1_1.md`.
   - Tests: 117 new fpv tests; `meshsa.fpv` at 100% line+branch coverage (parsers, health,
     ArmGuard included); full suite 282 passed; mypy `--strict` + ruff clean.
+- **`crsf_source` transport — an FPV aircraft as an ATAK air track.**
+  `@transport_registry.register("crsf_source")` (`meshsa.transports.CrsfSourceTransport`):
+  a receive-only transport that polls a half-duplex `CrsfLink` on a reader thread, decodes
+  the CRSF **GPS (0x02)** frame, and emits one position frame per fix through the existing
+  `telemetry` codec — so a drone/FPV aircraft reaches ATAK as an **air** track with **no
+  router/codec/`SCHEMA_VERSION` change**, the same additive seam as `mavlink_source` /
+  `msp_source`. Injectable `CrsfLink` (the pyserial hardware factory is `# pragma: no cover`)
+  and configurable GPS unit scaling (`ParserSettings.gps_*`); fully unit-tested with a fake
+  `CrsfSerial`, no radio. Closes the deferred air-track seam noted in `docs/ARCHITECTURE.md`.
+- **CRSF GPS decode in the telemetry parser.** `crsf/telemetry.py` now parses the GPS frame
+  into a new `GpsSensor` message (big-endian lat/lon degrees*1e7, ground speed km/h*10,
+  heading deg*100, altitude m with the +1000 m offset, satellite count); GPS is no longer in
+  the parsed-and-ignored set. Scales are `ParserSettings.gps_*` fields — no magic numbers.
 
 ### Changed
 - **CHARTER §3 carve-out (deliberate amendment — ratified by the maintainer 2026-06-12).**
   Adds a bounded exception to the "read-only / not a ground control station" non-goal:
   `ArmGuard` may transmit RC frames **only** for a pre-flight arm interlock; no in-flight
   intervention.
+- **Dataset schema `DATASET_SCHEMA` 1 → 2 (`fpv/version.py`).** `GpsSensor` is a new
+  persisted `telemetry.jsonl` record type that an older build cannot reconstruct, so a v2
+  dataset is forward-incompatible for v1 readers. `MIN_COMPATIBLE_DATASET` stays `1`: this
+  build still reads v1 sessions (with a `DatasetCompatibilityWarning`), and an older build
+  correctly rejects a v2 dataset rather than failing mid-replay. The meshsa **wire**
+  `SCHEMA_VERSION` is unchanged — `crsf_source` rides the existing `telemetry` codec.
 
 ### Fixed
 - **`meshtastic_radio`: resolve pypubsub lazily in `start()`, not `__init__`.** Constructing

@@ -114,10 +114,14 @@ Design choices that keep it consistent with the framework invariants:
   `SCHEMA_VERSION` — a logger format change never touches the wire window. Per-file JSONL
   header records make field *additions* non-breaking; rename/remove/retype bumps
   `DATASET_SCHEMA`.
-- **Deferred seam (not built):** CRSF telemetry could later surface as a meshsa **air**
-  track via an additive `@transport_registry.register("crsf_source")` wrapping `CrsfLink` —
-  no router/codec edits, per the open/closed invariant. Not registered now (no untested live
-  path). The `frames.jsonl`/`video` manifest field ship as a stable stub for the Phase 2
-  camera with **no** recording code.
+- **Air-track seam (registered in 0.3.0):** `@transport_registry.register("crsf_source")`
+  (`transports/crsf_source.py`) wraps `CrsfLink`, decodes the CRSF **GPS (0x02)** frame to a
+  `GpsSensor`, and emits a position frame through the existing `telemetry` codec — so an FPV
+  aircraft becomes an ATAK **air** track with no router/codec edits, per the open/closed
+  invariant (same injection + `# pragma: no cover` hardware pattern as `msp_source`). Adding
+  the `GpsSensor` telemetry type made it a new persisted dataset record, so `DATASET_SCHEMA`
+  bumped **1 → 2** (v1 datasets still read; older builds correctly reject a v2 dataset). The
+  `frames.jsonl`/`video` manifest field ship as a stable stub for the Phase 2 camera with
+  **no** recording code.
 - **Command authority** is limited to a pre-flight arm interlock (`ArmGuard`) under the
   CHARTER §3 carve-out; the monitor never intervenes in flight.

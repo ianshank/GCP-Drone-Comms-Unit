@@ -42,7 +42,8 @@ Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
 - [ ] Bench validation (§8): live LinkStats on hardware, voltage calibration, ratio sweep,
       antenna-removal transitions, `!FS!` end-to-end — thresholds remain provisional until then.
 - [ ] Phase 2: wire the camera into the existing `frames.jsonl`/`video` stub (no schema bump).
-- [ ] Optional additive `crsf_source` transport so CRSF telemetry becomes an ATAK air track.
+- [x] Additive `crsf_source` transport so CRSF telemetry becomes an ATAK air track (0.3.0;
+      decodes GPS 0x02 → `GpsSensor` → `telemetry` codec; `DATASET_SCHEMA` 1 → 2).
 
 ## Ops / packaging (M4–M5)
 - [ ] systemd enablement with a dedicated `flightctl` service user + correct ownership of the

@@ -31,6 +31,14 @@ class ParserSettings(BaseModel):
     attitude_rad_scale: float = 1e-4
     #: FLIGHT_MODE substring that marks an RF failsafe (loggable safety event).
     failsafe_marker: str = "!FS!"
+    #: GPS (0x02) latitude/longitude are transmitted as degrees * 1e7.
+    gps_coord_scale: float = 1e7
+    #: GPS ground speed is transmitted as km/h * 10.
+    gps_groundspeed_scale: float = 10.0
+    #: GPS heading is transmitted as degrees * 100.
+    gps_heading_scale: float = 100.0
+    #: GPS altitude is transmitted as metres with a fixed +1000 m offset.
+    gps_altitude_offset_m: int = 1000
 
 
 class HealthSettings(BaseModel):
