@@ -17,19 +17,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from typing import Any, cast
 
 import structlog
 
 from ..registry import transport_registry
+from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
 
 _log = structlog.get_logger("meshsa.meshtastic")
 
 InterfaceFactory = Callable[[], Any]
 SubscribeFn = Callable[[Callable[..., None], str], None]
-SleepFn = Callable[[float], Awaitable[None]]
 #: Applies node mesh settings (region/channel/psk/freq_khz) to a live device.
 Provisioner = Callable[[Any, dict[str, Any]], None]
 
@@ -117,11 +117,11 @@ class MeshtasticTransport(AbstractTransport):
         self._mesh = mesh
         self._provision = provision or _default_provisioner
         self._factory = interface_factory or _default_interface_factory(options)
-        # pubsub is resolved lazily in start() so constructing a meshtastic
-        # transport never requires pypubsub to be installed; callers/tests may
-        # still inject subscribe/unsubscribe explicitly.
-        self._subscribe: SubscribeFn | None = subscribe
-        self._unsubscribe: SubscribeFn | None = unsubscribe
+        # pypubsub is resolved lazily in start() (not here), so constructing the
+        # transport — e.g. for config validation in build_node — never requires
+        # the optional pypubsub dependency.
+        self._subscribe = subscribe
+        self._unsubscribe = unsubscribe
         self._topic = topic
         self._lost_topic = lost_topic
         self.portnum = portnum
@@ -130,10 +130,9 @@ class MeshtasticTransport(AbstractTransport):
         self.want_ack = want_ack
         self.channel_index = channel_index
         self._reconnect = reconnect
-        self._backoff_initial = backoff_initial_s
-        self._backoff_max = backoff_max_s
-        self._backoff_factor = backoff_factor
-        self._sleep = sleep or asyncio.sleep
+        self._backoff = Backoff(
+            initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
         self._iface: Any | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._task: asyncio.Task[None] | None = None
@@ -150,7 +149,9 @@ class MeshtasticTransport(AbstractTransport):
         self._started = True
         self._stopping = False
         self._lost = asyncio.Event()
-        subscribe, unsubscribe = self._subscribe, self._unsubscribe
+        # Resolve the pubsub pair now (importing pypubsub lazily if not injected).
+        subscribe = self._subscribe
+        unsubscribe = self._unsubscribe
         if subscribe is None or unsubscribe is None:  # pragma: no cover - lib glue
             subscribe, unsubscribe = _default_pubsub()
             self._subscribe, self._unsubscribe = subscribe, unsubscribe
@@ -183,7 +184,7 @@ class MeshtasticTransport(AbstractTransport):
             self._loop.call_soon_threadsafe(self._lost.set)
 
     async def _supervise(self) -> None:
-        backoff = self._backoff_initial
+        self._backoff.reset()
         assert self._lost is not None
         while not self._stopping:
             if self._iface is None:
@@ -191,10 +192,9 @@ class MeshtasticTransport(AbstractTransport):
                     self._iface = self._factory()
                 except Exception:
                     _log.warning("meshtastic connect failed", transport=self.name)
-                    await self._sleep(backoff)
-                    backoff = min(backoff * self._backoff_factor, self._backoff_max)
+                    await self._backoff.sleep_and_advance()
                     continue
-                backoff = self._backoff_initial
+                self._backoff.reset()
                 self.reconnects += 1
                 self._apply_mesh()
             await self._lost.wait()
@@ -202,8 +202,7 @@ class MeshtasticTransport(AbstractTransport):
             self._close_iface()
             if not self._reconnect:
                 break
-            await self._sleep(backoff)
-            backoff = min(backoff * self._backoff_factor, self._backoff_max)
+            await self._backoff.sleep_and_advance()
 
     def _close_iface(self) -> None:
         iface, self._iface = self._iface, None
@@ -215,11 +214,9 @@ class MeshtasticTransport(AbstractTransport):
 
     def _teardown_subs(self) -> None:
         if self._subscribed:
-            # _subscribed is only set True after start() resolves pubsub, so both
-            # are non-None here; cast keeps mypy strict happy without a branch.
-            unsubscribe = cast(SubscribeFn, self._unsubscribe)
-            unsubscribe(self._on_receive, self._topic)
-            unsubscribe(self._on_lost, self._lost_topic)
+            assert self._unsubscribe is not None  # resolved in start() before _subscribed
+            self._unsubscribe(self._on_receive, self._topic)
+            self._unsubscribe(self._on_lost, self._lost_topic)
             self._subscribed = False
 
     async def send(self, data: bytes) -> None:

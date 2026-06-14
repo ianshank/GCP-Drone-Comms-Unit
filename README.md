@@ -17,6 +17,13 @@ real time.
 - **Mesh SA bridge:** LoRa (Meshtastic), HaLow 802.11s, and IP mesh exchange versioned
   position/chat envelopes; one node bridges the mesh to a TAK server (FreeTAKServer) and/or
   the ATAK multicast SA group.
+- **FPV link health & flight logging (`meshsa.fpv`):** ingests **CRSF** telemetry from an
+  ELRS handset module over half-duplex UART, evaluates link health (LQ/RSSI/staleness),
+  logs synchronized RC + telemetry + event sessions to a versioned JSONL dataset, and
+  enforces a **pre-flight** arm interlock. Console tools: `fpv-telemetry-monitor`,
+  `fpv-log-replay`, `fpv-log-convert`. Install with the `fpv` extra:
+  `pip install -e "packages/meshsa[fpv]"`. (Pre-flight arm-gating is a deliberate, bounded
+  exception to the read-only charter — see [docs/CHARTER.md](docs/CHARTER.md) §3.)
 - **Modular & backward-compatible by construction:** new transports/codecs register via an
   open/closed registry; every wire envelope is `schema_version`-gated; a node tolerates
   configs written for newer/older builds.

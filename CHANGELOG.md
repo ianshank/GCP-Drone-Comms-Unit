@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
+  `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
+  matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are
+  unsupported instead of raising at startup.
+- **`message_from_record` rejects malformed dataset records.** Rebuilding a telemetry
+  message from a logged `{type, data}` record with missing/extra fields (log corruption or a
+  forward dataset that reshaped an existing record) now raises `TelemetryParseError` instead of
+  a bare `TypeError`, so replay fails loudly and consistently with the unknown-type path.
+- **`fpv-telemetry-monitor` survives a malformed known frame.** `pump_once` now catches
+  `TelemetryParseError` around the parse, logs it, and drops the frame, so a single CRC-valid
+  but payload-malformed frame no longer tears down the live monitor loop — matching the
+  per-frame drop-and-continue behaviour of `crsf_source`.
+
+### Changed
+- **Shared `Backoff` reconnect helper (`meshsa.transports.backoff`).** The exponential
+  `initial → min(current*factor, max)` reconnect schedule (with its injectable `sleep`) was
+  duplicated in `TakTcpTransport` and `MeshtasticTransport`; it now lives in one place. Public
+  constructor options (`backoff_initial_s`/`backoff_max_s`/`backoff_factor`/`sleep`) and the
+  observable `reconnects` counter are unchanged; the backoff sequence is identical.
+- **`FlightLogger` stream set is single-sourced.** The session JSONL filenames and the
+  manifest `files` map now derive from the one `_HEADERS` declaration instead of three
+  repeated stream lists; adding a stream is a one-line change. Output is byte-identical.
+- **Shared `meshsa.cli.configure_logging(level)` helper.** The duplicated
+  `structlog.configure(make_filtering_bound_logger(...))` wiring across the five console
+  entry points (`meshsa-base`, `fpv-log-convert`, `fpv-telemetry-monitor`, `fpv-log-replay`,
+  the flightctl gateway) now lives in one place.
+- **`mavlink_source`: GPS wire scales are now configurable** (`coord_scale`/`alt_scale`
+  constructor options), matching the existing `msp_source` pattern, instead of inline
+  `1e7`/`1000.0` literals. Defaults preserve `GLOBAL_POSITION_INT` units (degE7, mm), so
+  behavior is unchanged; no wire `SCHEMA_VERSION` change.
+- **Link-health WARN→CRITICAL staleness multiplier is now configurable** via
+  `HealthSettings.health_linkstats_critical_factor` (default `2.0`), replacing the
+  hard-coded `2×` in `LinkHealthMonitor`. Default behavior unchanged.
+
+### Removed
+- **`HealthSettings.health_fc_telemetry_stale_s`** — an orphan threshold that no §4.2
+  link-health rule consumed (no reason code, never read). Removing it keeps config and the
+  Phase-1 spec consistent; pydantic ignores the key in older configs (backward-compatible).
+  FC-telemetry-staleness monitoring, if desired, needs a defined §4.2 rule + reason code first.
+
 ### Added
 - **Read-only LLM situational-awareness assistant (`meshsa.llm`, opt-in `[llm]` extra).**
   - A natural-language assistant over live drone telemetry and TAK tracks. Strictly
@@ -26,6 +67,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     handling (`chat_reply`) is framework-free and unit-tested.
   - Ops: `flightctl/llm/` runbook + `llm.env.example`. Model defaults to `claude-opus-4-8`,
     overridable via `MESHSA_LLM_MODEL`. 33 new tests; suite stays at 100% line+branch.
+
+## [0.3.0] - 2026-06-13
+
+### Added
+- **`meshsa.fpv` — ground-side FPV telemetry subsystem (Phase 0 Errata E1 + Phase 1).**
+  A self-contained subpackage under `packages/meshsa/src/meshsa/fpv/` that ingests CRSF
+  telemetry from an ELRS handset module, evaluates link health, logs synchronized
+  sessions, and enforces a pre-flight arm gate. Reuses the existing DI/Protocol, pydantic
+  config, structlog, and versioning conventions; **no `meshsa` wire `SCHEMA_VERSION`
+  change** (the dataset has its own `DATASET_SCHEMA`).
+  - `crsf/frame.py` + `crsf/telemetry.py`: CRC8/DVB-S2 framing, address-gated stream
+    resync, pure **big-endian** parsers (`LinkStatistics`/`BatterySensor`/`Attitude`/
+    `FlightMode`); unknown types count, malformed known types raise.
+  - `crsf/link.py`: poll-driven `CrsfLink` (no own thread) with self-echo suppression
+    (Errata E1.2 — exact-byte primary + self-addr-RC secondary, `echoes_suppressed`
+    counter) and an `AddressProber` with the `probe_margin` gate (E1.3). Injectable
+    `CrsfSerial` seam; the pyserial default factory is lazily imported and
+    `# pragma: no cover`.
+  - `telemetry_store.py` + `link_health.py`: bounded per-type history; co-signal health
+    model (stale LinkStats can never be OK; downlink-degrading early warning; version-keyed
+    sensitivity floors) with immediate degradation / hysteresis-damped recovery.
+  - `flight_logger.py`: single writer thread; `rc`/`telemetry` drop-and-count, durable
+    block-then-raise `record_event`; per-file `schema_version` headers; `manifest.json`
+    with git SHA, `capture_latency_ms`, wiring, drop counters, telemetry rates.
+  - `arm_guard.py`: `RCLink` decorator enforcing health-gated **pre-flight** arming with a
+    latch that never disarms in flight (see the CHARTER §3 carve-out).
+  - Tools / console scripts: `fpv-telemetry-monitor`, `fpv-log-replay`,
+    `fpv-log-convert` (JSONL → Parquet, schema-aware).
+  - New optional extra `fpv = ["pyserial>=3.5", "pyarrow>=15"]`; nightly installs it for
+    real-type mypy + the Parquet path. The subsystem imports cleanly without the extra.
+  - Dataset versioning: `fpv/version.py` `DATASET_SCHEMA` with its own compat window
+    (ships at `2` in this release — see Changed); `fpv/dataset.py` enforces it on
+    replay/convert and tolerates a torn final JSONL line.
+  - Specs committed for traceability: `docs/specs/PHASE0_ERRATA.md`,
+    `docs/specs/PHASE1_SPEC_v1_1.md`.
+  - Tests: 117 new fpv tests; `meshsa.fpv` at 100% line+branch coverage (parsers, health,
+    ArmGuard included); full suite 282 passed; mypy `--strict` + ruff clean.
+- **`crsf_source` transport — an FPV aircraft as an ATAK air track.**
+  `@transport_registry.register("crsf_source")` (`meshsa.transports.CrsfSourceTransport`):
+  a receive-only transport that polls a half-duplex `CrsfLink` on a reader thread, decodes
+  the CRSF **GPS (0x02)** frame, and emits one position frame per fix through the existing
+  `telemetry` codec — so a drone/FPV aircraft reaches ATAK as an **air** track with **no
+  router/codec/`SCHEMA_VERSION` change**, the same additive seam as `mavlink_source` /
+  `msp_source`. Injectable `CrsfLink` (the pyserial hardware factory is `# pragma: no cover`)
+  and configurable GPS unit scaling (`ParserSettings.gps_*`); fully unit-tested with a fake
+  `CrsfSerial`, no radio. Closes the deferred air-track seam noted in `docs/ARCHITECTURE.md`.
+- **CRSF GPS decode in the telemetry parser.** `crsf/telemetry.py` now parses the GPS frame
+  into a new `GpsSensor` message (big-endian lat/lon degrees*1e7, ground speed km/h*10,
+  heading deg*100, altitude m with the +1000 m offset, satellite count); GPS is no longer in
+  the parsed-and-ignored set. Scales are `ParserSettings.gps_*` fields — no magic numbers.
+
+### Changed
+- **CHARTER §3 carve-out (deliberate amendment — ratified by the maintainer 2026-06-12).**
+  Adds a bounded exception to the "read-only / not a ground control station" non-goal:
+  `ArmGuard` may transmit RC frames **only** for a pre-flight arm interlock; no in-flight
+  intervention.
+- **Dataset schema `DATASET_SCHEMA` 1 → 2 (`fpv/version.py`).** `GpsSensor` is a new
+  persisted `telemetry.jsonl` record type that an older build cannot reconstruct, so a v2
+  dataset is forward-incompatible for v1 readers. `MIN_COMPATIBLE_DATASET` stays `1`: this
+  build still reads v1 sessions (with a `DatasetCompatibilityWarning`), and an older build
+  correctly rejects a v2 dataset rather than failing mid-replay. The meshsa **wire**
+  `SCHEMA_VERSION` is unchanged — `crsf_source` rides the existing `telemetry` codec.
+- **Shared `PollingSourceTransport` base for the flight-source transports
+  (`transports/polling_source.py`).** `crsf_source`, `msp_source` and `mavlink_source` were
+  near-identical (reader-thread lifecycle, shutdown, position-frame builder); that plumbing now
+  lives in one base, with each transport supplying only its link I/O (`_poll`/`_on_open`/
+  `_close`). Removes the triplicated code and makes the shutdown/robustness behavior below
+  shared. Public registry names and APIs are unchanged.
+
+### Fixed
+- **`crsf_source`: a single malformed frame no longer kills the reader thread.** A CRC-valid
+  CRSF frame can still fail payload-level parsing (`TelemetryParseError`); per-frame parse
+  errors are now caught, logged, and dropped so telemetry keeps flowing. Reader shutdown is
+  also immediate (a `threading.Event` replaces the `time.sleep` poll wait), and `link.close()`
+  is guarded so a raising close can't break `stop()` — matching `msp_source`/`mavlink_source`.
+- **`meshtastic_radio`: resolve pypubsub lazily in `start()`, not `__init__`.** Constructing
+  a `MeshtasticTransport` (e.g. for config validation in `build_node`) no longer imports the
+  optional `pypubsub` dependency, matching the lazy-optional-dep pattern used by
+  `health`/`msp_source`/`mavlink_source`. Fixes `test_build_node_forwards_mesh_config_to_meshtastic`
+  under the `[dev]`-only CI install.
 
 ## [0.2.0] - 2026-06-06
 

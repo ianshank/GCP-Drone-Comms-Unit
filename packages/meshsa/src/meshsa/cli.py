@@ -92,6 +92,15 @@ def log_level_num(name: str) -> int:
     return value if isinstance(value, int) else logging.INFO
 
 
+def configure_logging(level: str) -> None:
+    """Configure structlog's filtering level from a level name.
+
+    Shared by every console entry point (``meshsa-base``, the ``fpv-*`` tools and the
+    flightctl gateway runner) so the structlog wiring lives in exactly one place.
+    """
+    structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(log_level_num(level)))
+
+
 def _delimiter_bytes(raw: str) -> bytes:
     """Interpret a delimiter string with backslash escapes (e.g. '\\n') as bytes."""
     return raw.encode().decode("unicode_escape").encode()
@@ -173,9 +182,7 @@ async def run(args: argparse.Namespace) -> None:  # pragma: no cover - live orch
 
 def main() -> None:  # pragma: no cover - process entry point
     args = parse_args()
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(log_level_num(args.log_level))
-    )
+    configure_logging(args.log_level)
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(run(args))
 

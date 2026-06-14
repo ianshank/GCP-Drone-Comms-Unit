@@ -5,7 +5,15 @@ The live orchestration (run/main) is integration glue (# pragma: no cover).
 
 import logging
 
-from meshsa.cli import _delimiter_bytes, build_config, log_level_num, parse_args
+import structlog
+
+from meshsa.cli import (
+    _delimiter_bytes,
+    build_config,
+    configure_logging,
+    log_level_num,
+    parse_args,
+)
 
 
 def test_parse_args_defaults(monkeypatch):
@@ -42,6 +50,18 @@ def test_log_level_num_maps_names():
     assert log_level_num("info") == logging.INFO  # case-insensitive
     assert log_level_num("ERROR") == logging.ERROR
     assert log_level_num("bogus") == logging.INFO  # unknown -> INFO
+
+
+def test_configure_logging_applies_level():
+    # Shared structlog wiring used by every entry point; configures global state.
+    try:
+        configure_logging("WARNING")
+        assert structlog.is_configured()
+        # Unknown level falls back to INFO via log_level_num (no exception).
+        configure_logging("bogus")
+        assert structlog.is_configured()
+    finally:
+        structlog.reset_defaults()  # don't leak global config to other tests
 
 
 def test_delimiter_bytes_escapes():

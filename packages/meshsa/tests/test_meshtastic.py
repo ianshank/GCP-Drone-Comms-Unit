@@ -352,3 +352,17 @@ def test_default_provisioner_no_region_skips_write():
     iface = type("_I", (), {"localNode": _FakeNode()})()
     _default_provisioner(iface, {"region": None, "channel": None, "psk": None, "freq_khz": None})
     assert iface.localNode.written == []
+
+
+def test_construct_does_not_resolve_pubsub(monkeypatch):
+    # pypubsub is resolved lazily in start(), not __init__, so a transport can be
+    # built (e.g. for config validation in build_node) without the optional dep.
+    import meshsa.transports.meshtastic_radio as mr
+
+    def _boom():  # pragma: no cover - must never be called at construction
+        raise AssertionError("pypubsub resolved at construction")
+
+    monkeypatch.setattr(mr, "_default_pubsub", _boom)
+    transport = mr.MeshtasticTransport(name="lora")
+    assert transport.name == "lora"
+    assert transport._subscribe is None and transport._unsubscribe is None

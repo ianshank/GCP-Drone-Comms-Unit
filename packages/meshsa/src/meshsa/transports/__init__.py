@@ -1,6 +1,7 @@
 """Built-in transports (importing registers them)."""
 
 from .base import AbstractTransport
+from .crsf_source import CrsfSourceTransport
 from .loopback import LoopbackBus, LoopbackTransport, NullTransport
 from .mavlink_source import MavlinkSourceTransport
 from .meshtastic_radio import MeshtasticTransport
@@ -12,6 +13,7 @@ __all__ = [
     "LoopbackBus",
     "LoopbackTransport",
     "NullTransport",
+    "CrsfSourceTransport",
     "MavlinkSourceTransport",
     "MspSourceTransport",
     "MeshtasticTransport",

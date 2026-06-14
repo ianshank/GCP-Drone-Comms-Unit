@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import os
 import signal
 
-import structlog
-
 from meshsa import NodeConfig, build_node
-from meshsa.cli import log_level_num
+from meshsa.cli import configure_logging
 
 
 async def _run(config_path: str) -> None:
@@ -27,7 +26,10 @@ async def _run(config_path: str) -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+        # add_signal_handler is unimplemented on some platforms (e.g. Windows);
+        # match meshsa.cli.run and degrade gracefully instead of crashing.
+        with contextlib.suppress(NotImplementedError):
+            loop.add_signal_handler(sig, stop.set)
     try:
         await stop.wait()
     finally:
@@ -40,11 +42,7 @@ def main() -> None:
     )
     ap.add_argument("--config", required=True, help="path to a NodeConfig JSON file")
     args = ap.parse_args()
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(
-            log_level_num(os.environ.get("MESHSA_LOG_LEVEL", "INFO"))
-        )
-    )
+    configure_logging(os.environ.get("MESHSA_LOG_LEVEL", "INFO"))
     asyncio.run(_run(args.config))
 
 

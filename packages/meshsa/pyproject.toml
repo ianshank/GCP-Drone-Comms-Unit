@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshsa"
-version = "0.2.0"
+version = "0.3.0"
 description = "Modular framework for a distributable mesh situational-awareness network"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -43,6 +43,10 @@ msp = [
 health = [
     "aiohttp>=3.9",
 ]
+fpv = [
+    "pyserial>=3.5",
+    "pyarrow>=15",
+]
 llm = [
     "anthropic>=0.40",
     "aiohttp>=3.9",
@@ -61,6 +65,9 @@ dev = [
 
 [project.scripts]
 meshsa-base = "meshsa.cli:main"
+fpv-telemetry-monitor = "meshsa.fpv.tools.monitor:main"
+fpv-log-replay = "meshsa.fpv.tools.replay:main"
+fpv-log-convert = "meshsa.fpv.tools.convert:main"
 meshsa-llm = "meshsa.llm.server:main"
 
 [project.urls]
@@ -113,7 +120,17 @@ warn_return_any = true
 disallow_untyped_decorators = true
 
 [[tool.mypy.overrides]]
-module = ["meshtastic.*", "pubsub.*", "pypubsub.*", "aiohttp.*", "pymavlink.*", "yamspy.*", "anthropic.*"]
+module = [
+    "meshtastic.*",
+    "pubsub.*",
+    "pypubsub.*",
+    "aiohttp.*",
+    "pymavlink.*",
+    "yamspy.*",
+    "serial.*",
+    "pyarrow.*",
+    "anthropic.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
