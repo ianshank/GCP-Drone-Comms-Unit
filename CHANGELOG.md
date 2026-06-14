@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **FPV capture loop no longer busy-loops or dies silently (`meshsa.fpv.camera`).** When the
+  source disconnects, `read_frame()` returns `None` immediately; the capture loop now backs off a
+  bounded `CameraSettings.idle_poll_s` (new tunable, default `0.1`) instead of spinning at 100%
+  CPU, and the whole loop body is wrapped so a transient `read_frame`/`record_frame` failure is
+  logged and skipped rather than killing the daemon capture thread.
+- **`CaptureWriter.close()` closes the source before joining the capture thread.** A backend
+  blocked inside `read_frame()` is now unblocked first, so the bounded join can complete instead
+  of timing out against a wedged read.
+- **`FlightLogger` no longer persists a live reference to the caller's `video_meta`.** The dict is
+  deep-copied on ingest, so a caller mutating it (including nested values) after `start()` can no
+  longer silently alter the written `manifest.json`.
+- **`FlightLogger` counter updates are thread-safe.** A `threading.Lock` now guards the
+  read-modify-write updates to `dropped_records`, `_tel_counts`, `_tel_t_first`/`_tel_t_last`, and
+  `_notes` shared across the capture thread, the writer thread, and caller threads, so concurrent
+  increments can no longer be lost. The lock is never held across blocking I/O.
 - **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
   `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
   matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are

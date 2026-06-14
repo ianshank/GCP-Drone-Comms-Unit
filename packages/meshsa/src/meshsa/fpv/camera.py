@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -47,6 +48,8 @@ _SENTINEL: Any = object()
 EncodeCallable = Callable[[Any], None]
 #: Builds a :class:`CameraSource` (the real backend lives behind the factory).
 CameraFactory = Callable[[], CameraSource]
+#: Bounded idle back-off used by the capture loop; injectable for deterministic tests.
+SleepCallable = Callable[[float], None]
 
 
 @dataclass(frozen=True)
@@ -80,12 +83,16 @@ class CaptureWriter:
         encode: EncodeCallable,
         *,
         clock: Clock | None = None,
+        sleep: SleepCallable | None = None,
     ) -> None:
         self._s = settings
         self._source = source
         self._logger = logger
         self._encode = encode
         self._clock: Clock = clock or MonotonicClock()
+        #: Injectable idle back-off (defaults to ``time.sleep``); tests substitute a
+        #: fake to assert the loop backs off instead of spinning, deterministically.
+        self._sleep: SleepCallable = sleep or time.sleep
 
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=settings.capture_queue_len)
         self._capture_thread: threading.Thread | None = None
@@ -123,12 +130,15 @@ class CaptureWriter:
         _log.debug("capture writer started")
 
     def close(self) -> None:
-        """Stop capture, drain the encode queue, join, release the source.
+        """Stop capture, release the source, drain the encode queue, join.
 
         Idempotent. Bounded by ``capture_shutdown_timeout_s`` on every join so a
-        wedged encoder can never hang the caller. Preserves SIGINT semantics: a
-        ``KeyboardInterrupt`` during capture propagates out of the loop, and this
-        teardown still runs to release the device and join the encode thread.
+        wedged encoder can never hang the caller. The source is closed **before**
+        the capture-thread join: a backend blocked inside ``read_frame`` is
+        unblocked by ``close()``, so the join cannot time out waiting on it.
+        Preserves SIGINT semantics: a ``KeyboardInterrupt`` during capture
+        propagates out of the loop, and this teardown still runs to release the
+        device and join the encode thread.
         """
         if self._closed or not self._started:
             return
@@ -139,6 +149,9 @@ class CaptureWriter:
         assert self._encode_thread is not None
         timeout = self._s.capture_shutdown_timeout_s
         self._stop.set()
+        # Close the source FIRST to unblock any in-flight read_frame, then join;
+        # otherwise a backend wedged in read_frame would make the join time out.
+        self._source.close()
         self._capture_thread.join(timeout=timeout)
         if self._capture_thread.is_alive():  # pragma: no cover - capture wedged
             _log.warning("capture thread did not terminate within timeout")
@@ -150,20 +163,27 @@ class CaptureWriter:
         self._encode_thread.join(timeout=timeout)
         if self._encode_thread.is_alive():  # pragma: no cover - encoder wedged
             _log.warning("encode thread did not terminate within timeout")
-        self._source.close()
         _log.debug("capture writer closed", dropped_frames=self.dropped_frames)
 
     # -- internals ---------------------------------------------------------- #
 
     def _capture_loop(self) -> None:
         while not self._stop.is_set():
-            frame = self._source.read_frame()
-            if frame is None:
-                # Bounded-timeout read returned nothing; re-check the stop flag.
-                continue
-            t = self._clock.now()
-            self._logger.record_frame(frame.idx, t)
-            self._enqueue_lossy(frame.data)
+            try:
+                frame = self._source.read_frame()
+                if frame is None:
+                    # Source disconnected or between frames: back off a bounded
+                    # interval instead of spinning at 100% CPU re-checking stop.
+                    self._sleep(self._s.idle_poll_s)
+                    continue
+                t = self._clock.now()
+                self._logger.record_frame(frame.idx, t)
+                self._enqueue_lossy(frame.data)
+            except Exception:  # noqa: BLE001 - one bad read must never kill the thread
+                # A read_frame/record_frame failure is logged and skipped; killing
+                # the daemon thread here would silently stop all capture.
+                _log.exception("capture iteration failed; continuing")
+                self._sleep(self._s.idle_poll_s)
 
     def _enqueue_lossy(self, buffer: Any) -> None:
         try:

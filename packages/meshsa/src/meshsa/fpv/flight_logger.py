@@ -17,6 +17,7 @@ drains the queue, and joins the writer thread.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import queue
@@ -96,7 +97,9 @@ class FlightLogger:
         self._session_id = session_id or uuid.uuid4().hex[:8]
         #: Capture metadata (resolution/fps/codec/file) emitted as the manifest
         #: ``video`` entry when capture is wired; ``None`` keeps the Phase-1 stub.
-        self._video_meta = video_meta
+        #: Deep-copied on ingest so a caller mutating the dict it passed in (even
+        #: nested values) can never silently alter the persisted manifest.
+        self._video_meta = copy.deepcopy(video_meta)
 
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=settings.logger_queue_len)
         self._files: dict[str, IO[str]] = {}
@@ -104,6 +107,13 @@ class FlightLogger:
         self._closed = False
         self._started = False
         self.session_dir = ""
+
+        #: Guards the counters/aggregates mutated from multiple threads — caller
+        #: threads (``record_telemetry``/``set_note``), the capture thread (via
+        #: ``record_frame`` -> ``_enqueue_lossy``), and the writer thread's drop
+        #: path all read-modify-write these without it. Never held across blocking
+        #: I/O: only the in-memory increment is guarded, not the file write/enqueue.
+        self._counter_lock = threading.Lock()
 
         #: Free-form provenance merged into the manifest at close (e.g. the
         #: link's ``echoes_suppressed`` / ``crc_errors`` counters).
@@ -189,10 +199,11 @@ class FlightLogger:
         """Enqueue a parsed telemetry record (non-blocking; drops-and-counts)."""
         ts = self._t(t)
         name = type(msg).__name__
-        self._tel_counts[name] = self._tel_counts.get(name, 0) + 1
-        if self._tel_t_first is None:
-            self._tel_t_first = ts
-        self._tel_t_last = ts
+        with self._counter_lock:
+            self._tel_counts[name] = self._tel_counts.get(name, 0) + 1
+            if self._tel_t_first is None:
+                self._tel_t_first = ts
+            self._tel_t_last = ts
         self._enqueue_lossy("telemetry", {"t": ts, "type": name, "data": asdict(msg)})
 
     def record_event(
@@ -214,7 +225,8 @@ class FlightLogger:
 
     def set_note(self, key: str, value: Any) -> None:
         """Attach a provenance value (e.g. link counters) to the final manifest."""
-        self._notes[key] = value
+        with self._counter_lock:
+            self._notes[key] = value
 
     def record_frame(self, frame_idx: int, t: float | None = None) -> None:
         """Enqueue a video-frame index record (camera arrives in Phase 2).
@@ -244,11 +256,13 @@ class FlightLogger:
         try:
             self._queue.put_nowait((stream, rec))
         except queue.Full:
-            self.dropped_records[stream] = self.dropped_records.get(stream, 0) + 1
+            with self._counter_lock:
+                dropped = self.dropped_records.get(stream, 0) + 1
+                self.dropped_records[stream] = dropped
             _log.warning(
                 "logger queue full; dropping record",
                 stream=stream,
-                dropped=self.dropped_records[stream],
+                dropped=dropped,
             )
 
     def _writer(self) -> None:
@@ -270,7 +284,8 @@ class FlightLogger:
                 # A disk error or an unserialisable record must never kill the
                 # writer thread — that would wedge close(). Log, count it as a
                 # drop, and keep draining so shutdown stays bounded.
-                self.dropped_records[stream] = self.dropped_records.get(stream, 0) + 1
+                with self._counter_lock:
+                    self.dropped_records[stream] = self.dropped_records.get(stream, 0) + 1
                 _log.exception("logger write failed; dropping record", stream=stream)
             finally:
                 self._queue.task_done()
@@ -284,14 +299,25 @@ class FlightLogger:
             fh.flush()
 
     def _telemetry_rates(self) -> dict[str, float]:
-        if self._tel_t_first is None or self._tel_t_last is None:
+        # Snapshot the aggregates under the lock so a concurrent record_telemetry
+        # cannot mutate them mid-computation, then compute on the local copies.
+        with self._counter_lock:
+            t_first = self._tel_t_first
+            t_last = self._tel_t_last
+            counts = dict(self._tel_counts)
+        if t_first is None or t_last is None:
             return {}
-        span = self._tel_t_last - self._tel_t_first
+        span = t_last - t_first
         if span <= 0:
-            return {name: float(count) for name, count in self._tel_counts.items()}
-        return {name: count / span for name, count in self._tel_counts.items()}
+            return {name: float(count) for name, count in counts.items()}
+        return {name: count / span for name, count in counts.items()}
 
     def _write_manifest(self) -> None:
+        # Snapshot shared counters/notes atomically; the writer and caller threads
+        # mutate them concurrently and the manifest must capture a consistent view.
+        with self._counter_lock:
+            dropped_snapshot = dict(self.dropped_records)
+            notes_snapshot = dict(self._notes)
         manifest = {
             "schema_version": DATASET_SCHEMA,
             "created_utc": self._created_utc,
@@ -303,10 +329,12 @@ class FlightLogger:
             "hardware_notes": self._hardware_notes,
             "settings_snapshot": self._settings_snapshot,
             "telemetry_rates_hz": self._telemetry_rates(),
-            "dropped_records": dict(self.dropped_records),
-            "notes": dict(self._notes),
+            "dropped_records": dropped_snapshot,
+            "notes": notes_snapshot,
             # ``None`` until capture is wired; a CaptureWriter supplies the
-            # resolution/fps/codec/file dict via the ``video_meta`` ctor arg.
+            # resolution/fps/codec/file dict via the ``video_meta`` ctor arg. The
+            # stored value is already an isolated deep copy (taken in __init__), so
+            # the caller's later mutations cannot reach the persisted manifest.
             "video": self._video_meta,
             # JSONL filenames derive from the single stream set (_HEADERS); the
             # video entry is the one non-JSONL special case.

@@ -249,3 +249,72 @@ def test_git_sha_failure_path_yields_none(tmp_path):
     logger.close()
     manifest = _read_json(os.path.join(logger.session_dir, "manifest.json"))
     assert manifest["git_sha"] is None
+
+
+def test_video_meta_mutation_after_start_does_not_change_manifest(tmp_path):
+    # The manifest must snapshot video_meta by value: mutating the caller's dict
+    # (top-level AND nested) after start() must not alter persisted manifest.json.
+    video_meta = {"codec": "h264", "res": {"w": 1280, "h": 720}}
+    logger = _logger(tmp_path, video_meta=video_meta)
+    logger.start()
+    # Mutate the dict the caller passed in, both shallow and nested.
+    video_meta["codec"] = "TAMPERED"
+    video_meta["res"]["w"] = 9999
+    logger.close()
+    manifest = _read_json(os.path.join(logger.session_dir, "manifest.json"))
+    assert manifest["video"] == {"codec": "h264", "res": {"w": 1280, "h": 720}}
+
+
+def test_concurrent_counter_updates_are_not_lost(tmp_path):
+    # The drop/telemetry counters are mutated from caller, capture, and writer
+    # threads; the lock must make the read-modify-writes atomic so no increment is
+    # lost. Hammer record_telemetry from many threads and assert the total count.
+    import threading as _threading
+
+    logger = _logger(tmp_path)
+    logger.start()
+    per_thread = 200
+    n_threads = 8
+
+    def worker() -> None:
+        for _ in range(per_thread):
+            logger.record_telemetry(_ls(), t=1.0)
+
+    threads = [_threading.Thread(target=worker) for _ in range(n_threads)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    logger.close()
+    # Every increment is accounted for: nothing was lost to a race.
+    assert logger._tel_counts["LinkStatistics"] == per_thread * n_threads
+
+
+def test_concurrent_drop_counts_are_guarded(tmp_path):
+    # When the queue overflows, the drop counter is incremented under the lock from
+    # multiple caller threads concurrently; assert no increment is lost.
+    import threading as _threading
+
+    # A tiny queue with no draining writer started yet would still drain via the
+    # writer thread, so instead fill aggressively from many threads and assert the
+    # observed records + drops conserve the total enqueued.
+    logger = _logger(tmp_path, settings={"logger_queue_len": 1})
+    logger.start()
+    per_thread = 300
+    n_threads = 6
+    total = per_thread * n_threads
+
+    def worker() -> None:
+        for _ in range(per_thread):
+            logger.record_rc([1500], t=1.0)
+
+    threads = [_threading.Thread(target=worker) for _ in range(n_threads)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    logger.close()
+    written = len(_read_lines(os.path.join(logger.session_dir, "rc.jsonl"))) - 1  # minus header
+    # Conservation: everything enqueued was either written or counted as dropped.
+    # A lost-update race on dropped_records would break this equality.
+    assert written + logger.dropped_records["rc"] == total
