@@ -65,6 +65,7 @@ def _wait_until(predicate, timeout: float = 2.0) -> None:
         if predicate():
             return
         time.sleep(0.005)
+    raise AssertionError(f"timed out waiting for {predicate!r} after {timeout}s")
 
 
 def test_capture_writes_frame_index_records(tmp_path):
@@ -179,6 +180,136 @@ def test_default_clock_used_when_none_injected(tmp_path):
     logger.close()
     frame = _read_lines(os.path.join(logger.session_dir, "frames.jsonl"))[1]
     assert isinstance(frame["t"], float)
+
+
+def test_idle_poll_backs_off_when_read_returns_none(tmp_path):
+    # A source that returns None (disconnected) then a frame must recover without
+    # spinning: the loop sleeps the configured idle_poll_s on each None instead of
+    # busy-looping at 100% CPU. We inject the sleep and assert it is called.
+    clock = ManualClock()
+    logger = _logger(tmp_path, clock)
+    logger.start()
+    encoded = threading.Event()
+    sleeps: list[float] = []
+
+    class FlakyCamera:
+        """Returns None first (disconnected), then one real frame, then None."""
+
+        def __init__(self) -> None:
+            self._calls = 0
+            self.closed = False
+
+        def read_frame(self) -> Frame | None:
+            self._calls += 1
+            if self._calls == 1:
+                return None
+            if self._calls == 2:
+                return Frame(idx=0, t=0.0, data="buf")
+            return None
+
+        def close(self) -> None:
+            self.closed = True
+
+    settings = CameraSettings(idle_poll_s=0.25)
+    writer = CaptureWriter(
+        settings,
+        FlakyCamera(),
+        logger,
+        encode=lambda _b: encoded.set(),
+        clock=clock,
+        sleep=sleeps.append,
+    )
+    writer.start()
+    _wait_until(encoded.is_set)
+    writer.close()
+    logger.close()
+
+    # Recovered (frame encoded) AND backed off with the configured interval, not
+    # a hardcoded value, on the None reads -> no busy-loop.
+    assert sleeps  # at least one idle back-off happened
+    assert all(dt == settings.idle_poll_s for dt in sleeps)
+
+
+def test_record_frame_failure_does_not_kill_thread(tmp_path, monkeypatch):
+    # If record_frame raises once, the capture thread must keep running and log the
+    # next frame — a single bad iteration cannot silently stop all capture.
+    clock = ManualClock()
+    logger = _logger(tmp_path, clock)
+    logger.start()
+    encoded: list[object] = []
+    calls = {"n": 0}
+    real_record = logger.record_frame
+
+    def flaky_record(frame_idx: int, t: float | None = None) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("transient record failure")
+        real_record(frame_idx, t)
+
+    monkeypatch.setattr(logger, "record_frame", flaky_record)
+    frames = [Frame(idx=0, t=0.0, data="lost"), Frame(idx=1, t=0.0, data="ok")]
+    writer = CaptureWriter(
+        CameraSettings(idle_poll_s=0.0),
+        FakeCamera(frames),
+        logger,
+        encode=encoded.append,
+        clock=clock,
+    )
+    writer.start()
+    _wait_until(lambda: encoded == ["ok"])
+    writer.close()
+    logger.close()
+    # The first frame's record raised (lost), but the thread survived and the
+    # second frame was recorded + encoded.
+    assert encoded == ["ok"]
+    recs = _read_lines(os.path.join(logger.session_dir, "frames.jsonl"))[1:]
+    assert [r["frame_idx"] for r in recs] == [1]
+
+
+def test_close_releases_source_before_joining_capture(tmp_path):
+    # close() must close the source BEFORE joining the capture thread so a backend
+    # blocked in read_frame is unblocked and the join cannot time out. The fake's
+    # read_frame blocks until close() fires; with the source closed first the
+    # capture thread unblocks and the join completes well within the timeout, so
+    # the thread is dead afterwards (a wrong order would time out, leaving it
+    # alive). The recorded order proves source.close ran before the join returned.
+    clock = ManualClock()
+    logger = _logger(tmp_path, clock)
+    logger.start()
+    order: list[str] = []
+    unblock = threading.Event()
+    read_entered = threading.Event()
+
+    class BlockingCamera:
+        """read_frame blocks until close() is called (simulates a wedged backend)."""
+
+        def read_frame(self) -> Frame | None:
+            read_entered.set()
+            unblock.wait(timeout=2.0)
+            return None
+
+        def close(self) -> None:
+            order.append("source.close")
+            unblock.set()  # unblock the in-flight read_frame
+
+    writer = CaptureWriter(
+        CameraSettings(capture_shutdown_timeout_s=2.0, idle_poll_s=0.0),
+        BlockingCamera(),
+        logger,
+        encode=lambda _b: None,
+        clock=clock,
+    )
+    writer.start()
+    # Ensure the capture thread is genuinely blocked inside read_frame.
+    _wait_until(read_entered.is_set)
+    writer.close()
+    order.append("close.returned")
+    logger.close()
+    # Source was closed (unblocking read_frame) before close() returned, and the
+    # capture thread terminated within the timeout (proof the join did not block).
+    assert order == ["source.close", "close.returned"]
+    assert writer._capture_thread is not None
+    assert not writer._capture_thread.is_alive()
 
 
 def test_encode_failure_does_not_kill_thread(tmp_path):

@@ -164,6 +164,10 @@ class CameraSettings(BaseModel):
     #: Upper bound on capture/encode shutdown: each thread join in ``close()``
     #: waits at most this long so a wedged encoder can never hang the caller.
     capture_shutdown_timeout_s: float = 2.0
+    #: Idle back-off (seconds) the capture loop sleeps when ``read_frame`` returns
+    #: ``None`` (source disconnected / between frames), so a dead source can never
+    #: spin the loop at 100% CPU. Bounded so shutdown stays responsive.
+    idle_poll_s: float = 0.1
 
 
 class FpvSettings(BaseModel):
