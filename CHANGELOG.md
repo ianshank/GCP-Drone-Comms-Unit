@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
+  `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
+  matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are
+  unsupported instead of raising at startup.
+
 ### Changed
+- **Shared `meshsa.cli.configure_logging(level)` helper.** The duplicated
+  `structlog.configure(make_filtering_bound_logger(...))` wiring across the five console
+  entry points (`meshsa-base`, `fpv-log-convert`, `fpv-telemetry-monitor`, `fpv-log-replay`,
+  the flightctl gateway) now lives in one place.
 - **`mavlink_source`: GPS wire scales are now configurable** (`coord_scale`/`alt_scale`
   constructor options), matching the existing `msp_source` pattern, instead of inline
   `1e7`/`1000.0` literals. Defaults preserve `GLOBAL_POSITION_INT` units (degE7, mm), so

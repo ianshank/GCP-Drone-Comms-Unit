@@ -16,7 +16,7 @@ from typing import Any
 
 import structlog
 
-from ...cli import log_level_num
+from ...cli import configure_logging
 from ..dataset import read_jsonl
 
 _log = structlog.get_logger("meshsa.fpv.convert")
@@ -84,9 +84,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - entry point
     args = parse_args(argv)
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(log_level_num(args.log_level))
-    )
+    configure_logging(args.log_level)
     counts = convert_session(args.session_dir, args.out_dir)
     _log.info("convert complete", rows=counts)
     return 0

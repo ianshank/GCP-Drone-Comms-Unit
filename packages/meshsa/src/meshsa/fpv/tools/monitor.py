@@ -11,7 +11,7 @@ import argparse
 
 import structlog
 
-from ...cli import log_level_num
+from ...cli import configure_logging
 from ...protocols import Clock
 from ..config import FpvSettings
 from ..crsf.link import CrsfLink
@@ -115,8 +115,6 @@ def run(args: argparse.Namespace) -> None:  # pragma: no cover - live hardware l
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - entry point
     args = parse_args(argv)
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(log_level_num(args.log_level))
-    )
+    configure_logging(args.log_level)
     run(args)
     return 0

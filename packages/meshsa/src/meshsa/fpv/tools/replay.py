@@ -12,7 +12,7 @@ from typing import Any
 
 import structlog
 
-from ...cli import log_level_num
+from ...cli import configure_logging
 from ..config import HealthSettings
 from ..crsf.telemetry import message_from_record
 from ..dataset import read_jsonl
@@ -69,9 +69,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - entry poin
     from ..config import FpvSettings
 
     args = parse_args(argv)
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(log_level_num(args.log_level))
-    )
+    configure_logging(args.log_level)
     health = FpvSettings.from_file(args.config).health if args.config else HealthSettings()
     reports = replay_file(args.telemetry_jsonl, health_settings=health)
     worst = worst_state(r.state for r in reports)
