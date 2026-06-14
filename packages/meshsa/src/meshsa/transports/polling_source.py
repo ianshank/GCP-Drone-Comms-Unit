@@ -58,6 +58,8 @@ class PollingSourceTransport(AbstractTransport):
         queue_maxsize: int = 1000,
         poll_wait_s: float = 0.0,
         join_timeout_s: float = 2.0,
+        log_every_n: int = 100,
+        log_interval_s: float = 30.0,
     ) -> None:
         super().__init__(name, queue_maxsize)
         self._resource = resource
@@ -69,12 +71,20 @@ class PollingSourceTransport(AbstractTransport):
         #: (e.g. a blocking ``recv`` with a timeout) so no extra sleep is needed.
         self._poll_wait_s = poll_wait_s
         self._join_timeout_s = join_timeout_s
+        #: Emit a throttled link-health log line every ``log_every_n`` frames or
+        #: at most once per ``log_interval_s`` (whichever comes first), so a busy
+        #: link stays quiet and an idle link still reports ``link="down"``.
+        self._log_every_n = log_every_n
+        self._log_interval_s = log_interval_s
+        self._last_log_at: float | None = None
         self._thread: threading.Thread | None = None
         #: Set by ``stop()`` to wake the reader immediately (no shutdown latency).
         self._stop_event = threading.Event()
         #: Monotonic per-fix sequence so each emitted frame has a unique msg_id
         #: (the router dedupes by msg_id; reusing one would collapse all fixes).
         self._seq = 0
+        #: Frames ingested from the link over this transport's lifetime.
+        self.rx_frames = 0
 
     async def start(self) -> None:
         await super().start()
@@ -103,10 +113,40 @@ class PollingSourceTransport(AbstractTransport):
             except Exception:
                 _log.warning("source poll error; stopping reader", transport=self.name)
                 break
+            produced = False
             for frame in frames:
+                produced = True
+                self.rx_frames += 1
                 loop.call_soon_threadsafe(self._ingest_nowait, frame)
+                if self.rx_frames % self._log_every_n == 0 or self._interval_elapsed():
+                    self._log_link("up")
+            if not produced and self._interval_elapsed():
+                self._log_link("down")
             if self._poll_wait_s:
                 self._stop_event.wait(self._poll_wait_s)
+
+    def _interval_elapsed(self) -> bool:
+        """True if at least ``log_interval_s`` has passed since the last log line.
+
+        The first call seeds the window (returns ``False``) so an interval-based
+        line is only emitted after a full ``log_interval_s`` has actually elapsed.
+        """
+        now = self._clock.now()
+        if self._last_log_at is None:
+            self._last_log_at = now
+            return False
+        return (now - self._last_log_at) >= self._log_interval_s
+
+    def _log_link(self, link: str) -> None:
+        """Emit one throttled link-health line and reset the interval window."""
+        self._last_log_at = self._clock.now()
+        _log.info(
+            "source rx",
+            transport=self.name,
+            rx=self.rx_frames,
+            dropped_inbox_full=self.dropped_inbox_full,
+            link=link,
+        )
 
     def _position_frame(self, lat: float, lon: float, hae: float) -> bytes:
         """Build the telemetry-codec frame shared by every flight source."""

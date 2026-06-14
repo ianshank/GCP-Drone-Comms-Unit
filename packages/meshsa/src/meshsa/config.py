@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -40,6 +40,9 @@ class HealthConfig(BaseModel):
     enabled: bool = False
     host: str = "127.0.0.1"
     port: int = 8088
+    metrics_enabled: bool = False
+    metrics_path: str = "/metrics"
+    metrics_format: Literal["prometheus", "json"] = "prometheus"
 
 
 class NodeConfig(BaseModel):

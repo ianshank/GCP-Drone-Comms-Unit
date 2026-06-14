@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Prometheus/JSON metrics export.** `RouterMetrics.as_dict()` plus a hand-rolled
+  `meshsa.render_prometheus(metrics, transports)` (no new dependency) emit
+  `meshsa_rx_total`/`meshsa_tx_total`/`meshsa_forwarded_total`/
+  `meshsa_dropped_undecodable_total`/`meshsa_schema_mismatch_total` and per-transport
+  `meshsa_transport_{dropped_inbox_full,reconnects,rx_frames}{transport="..."}` series.
+  An opt-in `/metrics` route on the health listener serves either format, gated by new
+  `HealthConfig` fields (`metrics_enabled`/`metrics_path`/`metrics_format`).
+- **Per-transport rx observability on polling sources.** `PollingSourceTransport` now
+  tracks an `rx_frames` counter and emits a throttled `"source rx"` link-health log line
+  (`link="up"`/`"down"`) every `log_every_n` frames or once per `log_interval_s` idle
+  window (both configurable constructor params; defaults `100`/`30.0`). `rx_frames` is
+  surfaced in the health snapshot.
+- **`flightctl/constraints/fts-constraints.txt`.** The FreeTAKServer dependency pins
+  (setuptools/opentelemetry/etc.) verified to boot FTS on the Jetson now live in one
+  auditable constraints file; `scripts/setup_fts.sh` installs via `uv pip --constraint`.
+
 ### Fixed
 - **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
   `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
