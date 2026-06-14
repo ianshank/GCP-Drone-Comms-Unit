@@ -18,6 +18,7 @@ from meshsa.fpv.crsf.telemetry import (
     Attitude,
     BatterySensor,
     FlightMode,
+    GpsSensor,
     LinkStatistics,
     TelemetryParser,
 )
@@ -157,6 +158,30 @@ def test_flight_mode_empty_raises():
 
 
 # --------------------------------------------------------------------------- #
+# GPS — big-endian position/velocity, configurable scaling                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_gps_golden_value_and_scaling():
+    # lat=37.7749°, lon=-122.4194°, speed=12.3 km/h, heading=180.0°,
+    # altitude raw 1120 -> 120 m (the +1000 m offset removed), 9 satellites.
+    payload = struct.pack(">iiHHHB", 377749000, -1224194000, 123, 18000, 1120, 9)
+    msg = TelemetryParser().parse(_frame(CrsfFrameType.GPS, payload))
+    assert isinstance(msg, GpsSensor)
+    assert msg.lat_deg == pytest.approx(37.7749)
+    assert msg.lon_deg == pytest.approx(-122.4194)  # signed i32 (big-endian)
+    assert msg.ground_speed_kmh == pytest.approx(12.3)
+    assert msg.heading_deg == pytest.approx(180.0)
+    assert msg.altitude_m == 120  # 1120 - 1000 m offset
+    assert msg.satellites == 9
+
+
+def test_gps_wrong_length_raises():
+    with pytest.raises(TelemetryParseError, match="GPS"):
+        TelemetryParser().parse(_frame(CrsfFrameType.GPS, b"\x00" * 14))
+
+
+# --------------------------------------------------------------------------- #
 # Unknown vs ignored types                                                     #
 # --------------------------------------------------------------------------- #
 
@@ -172,7 +197,6 @@ def test_ignored_known_types_return_none_without_counting():
     p = TelemetryParser()
     for ftype in (
         CrsfFrameType.RC_CHANNELS_PACKED,
-        CrsfFrameType.GPS,
         CrsfFrameType.DEVICE_INFO,
         CrsfFrameType.DEVICE_PING,
         CrsfFrameType.RADIO_ID,

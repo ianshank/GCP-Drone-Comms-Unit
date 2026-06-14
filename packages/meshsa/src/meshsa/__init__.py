@@ -20,6 +20,7 @@ from .registry import Registry, codec_registry, transport_registry
 from .router import Router
 from .telemetry import TelemetryCodec
 from .transports import (
+    CrsfSourceTransport,
     LoopbackBus,
     LoopbackTransport,
     MavlinkSourceTransport,
@@ -69,6 +70,7 @@ __all__ = [
     "LoopbackBus",
     "LoopbackTransport",
     "NullTransport",
+    "CrsfSourceTransport",
     "MavlinkSourceTransport",
     "MspSourceTransport",
     "MeshtasticTransport",

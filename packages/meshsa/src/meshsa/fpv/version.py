@@ -17,7 +17,11 @@ from __future__ import annotations
 import warnings
 
 #: On-disk dataset schema this build writes (manifest + JSONL header records).
-DATASET_SCHEMA = 1
+#: Bumped 1 -> 2 in 0.3.0: the parser now emits a ``GpsSensor`` telemetry record
+#: (air-track position), a new ``telemetry.jsonl`` ``type`` an older build cannot
+#: reconstruct — a forward-incompatible addition, so old readers must reject a v2
+#: dataset rather than fail mid-replay. v1 datasets remain readable (see below).
+DATASET_SCHEMA = 2
 #: Oldest dataset schema this build still reads (raise only on breaking changes).
 MIN_COMPATIBLE_DATASET = 1
 #: Full set of dataset schemas a reader accepts.

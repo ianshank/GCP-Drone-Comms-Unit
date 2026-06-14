@@ -31,7 +31,6 @@ _TX_POWER_MW: tuple[int, ...] = (0, 10, 25, 100, 500, 1000, 2000, 250, 50)
 _IGNORED_TYPES: frozenset[int] = frozenset(
     {
         CrsfFrameType.RC_CHANNELS_PACKED,
-        CrsfFrameType.GPS,
         CrsfFrameType.DEVICE_PING,
         CrsfFrameType.DEVICE_INFO,
         CrsfFrameType.RADIO_ID,
@@ -82,12 +81,30 @@ class FlightMode:
     is_failsafe: bool
 
 
+@dataclass(frozen=True)
+class GpsSensor:
+    """0x02 GPS — position/velocity from the aircraft; scales are configurable.
+
+    Lat/lon arrive as degrees*1e7, ground speed as km/h*10, heading as deg*100,
+    and altitude as metres with a fixed +1000 m offset (the CRSF GPS wire form).
+    This is what turns an FPV aircraft into an ATAK *air* track via the
+    ``telemetry`` codec — see :mod:`meshsa.transports.crsf_source`.
+    """
+
+    lat_deg: float
+    lon_deg: float
+    ground_speed_kmh: float
+    heading_deg: float
+    altitude_m: int
+    satellites: int
+
+
 #: The closed set of telemetry messages the parser can emit.
-TelemetryMessage = LinkStatistics | BatterySensor | Attitude | FlightMode
+TelemetryMessage = LinkStatistics | BatterySensor | Attitude | FlightMode | GpsSensor
 
 #: Reconstruction registry: message class by name (for dataset replay).
 _BY_NAME: dict[str, type] = {
-    cls.__name__: cls for cls in (LinkStatistics, BatterySensor, Attitude, FlightMode)
+    cls.__name__: cls for cls in (LinkStatistics, BatterySensor, Attitude, FlightMode, GpsSensor)
 }
 
 
@@ -126,6 +143,8 @@ class TelemetryParser:
             return self._attitude(frame.payload)
         if ftype == CrsfFrameType.FLIGHT_MODE:
             return self._flight_mode(frame.payload)
+        if ftype == CrsfFrameType.GPS:
+            return self._gps(frame.payload)
         if ftype in _IGNORED_TYPES:
             _log.debug("ignoring known non-telemetry frame", type=frame.type_name)
             return None
@@ -189,3 +208,15 @@ class TelemetryParser:
             raise TelemetryParseError("FLIGHT_MODE: empty payload")
         text = payload.split(b"\x00", 1)[0].decode("ascii", errors="replace")
         return FlightMode(mode=text, is_failsafe=self._s.failsafe_marker in text)
+
+    def _gps(self, payload: bytes) -> GpsSensor:
+        self._require(payload, 15, "GPS")
+        lat, lon, speed, heading, altitude, sats = struct.unpack(">iiHHHB", payload)
+        return GpsSensor(
+            lat_deg=lat / self._s.gps_coord_scale,
+            lon_deg=lon / self._s.gps_coord_scale,
+            ground_speed_kmh=speed / self._s.gps_groundspeed_scale,
+            heading_deg=heading / self._s.gps_heading_scale,
+            altitude_m=altitude - self._s.gps_altitude_offset_m,
+            satellites=sats,
+        )

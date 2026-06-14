@@ -8,7 +8,7 @@ import pytest
 from _fpv_helpers import ManualClock
 
 from meshsa.fpv.config import HealthSettings, LoggerSettings
-from meshsa.fpv.crsf.telemetry import LinkStatistics, message_from_record
+from meshsa.fpv.crsf.telemetry import GpsSensor, LinkStatistics, message_from_record
 from meshsa.fpv.errors import TelemetryParseError
 from meshsa.fpv.flight_logger import FlightLogger
 from meshsa.fpv.link_health import HealthState
@@ -29,6 +29,22 @@ def test_message_from_record_roundtrip_and_unknown():
     assert msg.uplink_lq == 90
     with pytest.raises(TelemetryParseError, match="unknown telemetry record type"):
         message_from_record("Nonexistent", {})
+
+
+def test_message_from_record_roundtrip_gps():
+    # GpsSensor is a v2 dataset record type; it must round-trip through replay.
+    from dataclasses import asdict
+
+    original = GpsSensor(
+        lat_deg=37.7749,
+        lon_deg=-122.4194,
+        ground_speed_kmh=12.3,
+        heading_deg=180.0,
+        altitude_m=120,
+        satellites=9,
+    )
+    rebuilt = message_from_record("GpsSensor", asdict(original))
+    assert rebuilt == original
 
 
 def test_replay_records_reproduces_health_sequence():

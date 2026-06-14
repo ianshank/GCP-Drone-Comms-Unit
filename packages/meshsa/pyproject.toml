@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshsa"
-version = "0.2.0"
+version = "0.3.0"
 description = "Modular framework for a distributable mesh situational-awareness network"
 readme = "README.md"
 requires-python = ">=3.10"
