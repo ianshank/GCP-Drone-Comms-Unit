@@ -252,6 +252,27 @@ def test_decode_partial_attitude_and_status():
     assert "course_deg" not in out.payload["position"]
 
 
+@pytest.mark.parametrize(
+    "detail",
+    [
+        b'<track course="invalid" speed="3.0"/>',
+        b'<status battery="full"/>',
+        b'<_meshsa battery_v="low"/>',
+        b'<attitude roll="tilt"/>',
+    ],
+)
+def test_decode_nonnumeric_richer_detail_raises_meshsaerror(detail):
+    # A peer sending a non-numeric richer-detail attribute must surface as a
+    # MeshSAError, never a raw ValueError/TypeError escaping the decoder.
+    xml = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b"<detail>" + detail + b"</detail></event>"
+    )
+    with pytest.raises(MeshSAError, match="invalid richer detail in CoT"):
+        CotCodec().decode(xml)
+
+
 def test_cot_sentinel_matches_position_default():
     # The CoT "unknown error" sentinel and the Position ce/le default must stay
     # in lockstep via the shared UNKNOWN_ERROR_M constant.

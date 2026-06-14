@@ -12,10 +12,14 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
+
 from .errors import MeshSAError
 from .models import UNKNOWN_ERROR_M, Envelope, MessageKind
 from .registry import codec_registry
 from .version import SCHEMA_VERSION
+
+_log = structlog.get_logger("meshsa.cot")
 
 
 def _iso(ts: float) -> str:
@@ -224,37 +228,51 @@ class CotCodec:
         telemetry: dict[str, Any],
     ) -> None:
         """Parse the additive (M3.1) detail children back, lossless, ignoring
-        any unknown children. Mutates ``pos`` and ``telemetry`` in place."""
-        track = detail.find(self.track_element)
-        if track is not None:
-            if "course" in track.attrib:
-                pos["course_deg"] = float(track.attrib["course"])
-            if "speed" in track.attrib:
-                pos["speed_ms"] = float(track.attrib["speed"])
+        any unknown children. Mutates ``pos`` and ``telemetry`` in place.
 
-        status = detail.find(self.status_element)
-        if status is not None and self.battery_attr in status.attrib:
-            telemetry["battery_pct"] = int(status.attrib[self.battery_attr])
+        Numeric attributes come from untrusted peers, so every ``float``/``int``
+        parse is guarded: a malformed value (e.g. ``course="invalid"``) is
+        surfaced as a :class:`MeshSAError` rather than escaping as a raw
+        ``ValueError``/``TypeError``.
+        """
+        try:
+            track = detail.find(self.track_element)
+            if track is not None:
+                if "course" in track.attrib:
+                    pos["course_deg"] = float(track.attrib["course"])
+                if "speed" in track.attrib:
+                    pos["speed_ms"] = float(track.attrib["speed"])
 
-        vendor = detail.find(self.vendor_element)
-        if vendor is not None:
-            for key in ("battery_v", "current_a"):
-                if key in vendor.attrib:
-                    telemetry[key] = float(vendor.attrib[key])
+            status = detail.find(self.status_element)
+            if status is not None and self.battery_attr in status.attrib:
+                telemetry["battery_pct"] = int(status.attrib[self.battery_attr])
 
-        attitude = detail.find(self.attitude_element)
-        if attitude is not None:
-            att: dict[str, float] = {
-                model_key: float(attitude.attrib[xml_attr])
-                for xml_attr, model_key in (
-                    ("roll", "roll_deg"),
-                    ("pitch", "pitch_deg"),
-                    ("yaw", "yaw_deg"),
-                )
-                if xml_attr in attitude.attrib
-            }
-            if att:
-                telemetry["attitude"] = att
+            vendor = detail.find(self.vendor_element)
+            if vendor is not None:
+                for key in ("battery_v", "current_a"):
+                    if key in vendor.attrib:
+                        telemetry[key] = float(vendor.attrib[key])
+
+            attitude = detail.find(self.attitude_element)
+            if attitude is not None:
+                att: dict[str, float] = {
+                    model_key: float(attitude.attrib[xml_attr])
+                    for xml_attr, model_key in (
+                        ("roll", "roll_deg"),
+                        ("pitch", "pitch_deg"),
+                        ("yaw", "yaw_deg"),
+                    )
+                    if xml_attr in attitude.attrib
+                }
+                if att:
+                    telemetry["attitude"] = att
+        except (TypeError, ValueError) as exc:
+            _log.debug(
+                "malformed richer detail in CoT",
+                detail=ET.tostring(detail, encoding="unicode"),
+                error=str(exc),
+            )
+            raise MeshSAError(f"invalid richer detail in CoT: {exc}") from exc
 
 
 @codec_registry.register("cot")

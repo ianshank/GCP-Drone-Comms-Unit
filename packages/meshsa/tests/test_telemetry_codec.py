@@ -102,6 +102,22 @@ def test_decode_non_numeric_position_raises():
         TelemetryCodec().decode(_frame(lat=None))  # TypeError from float(None)
 
 
+def test_decode_out_of_range_battery_pct_raises_meshsaerror():
+    # An out-of-range battery_pct fails Telemetry's field validator, raising a
+    # pydantic ValidationError; the codec must wrap it as MeshSAError, not leak it.
+    frame = _frame(telemetry={"battery_pct": 150})
+    with pytest.raises(MeshSAError, match="invalid telemetry frame"):
+        TelemetryCodec().decode(frame)
+
+
+def test_decode_out_of_range_course_raises_meshsaerror():
+    # course_deg out of range fails Position's validator (ValidationError); the
+    # codec must surface it as MeshSAError rather than a raw ValidationError.
+    frame = _frame(course_deg=400.0)
+    with pytest.raises(MeshSAError, match="invalid telemetry frame"):
+        TelemetryCodec().decode(frame)
+
+
 def test_decode_carries_course_and_speed():
     env = TelemetryCodec().decode(_frame(course_deg=270.0, speed_ms=8.5))
     assert env.payload["position"]["course_deg"] == pytest.approx(270.0)

@@ -88,6 +88,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read-modify-write updates to `dropped_records`, `_tel_counts`, `_tel_t_first`/`_tel_t_last`, and
   `_notes` shared across the capture thread, the writer thread, and caller threads, so concurrent
   increments can no longer be lost. The lock is never held across blocking I/O.
+- **CoT decoder hardens richer-detail parsing against malformed peers.**
+  `CotCodec._decode_richer_detail` now wraps every `float`/`int` parse of
+  `<track>`/`<status>`/`<_meshsa>`/`<attitude>` attributes in
+  `try/except (TypeError, ValueError)` and raises `MeshSAError` (logging the
+  malformed input at debug). A peer sending e.g. `course="invalid"` no longer
+  escapes as a raw `ValueError`.
+- **`Telemetry` model now validates battery bounds.** `battery_v` must be `>= 0`
+  and `battery_pct` must be in `[0, 100]` when present, mirroring the `Position`
+  validators; out-of-range values raise `ValidationError`.
+- **Telemetry codec catches pydantic `ValidationError` on decode.**
+  `TelemetryCodec.decode` now imports and catches `pydantic.ValidationError`
+  alongside `TypeError`/`ValueError`, so a frame with an out-of-range
+  `battery_pct`/`course_deg` surfaces as the codec's `MeshSAError` instead of
+  leaking a raw `ValidationError`.
 - **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
   `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
   matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are
