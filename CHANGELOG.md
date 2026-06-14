@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`mavlink_source`: GPS wire scales are now configurable** (`coord_scale`/`alt_scale`
+  constructor options), matching the existing `msp_source` pattern, instead of inline
+  `1e7`/`1000.0` literals. Defaults preserve `GLOBAL_POSITION_INT` units (degE7, mm), so
+  behavior is unchanged; no wire `SCHEMA_VERSION` change.
+- **Link-health WARN→CRITICAL staleness multiplier is now configurable** via
+  `HealthSettings.health_linkstats_critical_factor` (default `2.0`), replacing the
+  hard-coded `2×` in `LinkHealthMonitor`. Default behavior unchanged.
+
+### Removed
+- **`HealthSettings.health_fc_telemetry_stale_s`** — an orphan threshold that no §4.2
+  link-health rule consumed (no reason code, never read). Removing it keeps config and the
+  Phase-1 spec consistent; pydantic ignores the key in older configs (backward-compatible).
+  FC-telemetry-staleness monitoring, if desired, needs a defined §4.2 rule + reason code first.
+
 ## [0.3.0] - 2026-06-13
 
 ### Added

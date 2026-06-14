@@ -49,7 +49,10 @@ class HealthSettings(BaseModel):
     health_downlink_lq_warn: int = 60
     health_rssi_margin_db: int = 10
     health_linkstats_stale_s: float = 1.0
-    health_fc_telemetry_stale_s: float = 5.0
+    #: LinkStats age beyond ``health_linkstats_critical_factor * health_linkstats_stale_s``
+    #: escalates WARN -> CRITICAL (§4.2 rule 1). Tunable so the critical point can be
+    #: set independently of the warn point instead of a hard-coded 2x.
+    health_linkstats_critical_factor: float = 2.0
     health_hysteresis_s: float = 2.0
     #: Installed ELRS major version; selects the version-keyed sensitivity floor
     #: (the rf_mode index is remapped across majors — a version-blind lookup picks

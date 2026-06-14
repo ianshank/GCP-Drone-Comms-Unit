@@ -142,7 +142,7 @@ class LinkHealthMonitor:
         reasons: list[str] = []
 
         stale = self._s.health_linkstats_stale_s
-        if age > 2 * stale:
+        if age > self._s.health_linkstats_critical_factor * stale:
             return HealthState.CRITICAL, ("linkstats_stale",)
         if age > stale:
             return HealthState.WARN, ("linkstats_stale",)

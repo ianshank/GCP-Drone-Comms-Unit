@@ -121,7 +121,7 @@ freshness degrades exactly when the link does. Rules:
 
 `health_lq_warn`/`health_lq_critical` = 70/50 %; `health_downlink_lq_warn` = 60 %;
 `health_rssi_margin_db` = 10 dB above sensitivity floor; `health_linkstats_stale_s`
-= 1.0 s; `health_fc_telemetry_stale_s` = 5.0 s; `health_hysteresis_s` = 2.0 s
+= 1.0 s (CRITICAL beyond `health_linkstats_critical_factor` = 2.0×); `health_hysteresis_s` = 2.0 s
 (anti-flap on upgrade transitions). Sensitivity floors are a map keyed by
 `(elrs_major_version, rf_mode)` in Settings.
 

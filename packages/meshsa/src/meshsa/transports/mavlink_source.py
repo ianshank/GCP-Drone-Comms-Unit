@@ -16,8 +16,11 @@ supplies only the MAVLink specifics:
   * The pymavlink connection is **injected** (``connection`` / ``connection_factory``)
     so the logic is tested with a fake; only the real link builder is
     ``# pragma: no cover``.
-  * Nothing is hard-coded: endpoint, message type, identity, recv timeout and the
-    clock are all parameters/config options.
+  * Nothing is hard-coded: endpoint, message type, identity, recv timeout, the
+    coordinate/altitude wire scales and the clock are all parameters/config
+    options. The GPS scales are configurable (mirroring ``msp_source``) so a
+    non-standard MAVLink dialect never needs a code change; the defaults match the
+    common ``GLOBAL_POSITION_INT`` units (lat/lon degE7, altitude millimetres).
 """
 
 from __future__ import annotations
@@ -54,6 +57,8 @@ class MavlinkSourceTransport(PollingSourceTransport):
         message_type: str = "GLOBAL_POSITION_INT",
         source_uid: str = "mav-1",
         callsign: str | None = None,
+        coord_scale: float = 1e7,
+        alt_scale: float = 1e-3,
         recv_timeout_s: float = 1.0,
         clock: Clock | None = None,
         queue_maxsize: int = 1000,
@@ -71,6 +76,8 @@ class MavlinkSourceTransport(PollingSourceTransport):
             poll_wait_s=0.0,
         )
         self._message_type = message_type
+        self._coord_scale = coord_scale
+        self._alt_scale = alt_scale
         self._recv_timeout = recv_timeout_s
 
     def _poll(self, resource: Any) -> list[bytes]:
@@ -81,9 +88,9 @@ class MavlinkSourceTransport(PollingSourceTransport):
             return []  # idle/timeout — re-check the stop event and poll again
         return [
             self._position_frame(
-                msg.lat / 1e7,  # degE7 -> degrees
-                msg.lon / 1e7,
-                msg.alt / 1000.0,  # mm -> metres
+                msg.lat / self._coord_scale,  # default degE7 -> degrees
+                msg.lon / self._coord_scale,
+                msg.alt * self._alt_scale,  # default mm -> metres (1e-3)
             )
         ]
 

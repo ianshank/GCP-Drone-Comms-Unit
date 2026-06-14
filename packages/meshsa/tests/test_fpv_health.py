@@ -121,6 +121,21 @@ def test_stale_linkstats_can_never_be_ok():
     assert r.arm_permitted is False
 
 
+def test_critical_factor_is_configurable():
+    # The WARN->CRITICAL staleness multiplier is a config field, not a hard-coded 2x.
+    s = HealthSettings(health_linkstats_critical_factor=3.0)
+    mon, store, clock = _make(s)
+    _drive_to_ok(mon, store, clock)
+    # Age between 1x and 3x stale -> WARN (would be CRITICAL under the default 2x).
+    clock.advance(s.health_linkstats_stale_s * 2.5)
+    assert mon.evaluate().state is HealthState.WARN
+    # Beyond 3x stale -> CRITICAL.
+    clock.advance(s.health_linkstats_stale_s)  # total 3.5x
+    r = mon.evaluate()
+    assert r.state is HealthState.CRITICAL
+    assert r.reasons == ("linkstats_stale",)
+
+
 def test_downlink_degrading_early_warning_while_uplink_clean():
     mon, store, clock = _make()
     _drive_to_ok(mon, store, clock)
