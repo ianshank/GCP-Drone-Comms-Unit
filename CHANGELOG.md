@@ -84,6 +84,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FC-telemetry-staleness monitoring, if desired, needs a defined §4.2 rule + reason code first.
 
 ### Added
+- **FPV camera capture core (`meshsa.fpv.camera`, Phase 2).** `CaptureWriter` owns one
+  daemon `fpv-capture` thread that reads `Frame`s from an injected `CameraSource` protocol,
+  stamps each on the **same** `Clock` the flight logger uses (so frame timestamps interleave
+  with telemetry on one timebase), records the frame index via the already-shipped
+  `FlightLogger.record_frame`, and hands the buffer to an injected `encode` callable over a
+  bounded queue that drops-and-counts on overflow (`dropped_frames`). The real OpenCV backend
+  is imported lazily behind a `# pragma: no cover` factory, so `import meshsa.fpv` stays
+  backend-free. No numpy in our code — frame pixels live in `Frame.data: Any`.
+  - New `camera` optional extra (`opencv-python-headless`); Jetson deployments may swap the
+    backend for v4l2/GStreamer behind the `CameraSource` Protocol with no code change.
+  - `CameraSettings` (fps/width/height/encoder/device/output_basename/capture_queue_len)
+    composed onto `FpvSettings`; all knobs are config, no magic numbers.
+  - The `frames.jsonl` stream (already wired in Phase 1) now carries real records, and the
+    manifest `video` entry is populated (was always `None`) when a `video_meta` dict is
+    passed to `FlightLogger`. **`DATASET_SCHEMA` is unchanged (stays 2)** — the camera writes
+    the existing `{t, frame_idx}` record and the only manifest change is `video` going from
+    `None` to a dict, both additive.
 - **Read-only LLM situational-awareness assistant (`meshsa.llm`, opt-in `[llm]` extra).**
   - A natural-language assistant over live drone telemetry and TAK tracks. Strictly
     advisory: every tool is read-only, so it can observe and summarize but never command

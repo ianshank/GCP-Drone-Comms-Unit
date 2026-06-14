@@ -144,6 +144,28 @@ class ProberSettings(BaseModel):
     probe_addresses: list[int] = Field(default_factory=lambda: [0xC8, 0xEC, 0xEE, 0xEA])
 
 
+class CameraSettings(BaseModel):
+    """FPV camera capture-core settings (Phase 2, §5.5). No magic numbers in code."""
+
+    #: Target capture frame rate (frames/second).
+    fps: int = 30
+    #: Capture frame width in pixels.
+    width: int = 1280
+    #: Capture frame height in pixels.
+    height: int = 720
+    #: Video encoder/codec the muxer targets.
+    encoder: str = "h264"
+    #: Capture device index (OpenCV ``VideoCapture`` ordinal).
+    device: int = 0
+    #: Output video filename written alongside the session JSONL streams.
+    output_basename: str = "video.mp4"
+    #: Bounded encode-queue depth; frames overflowing it are dropped-and-counted.
+    capture_queue_len: int = 256
+    #: Upper bound on capture/encode shutdown: each thread join in ``close()``
+    #: waits at most this long so a wedged encoder can never hang the caller.
+    capture_shutdown_timeout_s: float = 2.0
+
+
 class FpvSettings(BaseModel):
     """Root FPV settings; compose-and-default, no magic numbers in code."""
 
@@ -153,6 +175,7 @@ class FpvSettings(BaseModel):
     arm_guard: ArmGuardSettings = Field(default_factory=ArmGuardSettings)
     crsf: CrsfLinkSettings = Field(default_factory=CrsfLinkSettings)
     prober: ProberSettings = Field(default_factory=ProberSettings)
+    camera: CameraSettings = Field(default_factory=CameraSettings)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> FpvSettings:
