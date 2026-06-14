@@ -62,7 +62,12 @@ class TelemetryCodec:
                 frame[key] = pos[key]
         telemetry = envelope.payload.get("telemetry")
         if telemetry is not None:
-            block = Telemetry.model_validate(telemetry).model_dump(exclude_none=True)
+            # Validate here too (not just on decode) so the codec never leaks a raw
+            # pydantic ValidationError from its API — callers handle MeshSAError uniformly.
+            try:
+                block = Telemetry.model_validate(telemetry).model_dump(exclude_none=True)
+            except ValidationError as exc:
+                raise MeshSAError(f"invalid telemetry block: {exc}") from exc
             if block:
                 frame["telemetry"] = block
         return json.dumps(frame).encode("utf-8")

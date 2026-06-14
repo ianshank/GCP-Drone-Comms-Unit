@@ -88,6 +88,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read-modify-write updates to `dropped_records`, `_tel_counts`, `_tel_t_first`/`_tel_t_last`, and
   `_notes` shared across the capture thread, the writer thread, and caller threads, so concurrent
   increments can no longer be lost. The lock is never held across blocking I/O.
+- **CoT decode enforces the model bounds on peer values.** `CotCodec.decode` now
+  validates the assembled position/telemetry through the `Position`/`Telemetry` models
+  (reusing their validators), so numeric-but-out-of-contract CoT attributes (course
+  `[0,360)`, speed `>=0`, `battery_pct [0,100]`, `battery_v >=0`) are rejected as
+  `MeshSAError` rather than producing an out-of-contract envelope.
+- **Telemetry codec `encode` wraps validation errors.** `encode()` validates the
+  optional telemetry block too; a pydantic `ValidationError` is now surfaced as
+  `MeshSAError` (matching `decode`), so the codec never leaks a raw pydantic exception.
 - **CoT decoder hardens richer-detail parsing against malformed peers.**
   `CotCodec._decode_richer_detail` now wraps every `float`/`int` parse of
   `<track>`/`<status>`/`<_meshsa>`/`<attitude>` attributes in

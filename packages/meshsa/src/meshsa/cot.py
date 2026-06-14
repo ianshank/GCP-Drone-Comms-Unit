@@ -13,9 +13,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 import structlog
+from pydantic import ValidationError
 
 from .errors import MeshSAError
-from .models import UNKNOWN_ERROR_M, Envelope, MessageKind
+from .models import UNKNOWN_ERROR_M, Envelope, MessageKind, Position, Telemetry
 from .registry import codec_registry
 from .version import SCHEMA_VERSION
 
@@ -205,6 +206,19 @@ class CotCodec:
         payload_telemetry: dict[str, Any] = {}
         if detail is not None:
             self._decode_richer_detail(detail, pos, payload_telemetry)
+        # Validate the assembled position/telemetry against the model contracts so an
+        # untrusted peer cannot inject out-of-range values (course/speed/battery) that
+        # bypass the pydantic validators — CoT decode builds dicts directly. Reuses the
+        # model validators (DRY) and surfaces violations as MeshSAError, consistent with
+        # the telemetry codec's decode.
+        try:
+            pos = Position.model_validate(pos).model_dump(exclude_none=True)
+            if payload_telemetry:
+                payload_telemetry = Telemetry.model_validate(payload_telemetry).model_dump(
+                    exclude_none=True
+                )
+        except ValidationError as exc:
+            raise MeshSAError(f"invalid CoT track values: {exc}") from exc
         kind = MessageKind.PLI if etype.startswith("a-") else MessageKind.MARKER
         payload: dict[str, Any] = {
             "node": {"uid": uid, "callsign": callsign},
