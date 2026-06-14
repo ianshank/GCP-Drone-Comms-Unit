@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from .camera import Frame
     from .link_health import HealthReport
 
 
@@ -79,4 +80,25 @@ class CrsfSerial(Protocol):
 
     def close(self) -> None:
         """Release the underlying port."""
+        ...
+
+
+@runtime_checkable
+class CameraSource(Protocol):
+    """A frame source for the FPV capture writer (Phase 2 camera core).
+
+    ``read_frame`` MUST be timeout-bounded and never block indefinitely: return
+    the next :class:`meshsa.fpv.camera.Frame` if one is available, or ``None`` on
+    a (bounded) timeout so the capture loop can stay responsive to shutdown. The
+    default OpenCV backend is constructed by an injectable factory so unit tests
+    use a scripted fake and require no camera hardware; a Jetson deployment can
+    swap in a v4l2/GStreamer source behind this same Protocol without code change.
+    """
+
+    def read_frame(self) -> Frame | None:
+        """Return the next frame, or ``None`` on a bounded timeout (never blocks)."""
+        ...
+
+    def close(self) -> None:
+        """Release the underlying capture device."""
         ...

@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Prometheus/JSON metrics export.** `RouterMetrics.as_dict()` plus a hand-rolled
+  `meshsa.render_prometheus(metrics, transports)` (no new dependency) emit
+  `meshsa_rx_total`/`meshsa_tx_total`/`meshsa_forwarded_total`/
+  `meshsa_dropped_undecodable_total`/`meshsa_schema_mismatch_total` and per-transport
+  `meshsa_transport_{dropped_inbox_full,reconnects,rx_frames}{transport="..."}` series.
+  An opt-in `/metrics` route on the health listener serves either format, gated by new
+  `HealthConfig` fields (`metrics_enabled`/`metrics_path`/`metrics_format`).
+- **Per-transport rx observability on polling sources.** `PollingSourceTransport` now
+  tracks an `rx_frames` counter and emits a throttled `"source rx"` link-health log line
+  (`link="up"`/`"down"`) every `log_every_n` frames or once per `log_interval_s` idle
+  window (both configurable constructor params; defaults `100`/`30.0`). `rx_frames` is
+  surfaced in the health snapshot.
+- **`flightctl/constraints/fts-constraints.txt`.** The FreeTAKServer dependency pins
+  (setuptools/opentelemetry/etc.) verified to boot FTS on the Jetson now live in one
+  auditable constraints file; `scripts/setup_fts.sh` installs via `uv pip --constraint`.
+
 ### Fixed
+- **Prometheus transport label values are now escaped.** `render_prometheus` escaped
+  nothing, so a user-configured transport name (`TransportConfig.name`) containing a
+  `"`, `\` or newline produced malformed text-exposition output. Names are now escaped
+  per spec (`\` → `\\`, `"` → `\"`, newline → `\n`) before embedding in the
+  `{transport="..."}` label, keeping each series on one valid line.
+- **`PollingSourceTransport` rejects an invalid log-throttle config.** `log_every_n <= 0`
+  made the reader thread raise `ZeroDivisionError` on `rx_frames % log_every_n`, and a
+  non-positive `log_interval_s` made the idle window meaningless. The constructor now
+  validates `log_every_n >= 1` and `log_interval_s > 0`, raising `ValueError` early.
+- **`PollingSourceTransport` reader no longer drops iteration errors or mislabels
+  shutdown.** The frame iteration after `_poll()` ran outside the `try`, so an error while
+  iterating escaped and silently killed the reader thread; it is now inside the guarded
+  block. A poll error after the stop event is set now logs at `DEBUG` (a normal stop)
+  instead of `WARNING` (which looked like a failure).
+- **`serve_healthz` honors `health.metrics_*` config.** The metrics args defaulted to
+  hard-coded literals, so `health.metrics_enabled=true` in config did nothing unless the
+  caller also passed the flag. The args now default from `node.config.health.*` when left
+  unset, so config alone exposes `/metrics`.
 - **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
   `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
   matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are
@@ -49,6 +84,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FC-telemetry-staleness monitoring, if desired, needs a defined §4.2 rule + reason code first.
 
 ### Added
+- **FPV camera capture core (`meshsa.fpv.camera`, Phase 2).** `CaptureWriter` owns one
+  daemon `fpv-capture` thread that reads `Frame`s from an injected `CameraSource` protocol,
+  stamps each on the **same** `Clock` the flight logger uses (so frame timestamps interleave
+  with telemetry on one timebase), records the frame index via the already-shipped
+  `FlightLogger.record_frame`, and hands the buffer to an injected `encode` callable over a
+  bounded queue that drops-and-counts on overflow (`dropped_frames`). The real OpenCV backend
+  is imported lazily behind a `# pragma: no cover` factory, so `import meshsa.fpv` stays
+  backend-free. No numpy in our code — frame pixels live in `Frame.data: Any`.
+  - New `camera` optional extra (`opencv-python-headless`); Jetson deployments may swap the
+    backend for v4l2/GStreamer behind the `CameraSource` Protocol with no code change.
+  - `CameraSettings` (fps/width/height/encoder/device/output_basename/capture_queue_len)
+    composed onto `FpvSettings`; all knobs are config, no magic numbers.
+  - The `frames.jsonl` stream (already wired in Phase 1) now carries real records, and the
+    manifest `video` entry is populated (was always `None`) when a `video_meta` dict is
+    passed to `FlightLogger`. **`DATASET_SCHEMA` is unchanged (stays 2)** — the camera writes
+    the existing `{t, frame_idx}` record and the only manifest change is `video` going from
+    `None` to a dict, both additive.
 - **Read-only LLM situational-awareness assistant (`meshsa.llm`, opt-in `[llm]` extra).**
   - A natural-language assistant over live drone telemetry and TAK tracks. Strictly
     advisory: every tool is read-only, so it can observe and summarize but never command
