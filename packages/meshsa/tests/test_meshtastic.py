@@ -174,6 +174,14 @@ def test_registry_factory_builds_with_injection():
     assert isinstance(t, MeshtasticTransport) and t.name == "lora"
 
 
+def test_construct_without_pubsub_defers_resolution():
+    # Constructing the transport must not import/resolve pypubsub (so the base
+    # [dev] env without pypubsub can build a node); subscribe/unsubscribe stay
+    # unresolved until start(). Guards against the eager-import regression.
+    t = MeshtasticTransport(name="lora", interface_factory=lambda: FakeIface())
+    assert t._subscribe is None and t._unsubscribe is None
+
+
 # ---- reconnect / backoff ----
 async def test_reconnects_after_connection_lost():
     i1, i2 = FakeIface(), FakeIface()

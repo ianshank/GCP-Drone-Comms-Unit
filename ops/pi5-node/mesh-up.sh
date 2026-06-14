@@ -4,6 +4,7 @@
 # VERIFY the HaLow mesh mode: if the Morse driver lacks 802.11s mesh-point,
 # fall back to IBSS (see the commented block).
 set -euo pipefail
+# shellcheck source=/dev/null  # runtime-provided defaults file, absent at lint time
 [ -f /etc/default/mesh-node ] && . /etc/default/mesh-node
 
 : "${HALOW_IF:=wlan1}"; : "${MESH_ID:=openmanet}"; : "${HALOW_FREQ:=9050}"
