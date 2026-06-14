@@ -77,6 +77,8 @@ class MspSourceTransport(PollingSourceTransport):
         poll_interval_s: float = 1.0,
         clock: Clock | None = None,
         queue_maxsize: int = 1000,
+        log_every_n: int = 100,
+        log_interval_s: float = 30.0,
         **_options: Any,
     ) -> None:
         super().__init__(
@@ -88,6 +90,8 @@ class MspSourceTransport(PollingSourceTransport):
             clock=clock,
             queue_maxsize=queue_maxsize,
             poll_wait_s=poll_interval_s,
+            log_every_n=log_every_n,
+            log_interval_s=log_interval_s,
         )
         self._poll_fn = poll or _default_poll
         self._coord_scale = coord_scale

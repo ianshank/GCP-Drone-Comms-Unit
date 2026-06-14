@@ -14,6 +14,11 @@
 # =============================================================================
 set -euo pipefail
 
+# Resolve the dependency-constraints file relative to this script so the verified
+# pins (see flightctl/constraints/fts-constraints.txt) live in one auditable place.
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+CONSTRAINTS="$SCRIPT_DIR/../constraints/fts-constraints.txt"
+
 VENV=/mnt/ssd/venvs/fts
 export UV_CACHE_DIR=${UV_CACHE_DIR:-/mnt/ssd/caches/uv}
 export TMPDIR=${TMPDIR:-/mnt/ssd/tmp}
@@ -25,11 +30,9 @@ echo "=== creating $VENV (Python 3.11) ==="
 uv venv --python 3.11 "$VENV"
 
 echo "=== installing FreeTAKServer + verified pins ==="
-uv pip install --python "$VENV/bin/python" \
+uv pip install --python "$VENV/bin/python" --constraint "$CONSTRAINTS" \
   FreeTAKServer \
-  'setuptools<81' \
-  requests \
-  'opentelemetry-api==1.20.0' 'opentelemetry-sdk==1.20.0' 'opentelemetry-semantic-conventions==0.41b0'
+  requests
 
 # Optional web UI (uncomment; pulls its own deps):
 # uv pip install --python "$VENV/bin/python" FreeTAKServer-UI

@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Prometheus/JSON metrics export.** `RouterMetrics.as_dict()` plus a hand-rolled
+  `meshsa.render_prometheus(metrics, transports)` (no new dependency) emit
+  `meshsa_rx_total`/`meshsa_tx_total`/`meshsa_forwarded_total`/
+  `meshsa_dropped_undecodable_total`/`meshsa_schema_mismatch_total` and per-transport
+  `meshsa_transport_{dropped_inbox_full,reconnects,rx_frames}{transport="..."}` series.
+  An opt-in `/metrics` route on the health listener serves either format, gated by new
+  `HealthConfig` fields (`metrics_enabled`/`metrics_path`/`metrics_format`).
+- **Per-transport rx observability on polling sources.** `PollingSourceTransport` now
+  tracks an `rx_frames` counter and emits a throttled `"source rx"` link-health log line
+  (`link="up"`/`"down"`) every `log_every_n` frames or once per `log_interval_s` idle
+  window (both configurable constructor params; defaults `100`/`30.0`). `rx_frames` is
+  surfaced in the health snapshot.
+- **`flightctl/constraints/fts-constraints.txt`.** The FreeTAKServer dependency pins
+  (setuptools/opentelemetry/etc.) verified to boot FTS on the Jetson now live in one
+  auditable constraints file; `scripts/setup_fts.sh` installs via `uv pip --constraint`.
+
 ### Fixed
+- **Prometheus transport label values are now escaped.** `render_prometheus` escaped
+  nothing, so a user-configured transport name (`TransportConfig.name`) containing a
+  `"`, `\` or newline produced malformed text-exposition output. Names are now escaped
+  per spec (`\` → `\\`, `"` → `\"`, newline → `\n`) before embedding in the
+  `{transport="..."}` label, keeping each series on one valid line.
+- **`PollingSourceTransport` rejects an invalid log-throttle config.** `log_every_n <= 0`
+  made the reader thread raise `ZeroDivisionError` on `rx_frames % log_every_n`, and a
+  non-positive `log_interval_s` made the idle window meaningless. The constructor now
+  validates `log_every_n >= 1` and `log_interval_s > 0`, raising `ValueError` early.
+- **`PollingSourceTransport` reader no longer drops iteration errors or mislabels
+  shutdown.** The frame iteration after `_poll()` ran outside the `try`, so an error while
+  iterating escaped and silently killed the reader thread; it is now inside the guarded
+  block. A poll error after the stop event is set now logs at `DEBUG` (a normal stop)
+  instead of `WARNING` (which looked like a failure).
+- **`serve_healthz` honors `health.metrics_*` config.** The metrics args defaulted to
+  hard-coded literals, so `health.metrics_enabled=true` in config did nothing unless the
+  caller also passed the flag. The args now default from `node.config.health.*` when left
+  unset, so config alone exposes `/metrics`.
 - **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
   `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
   matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are
