@@ -40,6 +40,12 @@ class CotCodec:
         pli_type: str = "a-f-G-U-C",
         chat_type: str = "b-t-f",
         cot_version: str = "2.0",
+        track_element: str = "track",
+        status_element: str = "status",
+        attitude_element: str = "attitude",
+        battery_attr: str = "battery",
+        vendor_element: str = "_meshsa",
+        emit_detail: bool = True,
         **_: object,
     ) -> None:
         self.stale_s = stale_s
@@ -47,6 +53,14 @@ class CotCodec:
         self.pli_type = pli_type
         self.chat_type = chat_type
         self.cot_version = cot_version
+        # Richer-track element/attr names are config (no magic strings); a peer can
+        # rename them. ``emit_detail`` gates the additive children entirely.
+        self.track_element = track_element
+        self.status_element = status_element
+        self.attitude_element = attitude_element
+        self.battery_attr = battery_attr
+        self.vendor_element = vendor_element
+        self.emit_detail = emit_detail
 
     # -- encode -------------------------------------------------------------
     def encode(self, envelope: Envelope) -> bytes:
@@ -83,7 +97,44 @@ class CotCodec:
         detail = ET.SubElement(ev, "detail")
         ET.SubElement(detail, "contact", callsign=str(node.get("callsign", env.source_uid)))
         ET.SubElement(detail, "__group", name=str(node.get("tier", "")), role="Team Member")
+        if self.emit_detail:
+            self._emit_richer_detail(detail, pos, env.payload.get("telemetry") or {})
         return ET.tostring(ev)
+
+    def _emit_richer_detail(
+        self, detail: ET.Element, pos: dict[str, Any], telemetry: dict[str, Any]
+    ) -> None:
+        """Append the additive (M3.1) track/status/vendor/attitude children.
+
+        Every child is guarded: only emitted when its source data are present, so
+        a plain PLI yields no richer detail and old readers ignore what they do
+        not recognise.
+        """
+        course = pos.get("course_deg")
+        speed = pos.get("speed_ms")
+        if course is not None and speed is not None:
+            ET.SubElement(detail, self.track_element, course=str(course), speed=str(speed))
+
+        battery_pct = telemetry.get("battery_pct")
+        if battery_pct is not None:
+            ET.SubElement(detail, self.status_element, {self.battery_attr: str(battery_pct)})
+
+        vendor_attrs: dict[str, str] = {
+            attr: str(telemetry[key])
+            for attr, key in (("battery_v", "battery_v"), ("current_a", "current_a"))
+            if telemetry.get(key) is not None
+        }
+        if vendor_attrs:
+            ET.SubElement(detail, self.vendor_element, vendor_attrs)
+
+        attitude = telemetry.get("attitude") or {}
+        att_attrs: dict[str, str] = {
+            attr: str(attitude[key])
+            for attr, key in (("roll", "roll_deg"), ("pitch", "pitch_deg"), ("yaw", "yaw_deg"))
+            if attitude.get(key) is not None
+        }
+        if att_attrs:
+            ET.SubElement(detail, self.attitude_element, att_attrs)
 
     def _encode_chat(self, env: Envelope) -> bytes:
         text = env.payload.get("text", "")
@@ -147,15 +198,63 @@ class CotCodec:
         contact = detail.find("contact") if detail is not None else None
         if contact is not None:
             callsign = contact.attrib.get("callsign", uid)
+        payload_telemetry: dict[str, Any] = {}
+        if detail is not None:
+            self._decode_richer_detail(detail, pos, payload_telemetry)
         kind = MessageKind.PLI if etype.startswith("a-") else MessageKind.MARKER
+        payload: dict[str, Any] = {
+            "node": {"uid": uid, "callsign": callsign},
+            "position": pos,
+        }
+        if payload_telemetry:
+            payload["telemetry"] = payload_telemetry
         return Envelope(
             schema_version=SCHEMA_VERSION,
             msg_id=f"{uid}:{ev.attrib.get('time', '')}",
             ts=ts,
             source_uid=uid,
             kind=kind,
-            payload={"node": {"uid": uid, "callsign": callsign}, "position": pos},
+            payload=payload,
         )
+
+    def _decode_richer_detail(
+        self,
+        detail: ET.Element,
+        pos: dict[str, Any],
+        telemetry: dict[str, Any],
+    ) -> None:
+        """Parse the additive (M3.1) detail children back, lossless, ignoring
+        any unknown children. Mutates ``pos`` and ``telemetry`` in place."""
+        track = detail.find(self.track_element)
+        if track is not None:
+            if "course" in track.attrib:
+                pos["course_deg"] = float(track.attrib["course"])
+            if "speed" in track.attrib:
+                pos["speed_ms"] = float(track.attrib["speed"])
+
+        status = detail.find(self.status_element)
+        if status is not None and self.battery_attr in status.attrib:
+            telemetry["battery_pct"] = int(status.attrib[self.battery_attr])
+
+        vendor = detail.find(self.vendor_element)
+        if vendor is not None:
+            for key in ("battery_v", "current_a"):
+                if key in vendor.attrib:
+                    telemetry[key] = float(vendor.attrib[key])
+
+        attitude = detail.find(self.attitude_element)
+        if attitude is not None:
+            att: dict[str, float] = {
+                model_key: float(attitude.attrib[xml_attr])
+                for xml_attr, model_key in (
+                    ("roll", "roll_deg"),
+                    ("pitch", "pitch_deg"),
+                    ("yaw", "yaw_deg"),
+                )
+                if xml_attr in attitude.attrib
+            }
+            if att:
+                telemetry["attitude"] = att
 
 
 @codec_registry.register("cot")

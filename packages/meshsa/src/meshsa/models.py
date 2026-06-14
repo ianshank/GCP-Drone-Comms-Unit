@@ -29,13 +29,20 @@ class MessageKind(str, enum.Enum):
 
 
 class Position(BaseModel):
-    """A geodetic position; ce/le are circular/linear error in metres."""
+    """A geodetic position; ce/le are circular/linear error in metres.
+
+    ``course_deg``/``speed_ms`` are OPTIONAL richer-track fields (default ``None``);
+    when absent they must be dropped from the wire via ``model_dump(exclude_none=True)``
+    so old readers see byte-identical payloads.
+    """
 
     lat: float
     lon: float
     hae: float = 0.0
     ce: float = UNKNOWN_ERROR_M
     le: float = UNKNOWN_ERROR_M
+    course_deg: float | None = None
+    speed_ms: float | None = None
 
     @field_validator("lat")
     @classmethod
@@ -51,6 +58,38 @@ class Position(BaseModel):
             raise ValueError("lon out of range [-180, 180]")
         return v
 
+    @field_validator("course_deg")
+    @classmethod
+    def _course_range(cls, v: float | None) -> float | None:
+        if v is not None and not 0.0 <= v < 360.0:
+            raise ValueError("course_deg out of range [0, 360)")
+        return v
+
+    @field_validator("speed_ms")
+    @classmethod
+    def _speed_nonneg(cls, v: float | None) -> float | None:
+        if v is not None and v < 0.0:
+            raise ValueError("speed_ms must be >= 0")
+        return v
+
+
+class Attitude(BaseModel):
+    """Optional aircraft attitude (degrees); all fields default ``None``."""
+
+    roll_deg: float | None = None
+    pitch_deg: float | None = None
+    yaw_deg: float | None = None
+
+
+class Telemetry(BaseModel):
+    """Optional vehicle telemetry block; all fields default ``None`` so an absent
+    block is dropped from the wire via ``model_dump(exclude_none=True)``."""
+
+    battery_v: float | None = None
+    battery_pct: int | None = None
+    current_a: float | None = None
+    attitude: Attitude | None = None
+
 
 class NodeInfo(BaseModel):
     uid: str
@@ -61,6 +100,7 @@ class NodeInfo(BaseModel):
 class PliPayload(BaseModel):
     node: NodeInfo
     position: Position
+    telemetry: Telemetry | None = None
 
 
 class ChatPayload(BaseModel):
