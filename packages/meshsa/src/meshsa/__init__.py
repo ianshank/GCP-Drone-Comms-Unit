@@ -11,7 +11,7 @@ from .errors import (
     UnknownComponentError,
 )
 from .health import health_snapshot
-from .metrics import RouterMetrics
+from .metrics import RouterMetrics, render_prometheus
 from .models import (
     Attitude,
     ChatPayload,
@@ -75,6 +75,7 @@ __all__ = [
     "TelemetryCodec",
     "Router",
     "RouterMetrics",
+    "render_prometheus",
     "health_snapshot",
     "Node",
     "build_node",

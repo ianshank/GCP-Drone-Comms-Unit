@@ -83,6 +83,7 @@ class FlightLogger:
         hardware_notes: str | None = None,
         now_utc: str | None = None,
         session_id: str | None = None,
+        video_meta: dict[str, Any] | None = None,
     ) -> None:
         self._s = settings
         self._clock: Clock = clock or MonotonicClock()
@@ -93,6 +94,9 @@ class FlightLogger:
         self._hardware_notes = hardware_notes
         self._created_utc = now_utc or datetime.now(timezone.utc).isoformat()
         self._session_id = session_id or uuid.uuid4().hex[:8]
+        #: Capture metadata (resolution/fps/codec/file) emitted as the manifest
+        #: ``video`` entry when capture is wired; ``None`` keeps the Phase-1 stub.
+        self._video_meta = video_meta
 
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=settings.logger_queue_len)
         self._files: dict[str, IO[str]] = {}
@@ -301,7 +305,9 @@ class FlightLogger:
             "telemetry_rates_hz": self._telemetry_rates(),
             "dropped_records": dict(self.dropped_records),
             "notes": dict(self._notes),
-            "video": None,  # Phase 2 camera stub; keeps the contract stable
+            # ``None`` until capture is wired; a CaptureWriter supplies the
+            # resolution/fps/codec/file dict via the ``video_meta`` ctor arg.
+            "video": self._video_meta,
             # JSONL filenames derive from the single stream set (_HEADERS); the
             # video entry is the one non-JSONL special case.
             "files": {

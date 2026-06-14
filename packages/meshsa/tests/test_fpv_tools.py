@@ -78,6 +78,30 @@ def test_pump_once_ingests_parses_stores_and_evaluates():
     assert store.latest(LinkStatistics) is not None
 
 
+def test_pump_once_drops_malformed_known_frame():
+    # A CRC-valid LINK_STATISTICS frame with a wrong-length payload parses to a
+    # TelemetryParseError. pump_once must drop it (no raise) and keep the loop
+    # alive, mirroring crsf_source's per-frame drop-and-continue.
+    from meshsa.fpv.crsf.frame import CrsfFrame, CrsfFrameType
+    from meshsa.fpv.crsf.telemetry import LinkStatistics
+
+    fake = FakeCrsfSerial(echo=False)
+    link = CrsfLink(CrsfLinkSettings(), serial=fake)
+    link.open()
+    clock = ManualClock()
+    parser = TelemetryParser()
+    store = TelemetryStore()
+    monitor = LinkHealthMonitor(HealthSettings(), store, clock)
+
+    # 10-byte payload is valid; 3 bytes trips LINK_STATISTICS length validation.
+    bad = CrsfFrame(addr=0xEA, type=CrsfFrameType.LINK_STATISTICS, payload=bytes(3)).to_bytes()
+    fake.feed(bad)
+    report = pump_once(link, parser, store, monitor, clock)  # must not raise
+    # Nothing was stored: the malformed frame was dropped, not ingested.
+    assert store.latest(LinkStatistics) is None
+    assert report.state is HealthState.NO_DATA
+
+
 def test_pump_once_records_to_logger(tmp_path):
     from meshsa.fpv.config import LoggerSettings
     from meshsa.fpv.flight_logger import FlightLogger

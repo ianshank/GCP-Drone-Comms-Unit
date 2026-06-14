@@ -18,6 +18,8 @@ the deployment/runtime layer. See the approved plan for the full design and sequ
 | `sim/mavlink_fake.py` | pymavlink `udpout` simulator — emits HEARTBEAT + GLOBAL_POSITION_INT for dev/e2e (no autopilot needed). |
 | `systemd/mavp2p.service` + `mavp2p.env.example` | MAVLink proxy (mavp2p) unit. |
 | `systemd/freetakserver.service` + `fts.env.example` | FreeTAKServer unit (Python 3.11 venv). |
+| `scripts/setup_fts.sh` | Builds the FTS Python 3.11 venv and installs FreeTAKServer with the verified dep pins via `--constraint`. |
+| `constraints/fts-constraints.txt` | Dependency pins (setuptools/opentelemetry/etc.) verified to boot FTS 2.x on this box; consumed by `setup_fts.sh --constraint`. |
 | `udev/99-flightctl-serial.rules.example` | Stable `/dev/flightctl-*` serial symlinks for autopilot/FC. |
 
 ## Bring up the whole stack (one command)

@@ -47,6 +47,9 @@ fpv = [
     "pyserial>=3.5",
     "pyarrow>=15",
 ]
+camera = [
+    "opencv-python-headless>=4.8",
+]
 llm = [
     "anthropic>=0.40",
     "aiohttp>=3.9",
@@ -129,6 +132,7 @@ module = [
     "yamspy.*",
     "serial.*",
     "pyarrow.*",
+    "cv2.*",
     "anthropic.*",
 ]
 ignore_missing_imports = true
