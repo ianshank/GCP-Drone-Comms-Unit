@@ -15,7 +15,28 @@ from typing import TYPE_CHECKING, Any, Literal
 from .metrics import render_prometheus
 
 if TYPE_CHECKING:
+    from .config import HealthConfig
     from .node import Node
+
+
+def _resolve_metrics_options(
+    node: Node,
+    metrics_enabled: bool | None,
+    metrics_path: str | None,
+    metrics_format: Literal["prometheus", "json"] | None,
+) -> tuple[bool, str, Literal["prometheus", "json"]]:
+    """Fill any unset ``serve_healthz`` metrics arg from ``node.config.health.*``.
+
+    An explicit (non-``None``) argument always wins; otherwise the value falls
+    back to the node config so setting ``health.metrics_enabled=true`` exposes
+    ``/metrics`` with no CLI change. Pure/branching logic kept out of the
+    pragma-excluded aiohttp wiring so it is testable.
+    """
+    health: HealthConfig = node.config.health
+    enabled = health.metrics_enabled if metrics_enabled is None else metrics_enabled
+    path = health.metrics_path if metrics_path is None else metrics_path
+    fmt = health.metrics_format if metrics_format is None else metrics_format
+    return enabled, path, fmt
 
 
 def _transport_counters(node: Node) -> dict[str, dict[str, int]]:
@@ -68,16 +89,23 @@ async def serve_healthz(
     host: str,
     port: int,
     *,
-    metrics_enabled: bool = False,
-    metrics_path: str = "/metrics",
-    metrics_format: Literal["prometheus", "json"] = "prometheus",
+    metrics_enabled: bool | None = None,
+    metrics_path: str | None = None,
+    metrics_format: Literal["prometheus", "json"] | None = None,
 ) -> Any:  # pragma: no cover - real server
     """Start an aiohttp ``/healthz`` (and opt-in ``/metrics``) listener.
 
-    Returns the runner (call ``cleanup``). The snapshot/metrics rendering lives in
-    pure helpers above; only the aiohttp wiring here is pragma-excluded.
+    Returns the runner (call ``cleanup``). The metrics args default from
+    ``node.config.health.*`` when left unset, so ``health.metrics_enabled=true``
+    in config exposes ``/metrics`` without any CLI change. The snapshot/metrics
+    rendering and option-defaulting live in pure helpers above; only the aiohttp
+    wiring here is pragma-excluded.
     """
     from aiohttp import web
+
+    metrics_enabled, metrics_path, metrics_format = _resolve_metrics_options(
+        node, metrics_enabled, metrics_path, metrics_format
+    )
 
     async def handler(_request: Any) -> Any:
         return web.json_response(health_snapshot(node))

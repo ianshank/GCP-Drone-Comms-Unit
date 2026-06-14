@@ -36,13 +36,27 @@ _TRANSPORT_METRICS = {
 }
 
 
+def _escape_label_value(value: str) -> str:
+    """Escape a Prometheus label value per the text-exposition spec.
+
+    Label values are user-configurable (``TransportConfig.name``), so a name with
+    a backslash, double-quote or newline would otherwise emit a malformed line.
+    The spec requires escaping ``\\`` -> ``\\\\``, ``"`` -> ``\\"`` and a literal
+    newline -> ``\\n`` (backslash followed by ``n``). Backslash is replaced first
+    so the escapes it introduces are not re-escaped.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
 def render_prometheus(metrics: RouterMetrics, transports: Mapping[str, Mapping[str, int]]) -> str:
     """Render router + per-transport counters as Prometheus text-exposition lines.
 
     Hand-rolled text (no ``prometheus_client`` dependency): one ``name value``
     line per router counter, plus one ``name{transport="..."} value`` line per
     per-transport counter for each transport. Missing per-transport keys default
-    to ``0`` so the exported series set is stable across transport types.
+    to ``0`` so the exported series set is stable across transport types. The
+    transport name is escaped (:func:`_escape_label_value`) so a user-configured
+    name with special characters still yields valid exposition text.
     """
     lines = [
         f"meshsa_rx_total {metrics.rx}",
@@ -52,7 +66,8 @@ def render_prometheus(metrics: RouterMetrics, transports: Mapping[str, Mapping[s
         f"meshsa_schema_mismatch_total {metrics.schema_mismatch}",
     ]
     for name, counters in transports.items():
+        label = _escape_label_value(name)
         for key, metric in _TRANSPORT_METRICS.items():
             value = counters.get(key, 0)
-            lines.append(f'{metric}{{transport="{name}"}} {value}')
+            lines.append(f'{metric}{{transport="{label}"}} {value}')
     return "\n".join(lines) + "\n"

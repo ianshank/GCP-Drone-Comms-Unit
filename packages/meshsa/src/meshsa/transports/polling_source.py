@@ -62,6 +62,13 @@ class PollingSourceTransport(AbstractTransport):
         log_interval_s: float = 30.0,
     ) -> None:
         super().__init__(name, queue_maxsize)
+        # ``log_every_n``/``log_interval_s`` are user-configurable; guard the
+        # values the reader divides/compares by so a bad config fails loudly at
+        # construction rather than raising ZeroDivisionError on the reader thread.
+        if log_every_n < 1:
+            raise ValueError(f"log_every_n must be >= 1, got {log_every_n}")
+        if log_interval_s <= 0:
+            raise ValueError(f"log_interval_s must be > 0, got {log_interval_s}")
         self._resource = resource
         self._factory = factory
         self._source_uid = source_uid
@@ -109,19 +116,27 @@ class PollingSourceTransport(AbstractTransport):
         """Poll loop on its own thread; hands each frame to the asyncio loop."""
         while not self._stop_event.is_set():
             try:
-                frames = self._poll(resource)
+                # Iterate the produced frames inside the guard too: a source whose
+                # frame iteration (not just _poll) raises must not let the
+                # exception escape and silently kill the reader thread.
+                produced = False
+                for frame in self._poll(resource):
+                    produced = True
+                    self.rx_frames += 1
+                    loop.call_soon_threadsafe(self._ingest_nowait, frame)
+                    if self.rx_frames % self._log_every_n == 0 or self._interval_elapsed():
+                        self._log_link("up")
+                if not produced and self._interval_elapsed():
+                    self._log_link("down")
             except Exception:
-                _log.warning("source poll error; stopping reader", transport=self.name)
+                # A poll/iteration error during shutdown (stop flag set / resource
+                # closing) is a normal stop, not a failure: log it at DEBUG. Only
+                # an error while still running is a genuine WARNING.
+                if self._stop_event.is_set():
+                    _log.debug("source poll error during stop", transport=self.name)
+                else:
+                    _log.warning("source poll error; stopping reader", transport=self.name)
                 break
-            produced = False
-            for frame in frames:
-                produced = True
-                self.rx_frames += 1
-                loop.call_soon_threadsafe(self._ingest_nowait, frame)
-                if self.rx_frames % self._log_every_n == 0 or self._interval_elapsed():
-                    self._log_link("up")
-            if not produced and self._interval_elapsed():
-                self._log_link("down")
             if self._poll_wait_s:
                 self._stop_event.wait(self._poll_wait_s)
 

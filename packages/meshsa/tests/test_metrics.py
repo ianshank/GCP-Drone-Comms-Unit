@@ -100,3 +100,21 @@ def test_render_prometheus_transport_missing_rx_frames_defaults_zero():
     # A transport dict without rx_frames exercises the getattr/default path.
     text = render_prometheus(RouterMetrics(), {"tak": {"dropped_inbox_full": 0, "reconnects": 0}})
     assert 'meshsa_transport_rx_frames{transport="tak"} 0' in text.splitlines()
+
+
+def test_render_prometheus_escapes_special_chars_in_transport_name():
+    # Transport names are user-configurable, so a name with a backslash, quote and
+    # newline must be escaped per the text-exposition spec (\\ \" \n) so the line
+    # stays a single, valid, parseable series rather than breaking the format.
+    raw = 'a\\b"c\nd'
+    text = render_prometheus(RouterMetrics(rx=1), {raw: {"rx_frames": 9}})
+    lines = text.splitlines()
+    # Spec escaping: \\ -> \\\\ , " -> \" , newline -> \n (literal backslash + n).
+    escaped = 'a\\\\b\\"c\\nd'
+    expected = f'meshsa_transport_rx_frames{{transport="{escaped}"}} 9'
+    assert expected in lines
+    # The raw newline in the name must not survive into the output: every series
+    # stays on one physical line, so the line count is exactly 5 router + 3
+    # per-transport rather than splitting the name across two lines.
+    assert len(lines) == 8
+    assert all("\n" not in line for line in lines)
