@@ -273,6 +273,28 @@ def test_decode_nonnumeric_richer_detail_raises_meshsaerror(detail):
         CotCodec().decode(xml)
 
 
+@pytest.mark.parametrize(
+    "detail",
+    [
+        b'<track course="400" speed="3.0"/>',  # course out of [0, 360)
+        b'<track course="10" speed="-5"/>',  # speed must be >= 0
+        b'<status battery="150"/>',  # battery_pct out of [0, 100]
+        b'<_meshsa battery_v="-1"/>',  # battery_v must be >= 0
+    ],
+)
+def test_decode_out_of_range_richer_detail_raises_meshsaerror(detail):
+    # Numeric-but-out-of-contract values from a peer must be rejected with the same
+    # bounds the Position/Telemetry validators enforce (CoT builds dicts directly),
+    # surfaced as MeshSAError rather than producing an out-of-contract envelope.
+    xml = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b"<detail>" + detail + b"</detail></event>"
+    )
+    with pytest.raises(MeshSAError, match="invalid CoT track values"):
+        CotCodec().decode(xml)
+
+
 def test_cot_sentinel_matches_position_default():
     # The CoT "unknown error" sentinel and the Position ce/le default must stay
     # in lockstep via the shared UNKNOWN_ERROR_M constant.

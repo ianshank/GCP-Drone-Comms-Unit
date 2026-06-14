@@ -118,6 +118,24 @@ def test_decode_out_of_range_course_raises_meshsaerror():
         TelemetryCodec().decode(frame)
 
 
+def test_encode_out_of_range_telemetry_raises_meshsaerror():
+    # encode() validates the telemetry block too; an out-of-range value must surface
+    # as MeshSAError, not leak a raw pydantic ValidationError from the codec API.
+    env = Envelope(
+        msg_id="m",
+        ts=1.0,
+        source_uid="uav-1",
+        kind=MessageKind.PLI,
+        payload={
+            "node": {"callsign": "UAV1"},
+            "position": {"lat": 1.0, "lon": 2.0},
+            "telemetry": {"battery_pct": 150},  # out of [0, 100]
+        },
+    )
+    with pytest.raises(MeshSAError, match="invalid telemetry block"):
+        TelemetryCodec().encode(env)
+
+
 def test_decode_carries_course_and_speed():
     env = TelemetryCodec().decode(_frame(course_deg=270.0, speed_ms=8.5))
     assert env.payload["position"]["course_deg"] == pytest.approx(270.0)
