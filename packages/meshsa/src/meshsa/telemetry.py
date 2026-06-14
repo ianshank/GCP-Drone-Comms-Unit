@@ -18,6 +18,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pydantic import ValidationError
+
 from .errors import MeshSAError
 from .models import Envelope, MessageKind, Position, Telemetry
 from .registry import codec_registry
@@ -88,7 +90,10 @@ class TelemetryCodec:
             )
             telemetry = frame.get("telemetry")
             telemetry_model = Telemetry.model_validate(telemetry) if telemetry is not None else None
-        except (TypeError, ValueError) as exc:  # bad types / out-of-range lat/lon
+        except (TypeError, ValueError, ValidationError) as exc:
+            # bad types / out-of-range lat/lon (TypeError/ValueError) or a
+            # pydantic field-validator rejection on Position/Telemetry
+            # (ValidationError) — all surfaced as the codec's standard error.
             raise MeshSAError(f"invalid telemetry frame: {exc}") from exc
         callsign = str(frame.get("callsign", src))
         payload: dict[str, Any] = {

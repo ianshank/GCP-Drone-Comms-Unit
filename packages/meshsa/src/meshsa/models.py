@@ -90,6 +90,20 @@ class Telemetry(BaseModel):
     current_a: float | None = None
     attitude: Attitude | None = None
 
+    @field_validator("battery_v")
+    @classmethod
+    def _battery_v_nonneg(cls, v: float | None) -> float | None:
+        if v is not None and v < 0.0:
+            raise ValueError("battery_v must be >= 0")
+        return v
+
+    @field_validator("battery_pct")
+    @classmethod
+    def _battery_pct_range(cls, v: int | None) -> int | None:
+        if v is not None and not 0 <= v <= 100:
+            raise ValueError("battery_pct out of range [0, 100]")
+        return v
+
 
 class NodeInfo(BaseModel):
     uid: str

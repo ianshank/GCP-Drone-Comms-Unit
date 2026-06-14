@@ -84,6 +84,25 @@ def test_telemetry_optional_fields_default_none():
     assert t2.attitude is not None and t2.attitude.roll_deg == pytest.approx(1.0)
 
 
+def test_telemetry_valid_battery_bounds_pass():
+    t = Telemetry(battery_v=0.0, battery_pct=0)
+    assert t.battery_v == pytest.approx(0.0)
+    assert t.battery_pct == 0
+    t2 = Telemetry(battery_v=12.6, battery_pct=100)
+    assert t2.battery_pct == 100
+
+
+def test_telemetry_negative_battery_v_rejected():
+    with pytest.raises(ValidationError):
+        Telemetry(battery_v=-1.0)
+
+
+@pytest.mark.parametrize("battery_pct", [-1, 101, 150])
+def test_telemetry_battery_pct_out_of_range_rejected(battery_pct):
+    with pytest.raises(ValidationError):
+        Telemetry(battery_pct=battery_pct)
+
+
 def test_plipayload_telemetry_default_none():
     p = PliPayload(node=NodeInfo(uid="u", callsign="c"), position=Position(lat=1.0, lon=2.0))
     assert p.telemetry is None
