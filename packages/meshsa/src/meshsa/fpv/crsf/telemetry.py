@@ -103,7 +103,7 @@ class GpsSensor:
 TelemetryMessage = LinkStatistics | BatterySensor | Attitude | FlightMode | GpsSensor
 
 #: Reconstruction registry: message class by name (for dataset replay).
-_BY_NAME: dict[str, type] = {
+_BY_NAME: dict[str, type[TelemetryMessage]] = {
     cls.__name__: cls for cls in (LinkStatistics, BatterySensor, Attitude, FlightMode, GpsSensor)
 }
 
@@ -112,12 +112,18 @@ def message_from_record(type_name: str, data: dict[str, Any]) -> TelemetryMessag
     """Rebuild a telemetry message from a logged ``{type, data}`` record.
 
     Raises :class:`TelemetryParseError` for an unknown type name so a forward
-    dataset (a type this build does not model) fails loudly rather than silently.
+    dataset (a type this build does not model) fails loudly rather than silently,
+    and for a known type whose ``data`` is missing/extra fields (log corruption or
+    a forward dataset that reshaped an existing record) so replay rejects it rather
+    than crashing with a bare ``TypeError``.
     """
     cls = _BY_NAME.get(type_name)
     if cls is None:
         raise TelemetryParseError(f"unknown telemetry record type: {type_name!r}")
-    return cls(**data)  # type: ignore[no-any-return]
+    try:
+        return cls(**data)
+    except TypeError as exc:
+        raise TelemetryParseError(f"malformed data for {type_name}: {exc}") from exc
 
 
 class TelemetryParser:

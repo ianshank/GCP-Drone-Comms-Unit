@@ -31,6 +31,16 @@ def test_message_from_record_roundtrip_and_unknown():
         message_from_record("Nonexistent", {})
 
 
+def test_message_from_record_malformed_data_raises_parse_error():
+    # A known type whose payload is missing/extra fields (log corruption or a
+    # forward dataset that reshaped the record) must fail with TelemetryParseError
+    # rather than a bare TypeError that crashes replay.
+    with pytest.raises(TelemetryParseError, match="malformed data for LinkStatistics"):
+        message_from_record("LinkStatistics", {"uplink_lq": 90})  # missing fields
+    with pytest.raises(TelemetryParseError, match="malformed data for GpsSensor"):
+        message_from_record("GpsSensor", {"unexpected_field": 1})  # extra/wrong field
+
+
 def test_message_from_record_roundtrip_gps():
     # GpsSensor is a v2 dataset record type; it must round-trip through replay.
     from dataclasses import asdict

@@ -16,6 +16,7 @@ from ...protocols import Clock
 from ..config import FpvSettings
 from ..crsf.link import CrsfLink
 from ..crsf.telemetry import TelemetryParser
+from ..errors import TelemetryParseError
 from ..flight_logger import FlightLogger
 from ..link_health import HealthReport, LinkHealthMonitor
 from ..protocols import MonotonicClock
@@ -66,9 +67,20 @@ def pump_once(
 
     Returns the freshly evaluated :class:`HealthReport`. Echo suppression and CRC
     accounting happen inside ``link.poll_inbound``; this function never sees echoes.
+
+    A CRC-valid but payload-malformed *known* frame raises
+    :class:`TelemetryParseError`; it is dropped (logged, then skipped) so a single
+    bad frame never tears down the live loop — mirroring
+    :meth:`meshsa.transports.crsf_source.CrsfSourceTransport._poll`.
     """
     for frame in link.poll_inbound():
-        msg = parser.parse(frame)
+        try:
+            msg = parser.parse(frame)
+        except TelemetryParseError as exc:
+            _log.warning(
+                "telemetry parse error; dropping frame", type=frame.type_name, error=str(exc)
+            )
+            continue
         if msg is None:
             continue
         t = clock.now()

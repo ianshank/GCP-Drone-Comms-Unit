@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
   matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are
   unsupported instead of raising at startup.
+- **`message_from_record` rejects malformed dataset records.** Rebuilding a telemetry
+  message from a logged `{type, data}` record with missing/extra fields (log corruption or a
+  forward dataset that reshaped an existing record) now raises `TelemetryParseError` instead of
+  a bare `TypeError`, so replay fails loudly and consistently with the unknown-type path.
+- **`fpv-telemetry-monitor` survives a malformed known frame.** `pump_once` now catches
+  `TelemetryParseError` around the parse, logs it, and drops the frame, so a single CRC-valid
+  but payload-malformed frame no longer tears down the live monitor loop — matching the
+  per-frame drop-and-continue behaviour of `crsf_source`.
 
 ### Changed
 - **Shared `Backoff` reconnect helper (`meshsa.transports.backoff`).** The exponential
