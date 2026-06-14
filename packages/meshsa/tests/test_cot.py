@@ -112,6 +112,146 @@ def test_decode_without_point_uses_zero_position():
     assert out.payload["node"]["callsign"] == "QRU"
 
 
+def _rich_pli(mid="m1", ts=1_700_000_000.0):
+    return Envelope(
+        msg_id=mid,
+        ts=ts,
+        source_uid="uav-1",
+        kind=MessageKind.PLI,
+        payload={
+            "node": {"callsign": "UAV1", "tier": "user"},
+            "position": {
+                "lat": 37.5,
+                "lon": -122.3,
+                "hae": 12.0,
+                "course_deg": 270.0,
+                "speed_ms": 8.5,
+            },
+            "telemetry": {
+                "battery_v": 11.1,
+                "battery_pct": 75,
+                "current_a": 4.2,
+                "attitude": {"roll_deg": 1.0, "pitch_deg": -2.0, "yaw_deg": 90.0},
+            },
+        },
+    )
+
+
+def test_pli_emits_track_status_attitude_detail():
+    xml = CotCodec().encode(_rich_pli()).decode()
+    assert '<track course="270.0" speed="8.5"' in xml
+    assert 'battery="75"' in xml and "<status" in xml
+    assert 'battery_v="11.1"' in xml and 'current_a="4.2"' in xml
+    assert "<_meshsa" in xml
+    assert 'roll="1.0"' in xml and 'pitch="-2.0"' in xml and 'yaw="90.0"' in xml
+    assert "<attitude" in xml
+
+
+def test_pli_rich_roundtrips_track_status_attitude():
+    c = CotCodec()
+    out = c.decode(c.encode(_rich_pli()))
+    pos = out.payload["position"]
+    assert pos["course_deg"] == 270.0 and pos["speed_ms"] == 8.5
+    tel = out.payload["telemetry"]
+    assert tel["battery_pct"] == 75
+    assert tel["battery_v"] == 11.1 and tel["current_a"] == 4.2
+    assert tel["attitude"] == {"roll_deg": 1.0, "pitch_deg": -2.0, "yaw_deg": 90.0}
+
+
+def test_plain_pli_encode_has_no_richer_detail():
+    # A plain PLI (no course/speed/telemetry) must emit NO richer detail children.
+    xml = CotCodec().encode(_pli()).decode()
+    assert "<track" not in xml
+    assert "<status" not in xml
+    assert "<_meshsa" not in xml
+    assert "<attitude" not in xml
+
+
+def test_track_omitted_when_only_one_of_course_speed():
+    env = _pli()
+    env.payload["position"]["course_deg"] = 90.0  # speed absent
+    xml = CotCodec().encode(env).decode()
+    assert "<track" not in xml
+
+
+def test_emit_detail_false_suppresses_richer_children():
+    xml = CotCodec(emit_detail=False).encode(_rich_pli()).decode()
+    assert "<track" not in xml
+    assert "<status" not in xml
+    assert "<attitude" not in xml
+    # base contact/group detail is still present
+    assert "callsign=" in xml
+
+
+def test_decode_ignores_unknown_detail_children():
+    xml = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b'<detail><contact callsign="QRU"/>'
+        b'<unknownchild foo="bar"/><track course="10.0" speed="2.0"/>'
+        b"</detail></event>"
+    )
+    out = CotCodec().decode(xml)
+    assert out.payload["node"]["callsign"] == "QRU"
+    assert out.payload["position"]["course_deg"] == 10.0
+    assert out.payload["position"]["speed_ms"] == 2.0
+
+
+def test_decode_track_with_only_course_or_only_speed():
+    course_only = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b'<detail><track course="30.0"/></detail></event>'
+    )
+    out = CotCodec().decode(course_only)
+    assert out.payload["position"]["course_deg"] == 30.0
+    assert "speed_ms" not in out.payload["position"]
+
+    speed_only = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b'<detail><track speed="4.0"/></detail></event>'
+    )
+    out = CotCodec().decode(speed_only)
+    assert out.payload["position"]["speed_ms"] == 4.0
+    assert "course_deg" not in out.payload["position"]
+
+
+def test_decode_vendor_with_only_one_attr():
+    xml = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b'<detail><_meshsa battery_v="12.0"/></detail></event>'
+    )
+    out = CotCodec().decode(xml)
+    tel = out.payload["telemetry"]
+    assert tel == {"battery_v": 12.0}
+
+
+def test_decode_empty_attitude_element_yields_no_attitude():
+    xml = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b"<detail><attitude/></detail></event>"
+    )
+    out = CotCodec().decode(xml)
+    assert "telemetry" not in out.payload
+
+
+def test_decode_partial_attitude_and_status():
+    xml = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b'<detail><status battery="40"/>'
+        b'<attitude yaw="180.0"/></detail></event>'
+    )
+    out = CotCodec().decode(xml)
+    tel = out.payload["telemetry"]
+    assert tel["battery_pct"] == 40
+    assert tel["attitude"] == {"yaw_deg": 180.0}
+    assert "course_deg" not in out.payload["position"]
+
+
 def test_cot_sentinel_matches_position_default():
     # The CoT "unknown error" sentinel and the Position ce/le default must stay
     # in lockstep via the shared UNKNOWN_ERROR_M constant.

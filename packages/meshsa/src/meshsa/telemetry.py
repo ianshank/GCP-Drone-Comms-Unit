@@ -19,7 +19,7 @@ import json
 from typing import Any
 
 from .errors import MeshSAError
-from .models import Envelope, MessageKind, Position
+from .models import Envelope, MessageKind, Position, Telemetry
 from .registry import codec_registry
 from .version import SCHEMA_VERSION
 
@@ -44,7 +44,7 @@ class TelemetryCodec:
         """
         node = envelope.payload.get("node", {})
         pos = envelope.payload.get("position", {})
-        frame = {
+        frame: dict[str, Any] = {
             "src": envelope.source_uid,
             "callsign": node.get("callsign", envelope.source_uid),
             "msg_id": envelope.msg_id,
@@ -53,6 +53,16 @@ class TelemetryCodec:
             "lon": pos.get("lon", 0.0),
             "hae": pos.get("hae", 0.0),
         }
+        # Carry optional richer-track fields only when present (exclude_none on
+        # the wire so absent keys never leak; old readers ignore unknown keys).
+        for key in ("course_deg", "speed_ms"):
+            if pos.get(key) is not None:
+                frame[key] = pos[key]
+        telemetry = envelope.payload.get("telemetry")
+        if telemetry is not None:
+            block = Telemetry.model_validate(telemetry).model_dump(exclude_none=True)
+            if block:
+                frame["telemetry"] = block
         return json.dumps(frame).encode("utf-8")
 
     def decode(self, data: bytes) -> Envelope:
@@ -73,20 +83,30 @@ class TelemetryCodec:
                 lat=float(frame["lat"]),
                 lon=float(frame["lon"]),
                 hae=float(frame.get("hae", 0.0)),
+                course_deg=frame.get("course_deg"),
+                speed_ms=frame.get("speed_ms"),
             )
+            telemetry = frame.get("telemetry")
+            telemetry_model = Telemetry.model_validate(telemetry) if telemetry is not None else None
         except (TypeError, ValueError) as exc:  # bad types / out-of-range lat/lon
             raise MeshSAError(f"invalid telemetry frame: {exc}") from exc
         callsign = str(frame.get("callsign", src))
+        payload: dict[str, Any] = {
+            "node": {"uid": src, "callsign": callsign},
+            # exclude_none so absent richer keys never enter the payload/wire.
+            "position": position.model_dump(exclude_none=True),
+        }
+        if telemetry_model is not None:
+            block = telemetry_model.model_dump(exclude_none=True)
+            if block:
+                payload["telemetry"] = block
         return Envelope(
             schema_version=SCHEMA_VERSION,
             msg_id=msg_id,
             ts=ts,
             source_uid=src,
             kind=MessageKind.PLI,
-            payload={
-                "node": {"uid": src, "callsign": callsign},
-                "position": position.model_dump(),
-            },
+            payload=payload,
         )
 
 

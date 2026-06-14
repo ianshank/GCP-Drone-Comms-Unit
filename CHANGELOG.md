@@ -33,6 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`flightctl/constraints/fts-constraints.txt`.** The FreeTAKServer dependency pins
   (setuptools/opentelemetry/etc.) verified to boot FTS on the Jetson now live in one
   auditable constraints file; `scripts/setup_fts.sh` installs via `uv pip --constraint`.
+- **Richer PLI tracks (M3.1): optional course/speed/battery/attitude.** `Position`
+  gained optional `course_deg` (validated `[0, 360)`) and `speed_ms` (validated `>= 0`)
+  fields, and new `Attitude` and `Telemetry` models carry optional
+  roll/pitch/yaw and battery voltage/percent/current. `PliPayload` gained an
+  optional `telemetry` block. All fields are optional with `None` defaults and are
+  emitted via `model_dump(exclude_none=True)`, so absent keys never reach the wire
+  and old readers see byte-identical payloads — **no `SCHEMA_VERSION` bump**.
+- **Detail-aware CoT codec.** `CotCodec` now encodes the richer track data as
+  guarded `<track>`, `<status>`, `<_meshsa>` (voltage/current) and `<attitude>`
+  detail children when present, and decodes them back losslessly while ignoring
+  unknown `<detail>` children. The element/attribute names are constructor
+  parameters (`track_element`/`status_element`/`attitude_element`/`battery_attr`/
+  `vendor_element`) and the whole additive block can be disabled with
+  `emit_detail=False`. The `telemetry` codec carries the same optional fields.
 
 ### Fixed
 - **`TakMulticastTransport` recovers from receive errors instead of dying.** A transient
