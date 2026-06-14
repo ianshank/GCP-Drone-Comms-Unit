@@ -109,8 +109,26 @@ def test_manifest_contract(tmp_path):
     assert manifest["package_version"] == "0.2.0"
     assert manifest["dropped_records"] == {"rc": 0, "telemetry": 0}
     assert manifest["telemetry_rates_hz"]["LinkStatistics"] == pytest.approx(1.0)
-    assert manifest["video"] is None  # Phase 2 stub
     assert manifest["settings_snapshot"]["crsf"]["crsf_baud"] == 400000
+
+
+def test_manifest_video_is_null_without_camera(tmp_path):
+    # No camera wired (default video_meta=None) -> manifest video stays null.
+    logger = _logger(tmp_path)
+    logger.start()
+    logger.close()
+    manifest = _read_json(os.path.join(logger.session_dir, "manifest.json"))
+    assert manifest["video"] is None
+
+
+def test_manifest_video_populated_with_camera(tmp_path):
+    # When capture is wired, the CaptureWriter's metadata dict is emitted as video.
+    meta = {"file": "video.mp4", "width": 1280, "height": 720, "fps": 30, "encoder": "h264"}
+    logger = _logger(tmp_path, video_meta=meta)
+    logger.start()
+    logger.close()
+    manifest = _read_json(os.path.join(logger.session_dir, "manifest.json"))
+    assert manifest["video"] == meta
 
 
 def test_close_is_idempotent_and_supports_context_manager(tmp_path):

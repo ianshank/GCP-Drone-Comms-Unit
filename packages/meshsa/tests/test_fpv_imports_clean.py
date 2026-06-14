@@ -15,12 +15,14 @@ def test_import_meshsa_fpv_does_not_pull_optional_extras():
     import sys
 
     # Drop any already-imported optional deps so we observe a fresh import graph.
-    for opt in ("serial", "pyarrow"):
+    for opt in ("serial", "pyarrow", "cv2"):
         sys.modules.pop(opt, None)
     importlib.import_module("meshsa.fpv")
-    # Importing the package must not have eagerly imported the hardware/parquet deps.
+    # Importing the package must not have eagerly imported the hardware/parquet/
+    # camera deps (the real backends live behind lazy # pragma: no cover factories).
     assert "serial" not in sys.modules
     assert "pyarrow" not in sys.modules
+    assert "cv2" not in sys.modules
 
 
 def test_public_api_surface_is_importable():

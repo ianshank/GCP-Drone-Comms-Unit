@@ -20,6 +20,26 @@ def test_defaults_are_present_and_typed():
     assert s.crsf.crsf_address == 0xEA
     assert s.crsf.crsf_max_frame_len == 64
     assert s.prober.probe_margin == 3.0
+    assert s.camera.fps == 30
+    assert s.camera.width == 1280
+    assert s.camera.height == 720
+    assert s.camera.encoder == "h264"
+    assert s.camera.device == 0
+    assert s.camera.output_basename == "video.mp4"
+    assert s.camera.capture_queue_len == 256
+
+
+def test_camera_from_mapping_override_leaves_siblings_default():
+    s = FpvSettings.from_mapping({"camera": {"fps": 60, "width": 1920, "height": 1080}})
+    assert s.camera.fps == 60
+    assert s.camera.width == 1920
+    assert s.camera.height == 1080
+    # Untouched camera fields keep their defaults.
+    assert s.camera.encoder == "h264"
+    assert s.camera.capture_queue_len == 256
+    # Sibling sub-models are unaffected.
+    assert s.crsf.crsf_baud == 400000
+    assert s.logger.logger_queue_len == 4096
 
 
 def test_sensitivity_floor_is_version_keyed():
