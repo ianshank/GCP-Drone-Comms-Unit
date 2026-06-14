@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unsupported instead of raising at startup.
 
 ### Changed
+- **Shared `Backoff` reconnect helper (`meshsa.transports.backoff`).** The exponential
+  `initial → min(current*factor, max)` reconnect schedule (with its injectable `sleep`) was
+  duplicated in `TakTcpTransport` and `MeshtasticTransport`; it now lives in one place. Public
+  constructor options (`backoff_initial_s`/`backoff_max_s`/`backoff_factor`/`sleep`) and the
+  observable `reconnects` counter are unchanged; the backoff sequence is identical.
+- **`FlightLogger` stream set is single-sourced.** The session JSONL filenames and the
+  manifest `files` map now derive from the one `_HEADERS` declaration instead of three
+  repeated stream lists; adding a stream is a one-line change. Output is byte-identical.
 - **Shared `meshsa.cli.configure_logging(level)` helper.** The duplicated
   `structlog.configure(make_filtering_bound_logger(...))` wiring across the five console
   entry points (`meshsa-base`, `fpv-log-convert`, `fpv-telemetry-monitor`, `fpv-log-replay`,

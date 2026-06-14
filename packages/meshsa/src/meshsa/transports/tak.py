@@ -19,6 +19,7 @@ from typing import Any, Protocol
 import structlog
 
 from ..registry import transport_registry
+from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
 
 _log = structlog.get_logger("meshsa.tak")
@@ -49,7 +50,6 @@ class CotFramer:
 
 
 Connector = Callable[[], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
-SleepFn = Callable[[float], Awaitable[None]]
 
 
 def _default_connector(host: str, port: int) -> Connector:  # pragma: no cover - real network
@@ -82,10 +82,9 @@ class TakTcpTransport(AbstractTransport):
         self._read_size = read_size
         self._delimiter = delimiter
         self._reconnect = reconnect
-        self._backoff_initial = backoff_initial_s
-        self._backoff_max = backoff_max_s
-        self._backoff_factor = backoff_factor
-        self._sleep = sleep or asyncio.sleep
+        self._backoff = Backoff(
+            initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._task: asyncio.Task[None] | None = None
@@ -110,17 +109,16 @@ class TakTcpTransport(AbstractTransport):
         self._task = asyncio.create_task(self._supervise())
 
     async def _supervise(self) -> None:
-        backoff = self._backoff_initial
+        self._backoff.reset()
         while not self._stopping:
             if self._reader is None:
                 try:
                     self._reader, self._writer = await self._connector()
                 except Exception:
                     _log.warning("tak_tcp connect failed", transport=self.name)
-                    await self._sleep(backoff)
-                    backoff = min(backoff * self._backoff_factor, self._backoff_max)
+                    await self._backoff.sleep_and_advance()
                     continue
-                backoff = self._backoff_initial
+                self._backoff.reset()
                 self.reconnects += 1
             try:
                 await self._read_loop(self._reader)
@@ -131,8 +129,7 @@ class TakTcpTransport(AbstractTransport):
                 self._reader = None
             if not self._reconnect:
                 break
-            await self._sleep(backoff)
-            backoff = min(backoff * self._backoff_factor, self._backoff_max)
+            await self._backoff.sleep_and_advance()
 
     async def _read_loop(self, reader: asyncio.StreamReader) -> None:
         framer = CotFramer()

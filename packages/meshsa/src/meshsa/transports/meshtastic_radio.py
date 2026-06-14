@@ -17,19 +17,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from typing import Any, cast
 
 import structlog
 
 from ..registry import transport_registry
+from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
 
 _log = structlog.get_logger("meshsa.meshtastic")
 
 InterfaceFactory = Callable[[], Any]
 SubscribeFn = Callable[[Callable[..., None], str], None]
-SleepFn = Callable[[float], Awaitable[None]]
 #: Applies node mesh settings (region/channel/psk/freq_khz) to a live device.
 Provisioner = Callable[[Any, dict[str, Any]], None]
 
@@ -130,10 +130,9 @@ class MeshtasticTransport(AbstractTransport):
         self.want_ack = want_ack
         self.channel_index = channel_index
         self._reconnect = reconnect
-        self._backoff_initial = backoff_initial_s
-        self._backoff_max = backoff_max_s
-        self._backoff_factor = backoff_factor
-        self._sleep = sleep or asyncio.sleep
+        self._backoff = Backoff(
+            initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
         self._iface: Any | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._task: asyncio.Task[None] | None = None
@@ -185,7 +184,7 @@ class MeshtasticTransport(AbstractTransport):
             self._loop.call_soon_threadsafe(self._lost.set)
 
     async def _supervise(self) -> None:
-        backoff = self._backoff_initial
+        self._backoff.reset()
         assert self._lost is not None
         while not self._stopping:
             if self._iface is None:
@@ -193,10 +192,9 @@ class MeshtasticTransport(AbstractTransport):
                     self._iface = self._factory()
                 except Exception:
                     _log.warning("meshtastic connect failed", transport=self.name)
-                    await self._sleep(backoff)
-                    backoff = min(backoff * self._backoff_factor, self._backoff_max)
+                    await self._backoff.sleep_and_advance()
                     continue
-                backoff = self._backoff_initial
+                self._backoff.reset()
                 self.reconnects += 1
                 self._apply_mesh()
             await self._lost.wait()
@@ -204,8 +202,7 @@ class MeshtasticTransport(AbstractTransport):
             self._close_iface()
             if not self._reconnect:
                 break
-            await self._sleep(backoff)
-            backoff = min(backoff * self._backoff_factor, self._backoff_max)
+            await self._backoff.sleep_and_advance()
 
     def _close_iface(self) -> None:
         iface, self._iface = self._iface, None

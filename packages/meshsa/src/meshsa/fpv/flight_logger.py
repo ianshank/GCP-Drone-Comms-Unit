@@ -127,14 +127,12 @@ class FlightLogger:
         dir_name = f"{self._created_utc.replace(':', '-')}-{self._session_id}"
         self.session_dir = os.path.join(self._s.sessions_root, dir_name)
         os.makedirs(self.session_dir, exist_ok=True)
-        for stream, fname in (
-            ("rc", "rc.jsonl"),
-            ("telemetry", "telemetry.jsonl"),
-            ("events", "events.jsonl"),
-            ("frames", "frames.jsonl"),
-        ):
-            # Handle is owned by the writer thread for the session's lifetime and
-            # closed in close(); a context manager does not fit this ownership.
+        for stream in _HEADERS:
+            # Filenames derive from the single stream set (_HEADERS); adding a
+            # stream is a one-line _HEADERS edit. The handle is owned by the writer
+            # thread for the session's lifetime and closed in close(); a context
+            # manager does not fit this ownership.
+            fname = f"{stream}.jsonl"
             fh = open(os.path.join(self.session_dir, fname), "w", encoding="utf-8")  # noqa: SIM115
             header = {"schema_version": DATASET_SCHEMA, "file": stream, "fields": _HEADERS[stream]}
             fh.write(json.dumps(header) + "\n")
@@ -304,11 +302,10 @@ class FlightLogger:
             "dropped_records": dict(self.dropped_records),
             "notes": dict(self._notes),
             "video": None,  # Phase 2 camera stub; keeps the contract stable
+            # JSONL filenames derive from the single stream set (_HEADERS); the
+            # video entry is the one non-JSONL special case.
             "files": {
-                "rc": "rc.jsonl",
-                "telemetry": "telemetry.jsonl",
-                "events": "events.jsonl",
-                "frames": "frames.jsonl",
+                **{stream: f"{stream}.jsonl" for stream in _HEADERS},
                 "video": "video.mp4",
             },
         }
