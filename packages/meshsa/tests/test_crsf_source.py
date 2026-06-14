@@ -22,6 +22,13 @@ def _link_stats_wire() -> bytes:
     return CrsfFrame(addr=0xC8, type=CrsfFrameType.LINK_STATISTICS, payload=payload).to_bytes()
 
 
+def _malformed_gps_wire() -> bytes:
+    """A CRC-valid GPS frame with a short (8-byte) payload — passes framing/CRC but
+    fails payload-level parsing, so ``TelemetryParser.parse`` raises."""
+    payload = struct.pack(">ii", 377749000, -1224194000)
+    return CrsfFrame(addr=0xC8, type=CrsfFrameType.GPS, payload=payload).to_bytes()
+
+
 class FakeSerial:
     """A non-blocking ``CrsfSerial`` that yields each chunk once, then b''."""
 
@@ -42,6 +49,11 @@ class FakeSerial:
 class BoomSerial(FakeSerial):
     def read(self, size: int) -> bytes:
         raise RuntimeError("serial dropped")
+
+
+class CloseRaiseSerial(FakeSerial):
+    def close(self) -> None:
+        raise OSError("close failed")
 
 
 def _link(*chunks: bytes, serial_cls: type[FakeSerial] = FakeSerial) -> CrsfLink:
@@ -86,6 +98,34 @@ async def test_gps_frame_becomes_air_track_and_ignores_non_gps():
     assert env.payload["position"]["lat"] == pytest.approx(37.7749)
     assert env.payload["position"]["lon"] == pytest.approx(-122.4194)
     assert env.payload["position"]["hae"] == pytest.approx(120.0)
+
+
+async def test_malformed_frame_is_dropped_and_reader_survives():
+    # A malformed (CRC-valid but short) GPS frame must not kill the reader: it is
+    # dropped and the following good GPS frame still becomes an air track.
+    t = CrsfSourceTransport(
+        name="uav",
+        link=_link(_malformed_gps_wire() + _gps_wire()),
+        source_uid="uav-1",
+        clock=FakeClock(),
+        poll_interval_s=0.01,
+    )
+    await t.start()
+    try:
+        frame = await asyncio.wait_for(t.stream().__anext__(), timeout=2.0)
+    finally:
+        await t.stop()
+    env = TelemetryCodec().decode(frame)
+    assert env.payload["position"]["lat"] == pytest.approx(37.7749)
+    # The reader is still alive after dropping the bad frame (not crashed).
+    assert t._thread is None  # joined cleanly by stop(), never died mid-run
+
+
+async def test_stop_handles_close_error():
+    link = CrsfLink(CrsfLinkSettings(), serial=CloseRaiseSerial(_gps_wire()))
+    t = CrsfSourceTransport(name="uav", link=link, poll_interval_s=0.01)
+    await t.start()
+    await t.stop()  # link.close() raises; transport swallows it
 
 
 async def test_reader_stops_on_poll_error():

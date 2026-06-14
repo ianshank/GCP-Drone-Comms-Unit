@@ -68,8 +68,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build still reads v1 sessions (with a `DatasetCompatibilityWarning`), and an older build
   correctly rejects a v2 dataset rather than failing mid-replay. The meshsa **wire**
   `SCHEMA_VERSION` is unchanged — `crsf_source` rides the existing `telemetry` codec.
+- **Shared `PollingSourceTransport` base for the flight-source transports
+  (`transports/polling_source.py`).** `crsf_source`, `msp_source` and `mavlink_source` were
+  near-identical (reader-thread lifecycle, shutdown, position-frame builder); that plumbing now
+  lives in one base, with each transport supplying only its link I/O (`_poll`/`_on_open`/
+  `_close`). Removes the triplicated code and makes the shutdown/robustness behavior below
+  shared. Public registry names and APIs are unchanged.
 
 ### Fixed
+- **`crsf_source`: a single malformed frame no longer kills the reader thread.** A CRC-valid
+  CRSF frame can still fail payload-level parsing (`TelemetryParseError`); per-frame parse
+  errors are now caught, logged, and dropped so telemetry keeps flowing. Reader shutdown is
+  also immediate (a `threading.Event` replaces the `time.sleep` poll wait), and `link.close()`
+  is guarded so a raising close can't break `stop()` — matching `msp_source`/`mavlink_source`.
 - **`meshtastic_radio`: resolve pypubsub lazily in `start()`, not `__init__`.** Constructing
   a `MeshtasticTransport` (e.g. for config validation in `build_node`) no longer imports the
   optional `pypubsub` dependency, matching the lazy-optional-dep pattern used by
