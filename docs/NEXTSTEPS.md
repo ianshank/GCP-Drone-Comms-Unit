@@ -18,7 +18,7 @@
 > [CHARTER.md](CHARTER.md) §3 supervised-commanding carve-out (ratified 2026-06-16). The
 > MAVLink plumbing is the easy part; the work is the safety/auth/audit layer. Sequence this
 > **after** M2 hardening — do not ship a command surface before TLS + auth land.
-- [x] **Scope ratified** in CHARTER.md (2026-06-16): whitelist safe commands first
+- [x] **Scope ratified** in [CHARTER.md](CHARTER.md) (2026-06-16): whitelist safe commands first
       (SET_MODE, RTL) before destructive ones (force-disarm). Maintainer sign-off recorded.
 - [ ] **Command path via the registry:** add a write-capable `mavlink_sink`
       transport + command codec (no router/node edits). Reuse `mavlink2rest` (`:8088`)
@@ -84,7 +84,9 @@ Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
 - [x] **Human sign-off on the CHARTER §3 carve-out** (RC-TX scope expansion) — ratified 2026-06-12.
 - [ ] Bench validation (§8): live LinkStats on hardware, voltage calibration, ratio sweep,
       antenna-removal transitions, `!FS!` end-to-end — thresholds remain provisional until then.
-- [ ] Phase 2: wire the camera into the existing `frames.jsonl`/`video` stub (no schema bump).
+- [x] Phase 2: camera wired into the existing `frames.jsonl`/`video` stub via a `CaptureWriter`
+      daemon (`fpv/camera.py`) reading an injected `CameraSource` — additive, `DATASET_SCHEMA`
+      stays 2; only the capture backend is `# pragma: no cover` glue (shipped, see ARCHITECTURE).
 - [x] Additive `crsf_source` transport so CRSF telemetry becomes an ATAK air track (0.3.0;
       decodes GPS 0x02 → `GpsSensor` → `telemetry` codec; `DATASET_SCHEMA` 1 → 2).
 

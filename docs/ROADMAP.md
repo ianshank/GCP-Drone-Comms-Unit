@@ -14,7 +14,7 @@
 A small, rugged, field-deployable comms unit that fuses drone/flight-controller telemetry and
 a mesh situational-awareness network into TAK/ATAK, over whatever links are available, with or
 without internet — read-only by default, with **bounded, human-supervised** commanding as a
-ratified extension (see CHARTER §3).
+ratified extension (see [CHARTER.md](CHARTER.md) §3).
 
 ## Milestone trajectory (themes, not dates)
 
@@ -54,7 +54,7 @@ Reproducible multi-arch (arm64) images; NVMe-root appliance build; signed releas
 GHCR publish on tags.
 
 ### Initiative C — Supervised two-way commanding (ratified 2026-06-16, gated on M2)
-A bounded, human-supervised command path (CHARTER §3 carve-out). Whitelist-first
+A bounded, human-supervised command path ([CHARTER.md](CHARTER.md) §3 carve-out). Whitelist-first
 (`SET_MODE`/`RTL` before arm/disarm), added via `transport_registry` with no router/node
 edits, `COMMAND_INT` + `COMMAND_ACK` with bounded retries, and a **mandatory** safety layer:
 per-command operator confirmation, command-channel authentication, append-only audit log,
@@ -70,6 +70,6 @@ open/closed registry extensibility; versioned backward-compatible wire; DI via `
 
 ## What "on track" means
 A change is on-track if it (1) advances a milestone above, (2) respects every CHARTER
-invariant, and (3) does not expand scope beyond CHARTER §3 (including the bounded commanding
+invariant, and (3) does not expand scope beyond [CHARTER.md](CHARTER.md) §3 (including the bounded commanding
 carve-out). When a change would violate an invariant or expand scope, surface it for a human
 decision rather than proceeding.
