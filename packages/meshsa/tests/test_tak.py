@@ -338,6 +338,73 @@ async def test_multicast_stop_without_start_safe():
     await t.stop()
 
 
+class RaiseOnceDgram(FakeDgram):
+    """A FakeDgram whose first recv() raises, to exercise the recovery path."""
+
+    def __init__(self):
+        super().__init__()
+        self._raised = False
+
+    async def recv(self):
+        if not self._raised:
+            self._raised = True
+            raise OSError("multicast recv boom")
+        return await super().recv()
+
+
+async def test_multicast_recovers_after_recv_error():
+    # First socket errors on recv; the loop must close it, back off, rebuild via
+    # the factory, and keep ingesting on the healthy second socket.
+    bad, good = RaiseOnceDgram(), FakeDgram()
+    ios = [bad, good]
+    sleep = FakeSleep()
+    t = TakMulticastTransport(io_factory=lambda: ios.pop(0), sleep=sleep)
+    await t.start()
+    await _wait(lambda: bad.closed and t.reconnects == 1)  # errored socket closed + rebuilt
+    good.push(_cot_pli())
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    assert sleep.calls  # backoff slept before rebuilding
+    await t.stop()
+    assert good.closed
+
+
+class RaiseAlwaysDgram(FakeDgram):
+    """recv() always raises — used to drive the persistent-failure path."""
+
+    async def recv(self):
+        raise OSError("multicast down")
+
+
+async def test_multicast_recv_loop_exits_on_stop_flag_during_backoff():
+    box = {}
+
+    async def flip(_secs):
+        box["t"]._stopping = True  # stop arrives while backing off -> loop breaks
+
+    t = TakMulticastTransport(io_factory=lambda: RaiseAlwaysDgram(), sleep=flip)
+    box["t"] = t
+    await t.start()
+    await _wait(lambda: t._task.done())  # recv error -> backoff -> stop flag -> exit
+    assert t.reconnects == 0  # never rebuilt; broke out after the stop flag
+    await t.stop()
+
+
+class CloseFailDgram(RaiseOnceDgram):
+    """First recv() raises and close() also raises, to exercise close best-effort."""
+
+    def close(self):
+        raise OSError("close boom")
+
+
+async def test_multicast_close_error_swallowed_during_recovery():
+    ios = [CloseFailDgram(), FakeDgram()]
+    t = TakMulticastTransport(io_factory=lambda: ios.pop(0), sleep=FakeSleep())
+    await t.start()
+    await _wait(lambda: t.reconnects == 1)  # close raised but was swallowed; rebuilt anyway
+    await t.stop()
+
+
 # ============================ registry ============================
 def test_tak_registered():
     assert transport_registry.has("tak_tcp")

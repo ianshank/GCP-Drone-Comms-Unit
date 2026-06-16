@@ -102,22 +102,26 @@ Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
 ## Code-quality backlog (2026-06-16 gap scan)
 Found by a read-only gap/deviation scan of the 0.3.x hardening + FPV-Phase-2 work; lint,
 `mypy --strict`, format, and the test suite are all green — these are design/robustness items.
-- [ ] **[security] `meshsa.llm` server binds `0.0.0.0` with no auth** (`llm/server.py`
-      `DEFAULT_HOST`; mirrored in `flightctl/llm/README.md`). The `/chat` endpoint spends
-      Anthropic tokens and discloses live drone/track positions. Default to `127.0.0.1` + add a
-      `MESHSA_LLM_TOKEN` bearer check. **M2 hardening prerequisite — gates the commanding
-      initiative** (see [ROADMAP.md](ROADMAP.md) Initiative C).
-- [ ] **[robustness] `TakMulticastTransport._recv_loop` has no error recovery** (`transports/tak.py`),
-      unlike the TCP supervisor — a transient socket error silently and permanently stops
-      multicast ingestion. Wrap in `try/except` + WARNING + rebuild.
-- [ ] **[safety] `ArmGuard._last_report` is read/written across methods without a lock**
-      (`fpv/arm_guard.py`); `_emit_blocked` re-reads it and can mismatch. Add a `Lock` or
-      document/enforce the single-thread contract.
-- [ ] **[consistency] `FlightLogger.dropped_records` omits the `"frames"` key**
-      (`fpv/flight_logger.py`) so the manifest never reports `frames: 0`; init all three streams.
+- [x] **[security] `meshsa.llm` server bound `0.0.0.0` with no auth** (`llm/server.py`). Fixed:
+      `DEFAULT_HOST` is now `127.0.0.1`, a `MESHSA_LLM_TOKEN` bearer check gates `/chat`, and the
+      server **fails closed** (refuses to start) on a non-loopback bind without a token. **M2
+      security invariant restored** — was the gate on the commanding initiative
+      (see [ROADMAP.md](ROADMAP.md) Initiative C).
+- [x] **[robustness] `TakMulticastTransport._recv_loop` had no error recovery** (`transports/tak.py`).
+      Fixed: the recv loop now closes the wedged socket, rebuilds via the factory, and backs off via
+      the shared `Backoff` (mirrors the TCP supervisor) instead of dying on a transient error.
+- [x] **[safety] `ArmGuard._last_report` lock** (`fpv/arm_guard.py`) — **re-scoped after review.** No
+      concurrent caller exists today (`update_health` has no non-test caller; no FPV thread touches
+      `ArmGuard`) and the reads already snapshot the reference, so a lock would be speculative. The
+      single-thread/serialize-by-caller contract is now documented in the class; add a `Lock` +
+      concurrent test when the live monitor and RC loop are wired on separate threads (Initiative C).
+- [ ] **[consistency] `FlightLogger.dropped_records` omits the `"events"`/`"frames"` keys**
+      (`fpv/flight_logger.py`) so the manifest omits a `0` for them (cosmetic — drops are still
+      counted via `.get()`); init all four streams.
 - [ ] **[robustness] guard unguarded teardown/parse paths:** `camera.py close()` source close,
-      `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions; and
-      throttle the per-frame WARNING floods in `crsf_source` / `meshtastic_radio`.
+      `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions.
+      (Dropped from this list after verification: there are **no per-frame WARNING floods** in
+      `crsf_source` / `meshtastic_radio` — logging there is already one-per-error, not per-frame.)
 - [ ] **[cleanup] drop `# pragma: no cover` on pure logic** in `fpv/crsf/rc.py` (span==0 guards)
       and source the remaining magic numbers (`rc.py` pad=992, `monitor.py` interval) from config.
 

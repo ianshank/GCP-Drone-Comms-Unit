@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **SA-assistant server no longer exposes an unauthenticated surface by default.**
+  `meshsa.llm` bound `0.0.0.0` with no auth, so `/chat` — which discloses live
+  drone/track positions and spends Anthropic tokens — was reachable off-host. It now
+  binds `127.0.0.1` by default (`DEFAULT_HOST`), accepts a `MESHSA_LLM_TOKEN` bearer
+  token enforced on `/chat` via constant-time compare, and **fails closed**:
+  `validate_bind` refuses to start on a non-loopback host when no token is set. Restores
+  the M2 "no unauthenticated surface by default" invariant (was the gate on the
+  ratified commanding initiative).
+
 ### Added
 - **Prometheus/JSON metrics export.** `RouterMetrics.as_dict()` plus a hand-rolled
   `meshsa.render_prometheus(metrics, transports)` (no new dependency) emit
@@ -25,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   auditable constraints file; `scripts/setup_fts.sh` installs via `uv pip --constraint`.
 
 ### Fixed
+- **`TakMulticastTransport` recovers from receive errors instead of dying.** A transient
+  `recv()` error permanently stopped multicast CoT ingestion (the recv loop had no
+  `try/except`, unlike the TCP supervisor). The loop now closes the wedged socket,
+  rebuilds it via the injected `io_factory`, and backs off via the shared `Backoff`
+  (new `backoff_*`/`sleep` constructor params), tracking rebuilds in a `reconnects`
+  counter.
 - **Prometheus transport label values are now escaped.** `render_prometheus` escaped
   nothing, so a user-configured transport name (`TransportConfig.name`) containing a
   `"`, `\` or newline produced malformed text-exposition output. Names are now escaped
