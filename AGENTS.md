@@ -6,11 +6,13 @@ Tool-specific files such as [CLAUDE.md](CLAUDE.md) and
 avoid drift. When editing inside a subfolder, also read the nearest scoped
 `AGENTS.md`.
 
-**Read [docs/CHARTER.md](docs/CHARTER.md) first** — it is the stable long-term plan
-(vision, scope/non-goals, and invariants that must not drift) that keeps work on track.
-It changes rarely and only by deliberate decision. Put changeable, near-term to-dos in
-[docs/NEXTSTEPS.md](docs/NEXTSTEPS.md), not in the charter. Architecture detail lives in
-[docs/C4.md](docs/C4.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Reading order to stay on track: [docs/CHARTER.md](docs/CHARTER.md) →
+[docs/ROADMAP.md](docs/ROADMAP.md) → the nearest scoped `AGENTS.md` →
+[docs/NEXTSTEPS.md](docs/NEXTSTEPS.md).** CHARTER is the stable scope/non-goals + invariants
+that must not drift; ROADMAP is the stable milestone trajectory. Both change rarely and only
+by deliberate decision — put changeable, near-term to-dos in NEXTSTEPS, not in either.
+Architecture detail lives in [docs/C4.md](docs/C4.md) and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Repository Map
 
@@ -19,7 +21,7 @@ It changes rarely and only by deliberate decision. Put changeable, near-term to-
 | [packages/meshsa](packages/meshsa) | Python framework, codecs, transports, tests, console script |
 | [ops](ops) | Raspberry Pi 5 provisioning and base-node systemd deployment |
 | [hardware](hardware) | 3D-printable hardware assets and generation scripts |
-| [docs](docs) | Architecture and audit/backlog documents |
+| [docs](docs) | Stable plan ([CHARTER](docs/CHARTER.md), [ROADMAP](docs/ROADMAP.md)), architecture (C4/ARCHITECTURE), and audit/backlog documents |
 | [tools](tools) | Makefile shortcuts and runtime Dockerfile |
 | [.agents/skills](.agents/skills) | On-demand playbooks for repeatable agent workflows |
 | [.github/agents](.github/agents) | Focused custom agent modes |
