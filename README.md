@@ -11,9 +11,10 @@ real time.
 > plus the deployment/ops layer (`flightctl/`) that wires it into a real comms unit.
 
 ## What it does
-- **Telemetry → CoT:** a MAVLink autopilot (`mavlink_source`) or a Betaflight FC over MSP
-  (`msp_source`) becomes an **air** track in ATAK, with no core changes — telemetry sources
-  self-register as transports and bridge through the existing `cot` codec.
+- **Telemetry → CoT:** a MAVLink autopilot (`mavlink_source`), a Betaflight FC over MSP
+  (`msp_source`), or an FPV CRSF/ELRS feed (`crsf_source`) becomes an **air** track in ATAK,
+  with no core changes — telemetry sources self-register as transports and bridge through the
+  existing `cot` codec.
 - **Mesh SA bridge:** LoRa (Meshtastic), HaLow 802.11s, and IP mesh exchange versioned
   position/chat envelopes; one node bridges the mesh to a TAK server (FreeTAKServer) and/or
   the ATAK multicast SA group.
@@ -24,6 +25,9 @@ real time.
   `fpv-log-replay`, `fpv-log-convert`. Install with the `fpv` extra:
   `pip install -e "packages/meshsa[fpv]"`. (Pre-flight arm-gating is a deliberate, bounded
   exception to the read-only charter — see [docs/CHARTER.md](docs/CHARTER.md) §3.)
+- **Observability & a read-only SA assistant:** opt-in `/healthz` + `/metrics`
+  (Prometheus/JSON) on the gateway; an optional, **read-only** `meshsa.llm` assistant answers
+  operator questions over live telemetry and TAK tracks (it issues no vehicle commands).
 - **Modular & backward-compatible by construction:** new transports/codecs register via an
   open/closed registry; every wire envelope is `schema_version`-gated; a node tolerates
   configs written for newer/older builds.
@@ -37,7 +41,7 @@ real time.
 | [ops/pi5-node](ops/pi5-node) | Raspberry Pi 5 user-node provisioning (`mesh-up.sh`, `setup_pi5_node.sh`) |
 | [ops/base-service](ops/base-service) | Base-node systemd service unit + install guide |
 | [hardware](hardware) | 3D-printable enclosures (GCS, user nodes, Jetson case) |
-| [docs](docs) | [Charter](docs/CHARTER.md) (stable north-star), [C4](docs/C4.md), [Architecture](docs/ARCHITECTURE.md), [Next steps](docs/NEXTSTEPS.md), [Audit](docs/AUDIT_REPORT.md) |
+| [docs](docs) | [Charter](docs/CHARTER.md) (stable north-star), [Roadmap](docs/ROADMAP.md) (milestone trajectory), [C4](docs/C4.md), [Architecture](docs/ARCHITECTURE.md), [Next steps](docs/NEXTSTEPS.md), [Audit](docs/AUDIT_REPORT.md) |
 | [tools](tools) | `Dockerfile`, `Makefile` |
 | [AGENTS.md](AGENTS.md) | Canonical AI agent operating guide |
 | [.github/workflows](.github/workflows) | CI + release pipelines |
@@ -47,7 +51,7 @@ real time.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e "packages/meshsa[dev]"
-cd packages/meshsa && pytest          # 165 tests, 100% line+branch coverage
+cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (currently ~99%)
 ```
 
 Drone/FC telemetry → CoT (no hardware needed — uses the bundled simulator):
@@ -72,8 +76,9 @@ meshsa-base --port /dev/ttyUSB0 --fts-host 127.0.0.1 --lat 37.0 --lon -122.0 --c
 - **Pi 5 user node** (HaLow mesh + ADS-B): [ops/pi5-node/README_pi5_node.md](ops/pi5-node/README_pi5_node.md).
 
 ## For contributors and AI agents
-Start with [docs/CHARTER.md](docs/CHARTER.md) (the stable long-term plan that does not
-change with each task) and [AGENTS.md](AGENTS.md). See [CONTRIBUTING.md](CONTRIBUTING.md),
+Start with [docs/CHARTER.md](docs/CHARTER.md) (stable scope + invariants) and
+[docs/ROADMAP.md](docs/ROADMAP.md) (stable milestone trajectory) — neither changes per task —
+then [AGENTS.md](AGENTS.md). See [CONTRIBUTING.md](CONTRIBUTING.md),
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md); security disclosures via [SECURITY.md](SECURITY.md).
 
 ## License

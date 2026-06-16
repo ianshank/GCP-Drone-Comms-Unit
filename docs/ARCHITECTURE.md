@@ -120,8 +120,11 @@ Design choices that keep it consistent with the framework invariants:
   aircraft becomes an ATAK **air** track with no router/codec edits, per the open/closed
   invariant (same injection + `# pragma: no cover` hardware pattern as `msp_source`). Adding
   the `GpsSensor` telemetry type made it a new persisted dataset record, so `DATASET_SCHEMA`
-  bumped **1 → 2** (v1 datasets still read; older builds correctly reject a v2 dataset). The
-  `frames.jsonl`/`video` manifest field ship as a stable stub for the Phase 2 camera with
-  **no** recording code.
+  bumped **1 → 2** (v1 datasets still read; older builds correctly reject a v2 dataset).
+- **Camera capture (Phase 2, shipped):** a `CaptureWriter` daemon thread (`fpv/camera.py`)
+  reads frames from an injected `CameraSource` and writes real records to the
+  `frames.jsonl` stream with the manifest `video` entry populated — additive, so
+  `DATASET_SCHEMA` stays **2**. The capture backend is the only `# pragma: no cover` glue
+  (swapped for v4l2/GStreamer on the production Jetson).
 - **Command authority** is limited to a pre-flight arm interlock (`ArmGuard`) under the
   CHARTER §3 carve-out; the monitor never intervenes in flight.

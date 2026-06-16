@@ -19,8 +19,10 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 
 # Virtualenvs
@@ -42,6 +44,15 @@ archive/
 docs/
 hardware/
 flightctl/
+ops/
 *.stl
 *.png
 *.zip
+
+# Runtime / FPV capture artifacts
+*.log
+flight-logs/
+*.parquet
+*.mp4
+*.h264
+*.mkv
