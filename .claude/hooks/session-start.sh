@@ -23,7 +23,7 @@ cd "$ROOT"
 # Best-effort pip upgrade: a Debian-managed pip cannot uninstall itself, so never
 # let that abort the hook (the existing pip installs the package fine).
 python -m pip install --quiet --upgrade pip 2>/dev/null || true
-pip install --quiet -e "packages/meshsa[dev]"
+python -m pip install --quiet -e "packages/meshsa[dev]"
 
 # Gate invocation note: this environment ships `mypy`/`pytest` as isolated uv-tool
 # installs that don't see the project deps. Run the gates from packages/meshsa via
