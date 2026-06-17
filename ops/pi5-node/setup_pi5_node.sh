@@ -51,10 +51,14 @@ echo "[*] dump1090 (ADS-B). If dump1090-fa isn't packaged, build readsb/dump1090
 sudo apt install -y dump1090-mutability || echo "  (install a dump1090 variant manually)"
 
 echo "[*] FreeTAKServer via Docker compose -> /opt/fts"
+# Pin to a verified release for reproducible installs; `:latest` drifts on every
+# upstream push. Override: FTS_IMAGE=ghcr.io/freetakteam/freetakserver:<tag>
+# TODO(pin): replace the default with a known-good FTS release tag.
+FTS_IMAGE="${FTS_IMAGE:-ghcr.io/freetakteam/freetakserver:latest}"
 sudo mkdir -p /opt/fts && sudo tee /opt/fts/docker-compose.yml >/dev/null <<YML
 services:
   fts:
-    image: ghcr.io/freetakteam/freetakserver:latest   # VERIFY current tag
+    image: ${FTS_IMAGE}
     network_mode: host
     restart: unless-stopped
     environment:

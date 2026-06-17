@@ -5,15 +5,14 @@ position (MSP_RAW_GPS) and turns each sample into a telemetry frame for the
 ``telemetry`` codec — the same seam as :mod:`meshsa.transports.mavlink_source`, so a
 drone/FC shows up as an ATAK track with no core changes.
 
-Design:
+Built on :class:`~meshsa.transports.polling_source.PollingSourceTransport` (which
+owns the reader thread, event-based shutdown, link-health observability and the
+guarded resource close). This module supplies only the MSP specifics:
   * The MSP request/response poll (hardware/YAMSPy specific) is an **injectable**
     ``poll`` callable; its default talks to a real ``yamspy.MSPy`` board and is
     ``# pragma: no cover``. The board itself is injected too (``board`` /
-    ``board_factory``). So the transport plumbing — reader thread, framing,
-    ingest, lifecycle — is fully tested with fakes; no FC, no serial, no socat.
-  * Polling runs on a dedicated thread (MSP is blocking serial I/O); each sample
-    crosses into the asyncio loop via ``call_soon_threadsafe`` onto the shared
-    drop-counting ``_ingest_nowait``.
+    ``board_factory``). So the transport plumbing is fully tested with fakes; no
+    FC, no serial, no socat.
   * Nothing is hard-coded: device/baud, poll interval, identity, coordinate/alt
     scaling and the clock are parameters/config options. Coordinate scaling is
     configurable because MSP GPS units vary by firmware (Betaflight reports lat/lon
@@ -29,16 +28,14 @@ Design:
 from __future__ import annotations
 
 import json
-import threading
-import time
 from collections.abc import Callable
 from typing import Any
 
 import structlog
 
-from ..protocols import Clock, SystemClock
+from ..protocols import Clock
 from ..registry import transport_registry
-from .base import AbstractTransport
+from .polling_source import PollingSourceTransport
 
 _log = structlog.get_logger("meshsa.msp")
 
@@ -232,7 +229,16 @@ def build_telemetry_frame(
     return json.dumps(frame).encode("utf-8")
 
 
-class MspSourceTransport(AbstractTransport):
+class MspSourceTransport(PollingSourceTransport):
+    """MSP flight-source on the shared :class:`PollingSourceTransport` plumbing.
+
+    Adds the MSP specifics on top of the base reader thread: the (injectable) poll,
+    coordinate/alt scaling, the optional GPS-less fallback position, and telemetry
+    ``remarks`` — all funnelled through the pure :func:`build_telemetry_frame`.
+    """
+
+    _thread_prefix = "msp"
+
     def __init__(
         self,
         name: str = "msp",
@@ -250,14 +256,23 @@ class MspSourceTransport(AbstractTransport):
         poll_interval_s: float = 1.0,
         clock: Clock | None = None,
         queue_maxsize: int = 1000,
+        log_every_n: int = 100,
+        log_interval_s: float = 30.0,
         **_options: Any,
     ) -> None:
-        super().__init__(name, queue_maxsize)
-        self._board = board
-        self._factory = board_factory or _default_board_factory(_options)
-        self._poll = poll or _default_poll
-        self._source_uid = source_uid
-        self._callsign = callsign or source_uid
+        super().__init__(
+            name,
+            resource=board,
+            factory=board_factory or _default_board_factory(_options),
+            source_uid=source_uid,
+            callsign=callsign,
+            clock=clock,
+            queue_maxsize=queue_maxsize,
+            poll_wait_s=poll_interval_s,
+            log_every_n=log_every_n,
+            log_interval_s=log_interval_s,
+        )
+        self._poll_fn = poll or _default_poll
         self._coord_scale = coord_scale
         self._alt_scale = alt_scale
         # Fallback position (decimal degrees / metres, NOT scaled by coord_scale) for a
@@ -265,46 +280,10 @@ class MspSourceTransport(AbstractTransport):
         self._fallback_lat = fallback_lat
         self._fallback_lon = fallback_lon
         self._fallback_hae = fallback_hae
-        self._poll_interval = poll_interval_s
-        self._clock = clock or SystemClock()
-        self._thread: threading.Thread | None = None
-        self._reading = False
-        self._seq = 0
 
-    async def start(self) -> None:
-        await super().start()
-        loop = self._get_loop()
-        if self._board is None:
-            self._board = self._factory()  # pragma: no cover - exercised via injection
-        self._reading = True
-        self._thread = threading.Thread(
-            target=self._reader,
-            args=(loop, self._board),
-            name=f"msp-{self.name}",
-            daemon=True,
-        )
-        self._thread.start()
-
-    @staticmethod
-    def _get_loop() -> Any:
-        import asyncio
-
-        return asyncio.get_running_loop()
-
-    def _reader(self, loop: Any, board: Any) -> None:
-        while self._reading:
-            try:
-                sample = self._poll(board)
-            except Exception:
-                _log.warning("msp poll error; stopping reader", transport=self.name)
-                break
-            frame = self._to_frame(sample)
-            if frame is not None:
-                loop.call_soon_threadsafe(self._ingest_nowait, frame)
-            time.sleep(self._poll_interval)
-
-    def _to_frame(self, sample: dict[str, Any] | None) -> bytes | None:
-        # Advance the sequence only when a frame is actually produced (unchanged behaviour).
+    def _poll(self, resource: Any) -> list[bytes]:
+        sample = self._poll_fn(resource)
+        # Advance the sequence only when a frame is actually produced.
         frame = build_telemetry_frame(
             sample,
             seq=self._seq + 1,
@@ -317,27 +296,10 @@ class MspSourceTransport(AbstractTransport):
             fallback_lon=self._fallback_lon,
             fallback_hae=self._fallback_hae,
         )
-        if frame is not None:
-            self._seq += 1
-        return frame
-
-    async def send(self, data: bytes) -> None:
-        # Receive-only source.
-        return None
-
-    async def stop(self) -> None:
-        self._reading = False
-        if self._board is not None:
-            close = getattr(self._board, "close", None)
-            if callable(close):
-                try:
-                    close()
-                except Exception:
-                    _log.debug("msp board close error", transport=self.name)
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-            self._thread = None
-        await super().stop()
+        if frame is None:
+            return []
+        self._seq += 1
+        return [frame]
 
 
 @transport_registry.register("msp_source")

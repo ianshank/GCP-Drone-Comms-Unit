@@ -34,8 +34,9 @@ from typing import Any, Protocol
 import structlog
 
 from ..pacing import Pacer
-from ..protocols import Clock, SleepFn, SystemClock
+from ..protocols import Clock, SystemClock
 from ..registry import transport_registry
+from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
 
 _log = structlog.get_logger("meshsa.tak")
@@ -160,9 +161,9 @@ class TakTcpTransport(AbstractTransport):
         self._read_size = read_size
         self._delimiter = delimiter
         self._reconnect = reconnect
-        self._backoff_initial = backoff_initial_s
-        self._backoff_max = backoff_max_s
-        self._backoff_factor = backoff_factor
+        self._backoff = Backoff(
+            initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
         self._sleep = sleep or asyncio.sleep
         # Optional outbound pacing (minimum-hold) so a fast source does not overrun a
         # rate-limited FTS. Disabled by default -> send() is byte-for-byte unchanged.
@@ -199,17 +200,16 @@ class TakTcpTransport(AbstractTransport):
         self._task = asyncio.create_task(self._supervise())
 
     async def _supervise(self) -> None:
-        backoff = self._backoff_initial
+        self._backoff.reset()
         while not self._stopping:
             if self._reader is None:
                 try:
                     self._reader, self._writer = await self._connector()
                 except Exception:
                     _log.warning("tak_tcp connect failed", transport=self.name)
-                    await self._sleep(backoff)
-                    backoff = min(backoff * self._backoff_factor, self._backoff_max)
+                    await self._backoff.sleep_and_advance()
                     continue
-                backoff = self._backoff_initial
+                self._backoff.reset()
                 self.reconnects += 1
             try:
                 await self._read_loop(self._reader)
@@ -220,8 +220,7 @@ class TakTcpTransport(AbstractTransport):
                 self._reader = None
             if not self._reconnect:
                 break
-            await self._sleep(backoff)
-            backoff = min(backoff * self._backoff_factor, self._backoff_max)
+            await self._backoff.sleep_and_advance()
 
     async def _read_loop(self, reader: asyncio.StreamReader) -> None:
         framer = CotFramer()
@@ -314,6 +313,10 @@ class TakMulticastTransport(AbstractTransport):
         group: str = "239.2.3.1",
         port: int = 6969,
         iface: str = "0.0.0.0",
+        backoff_initial_s: float = 1.0,
+        backoff_max_s: float = 30.0,
+        backoff_factor: float = 2.0,
+        sleep: SleepFn | None = None,
         queue_maxsize: int = 1000,
         **_: Any,
     ) -> None:
@@ -321,18 +324,56 @@ class TakMulticastTransport(AbstractTransport):
         self._io_factory = io_factory or (lambda: _default_multicast_io(group, port, iface))
         self._io: DatagramIO | None = None
         self._task: asyncio.Task[None] | None = None
+        self._stopping = False
+        self._backoff = Backoff(
+            initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
+        #: Times the recv loop rebuilt the socket after an error (observability).
+        self.reconnects = 0
 
     async def start(self) -> None:
         await super().start()
+        self._stopping = False
         self._io = self._io_factory()
         self._task = asyncio.create_task(self._recv_loop())
 
     async def _recv_loop(self) -> None:
-        assert self._io is not None
-        while True:
-            data = await self._io.recv()
-            if data:
-                await self._ingest(data)
+        # Mirror the TCP supervisor: a transient recv error must not permanently
+        # kill multicast ingestion. On error, close the wedged socket, back off,
+        # and rebuild it. The rebuild is guarded too — if the interface is still
+        # hard-down, ``_io_factory`` (socket bind + IP_ADD_MEMBERSHIP) raises, and
+        # an unguarded rebuild would kill this task forever; instead we log, back
+        # off, and retry the factory on the next pass so ingestion self-heals once
+        # the interface returns.
+        self._backoff.reset()
+        while not self._stopping:
+            if self._io is None:
+                try:
+                    self._io = self._io_factory()
+                except Exception:
+                    _log.warning("tak_multicast rebuild failed; retrying", transport=self.name)
+                    await self._backoff.sleep_and_advance()
+                    continue
+                self._backoff.reset()
+                self.reconnects += 1
+            try:
+                data = await self._io.recv()
+                if data:
+                    await self._ingest(data)
+                self._backoff.reset()
+            except Exception:
+                _log.warning("tak_multicast recv error; rebuilding", transport=self.name)
+                self._close_io()
+                await self._backoff.sleep_and_advance()
+
+    def _close_io(self) -> None:
+        io, self._io = self._io, None
+        if io is None:
+            return
+        try:
+            io.close()
+        except Exception:  # best-effort during error recovery / shutdown
+            _log.debug("tak_multicast io close error", transport=self.name)
 
     async def send(self, data: bytes) -> None:
         if self._io is None:
@@ -340,14 +381,13 @@ class TakMulticastTransport(AbstractTransport):
         self._io.sendto(data)
 
     async def stop(self) -> None:
+        self._stopping = True
         if self._task is not None:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
-        if self._io is not None:
-            self._io.close()
-            self._io = None
+        self._close_io()
         await super().stop()
 
 

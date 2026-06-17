@@ -134,3 +134,27 @@ async def test_stop_handles_close_error():
     t = MavlinkSourceTransport(name="d", connection=conn, recv_timeout_s=0.05)
     await t.start()
     await t.stop()  # close() raises; transport swallows it
+
+
+async def test_coordinate_and_alt_scales_are_configurable():
+    # Mirrors msp_source: the GPS wire scales are ctor params, not hard-coded.
+    # With identity scales, raw values are already in engineering units.
+    conn = FakeConn()
+    t = MavlinkSourceTransport(
+        name="d",
+        connection=conn,
+        source_uid="uav-1",
+        coord_scale=1.0,
+        alt_scale=1.0,
+        recv_timeout_s=0.05,
+    )
+    await t.start()
+    conn.feed(FakeMsg(12, -34, 100))  # already degrees / metres under identity scales
+    try:
+        frame = await asyncio.wait_for(t.stream().__anext__(), timeout=2.0)
+    finally:
+        await t.stop()
+    pos = TelemetryCodec().decode(frame).payload["position"]
+    assert pos["lat"] == pytest.approx(12.0)
+    assert pos["lon"] == pytest.approx(-34.0)
+    assert pos["hae"] == pytest.approx(100.0)

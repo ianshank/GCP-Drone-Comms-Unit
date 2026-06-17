@@ -25,10 +25,53 @@ available (LoRa, HaLow, IP, cellular/VPN), with or without internet.
 ops layer (gateway, FreeTAKServer, MAVLink proxy, simulators, deployment scripts), and the
 hardware enclosures.
 
-**Out of scope (non-goals):** flying/controlling aircraft (we are read-only on telemetry,
-not a ground control station that commands vehicles); running the ATAK Android app on the
-unit (ATAK runs on phones); becoming a general message broker; replacing the autopilot,
-FC firmware, or the TAK server.
+**Out of scope (non-goals):** flying/controlling aircraft (we are read-only on telemetry
+**by default**, not a general ground control station — see the bounded carve-outs below:
+pre-flight arm-gating, and the supervised-commanding amendment); running the ATAK
+Android app on the unit (ATAK runs on
+phones); becoming a general message broker; replacing the autopilot, FC firmware, or the
+TAK server.
+
+> **Carve-out (deliberate amendment — ratified by the maintainer on 2026-06-12 per §6):
+> pre-flight arm-gating only.** The `meshsa.fpv` ground-side subsystem may transmit RC frames for the
+> single purpose of a **pre-flight safety interlock**: `ArmGuard` gates the arm RC channel
+> low until pre-flight health checks pass. Once the arm channel goes high, `ArmGuard` never
+> commands or modifies any RC channel thereafter (including arm); the latch resets only when
+> the operator commands the arm channel low (disarm). If health degrades after arm, clamping
+> resumes only after that operator-driven disarm. This is a pre-flight interlock only — it
+> **never disarms in flight** and performs **no in-flight intervention** (no auto-RTH,
+> auto-land, throttle, or auto-disarm; degraded-link authority stays with the ELRS RF
+> failsafe → Betaflight `failsafe_procedure`). This narrowly-scoped exception does not make
+> the unit a general ground control station; everything else in this non-goal stands.
+
+> **Carve-out (deliberate amendment — ratified by the maintainer on 2026-06-16 per §6):
+> supervised two-way commanding.** The unit MAY originate a **bounded,
+> human-supervised** set of MAVLink commands to a connected vehicle, lifting the blanket
+> "read-only" stance for those commands only. Constraints (all required):
+> - **Bounded command set, whitelist-first.** Begin with low-risk commands (`SET_MODE`,
+>   `Return-to-Launch`), then arm/disarm. Mission/waypoint autonomy, swarm, and BVLOS
+>   autonomy stay out of scope until separately ratified.
+> - **Added via the registry (Invariant 1).** Commanding ships as a write-capable transport
+>   registered through `transport_registry` (and a command codec) — the router, node, and
+>   models are not edited. Positional commands use `COMMAND_INT`; each command is confirmed
+>   via `COMMAND_ACK`/`MAV_RESULT` with **bounded retries** on a missing ACK.
+> - **Safety/auth/audit are mandatory, not optional.** Every command requires (a) explicit
+>   per-command **operator confirmation**, (b) **command-channel authentication**, (c) an
+>   **append-only audit log**, and (d) `health_all_ok`-style preconditions before arm. The
+>   `MAV_CMD_COMPONENT_ARM_DISARM` **force path (param2 = 21196**, which bypasses interlocks
+>   including **in-flight disarm**) is OFF by default and gated behind a separate explicit
+>   confirmation.
+> - **LLM stays read-only.** `meshsa.llm` issues **no** commands autonomously; any future
+>   command tool requires a human confirmation in the loop.
+> - **Sequenced after hardening.** No command surface ships before M2 transport auth/TLS
+>   lands; an unauthenticated command surface (e.g. raw `mavlink2rest` on `:8088`) must never
+>   be exposed in a deployment.
+>
+> This remains **bounded supervised commanding**, not a general autonomous GCS. Ratification
+> authorizes the initiative under the constraints above; it does **not** flip a switch — no
+> command-capable code path is enabled by default, and none ships until M2 hardening (TLS +
+> transport auth) and the safety/auth/audit layer land. Mission/waypoint autonomy, swarm, and
+> BVLOS autonomy remain out of scope pending a separate amendment.
 
 ## 4. Invariants (must not drift — enforce in review)
 1. **Open/closed extensibility.** New mediums and wire formats are added through
@@ -49,6 +92,9 @@ FC firmware, or the TAK server.
    live in `*.env`/runtime config, never committed.
 
 ## 5. Long-term roadmap (themes, not dates)
+> The detailed milestone trajectory lives in [ROADMAP.md](ROADMAP.md); the themes below are
+> the summary. Keep the two aligned — milestone detail changes there, not here.
+
 - **M1 — Telemetry→CoT MVP (done):** `mavlink_source` + `msp_source` + `telemetry` codec →
   CoT air tracks; FreeTAKServer on the unit; verified end-to-end on hardware.
 - **M2 — Hardening:** TLS CoT (`:8089`) + signed ATAK data packages; auth; rate-limit/pacing

@@ -1,0 +1,25 @@
+# =============================================================================
+# fts-constraints.txt — dependency pins VERIFIED to boot FreeTAKServer 2.x on this
+# box (Jetson Orin Nano, JetPack 6.2, aarch64), discovered by actually starting FTS.
+#
+# Passed to `uv pip install --constraint` by flightctl/scripts/setup_fts.sh so the
+# pins live in one auditable place instead of being inlined on the install line.
+# A constraint only bounds a package's version *if* it is (transitively) installed;
+# it does not by itself pull a package in — `requests` is therefore also named on
+# the install line so it is actually installed (FTS forgets to declare it).
+#
+# Why each pin:
+#   * setuptools<81 — FTS/digitalpy import pkg_resources, removed in setuptools 81.
+#   * requests      — a runtime dep FTS forgets to declare (it tries to self-pip3
+#                     install it at start and fails on a venv without pip on PATH).
+#   * opentelemetry-{api,sdk}==1.20.0 + semantic-conventions==0.41b0 — digitalpy
+#                     0.3.13.x sets BatchSpanProcessor.span_exporter, which became a
+#                     read-only property in opentelemetry>=~1.21, crashing startup.
+#                     1.20.0 (and its matching 0.41b0 semantic-conventions) is the
+#                     last combination that works.
+# =============================================================================
+setuptools<81
+requests
+opentelemetry-api==1.20.0
+opentelemetry-sdk==1.20.0
+opentelemetry-semantic-conventions==0.41b0

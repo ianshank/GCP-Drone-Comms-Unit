@@ -15,9 +15,12 @@ MSPy.log
 .pytest_cache/
 .coverage
 .coverage.*
+coverage.xml
+*.cover
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 
 # IDE / OS
 .idea/
@@ -28,6 +31,17 @@ Thumbs.db
 # Local env files
 *.env
 !*.env.example
+
+# Runtime / FPV capture artifacts (flight logger, log-convert, camera)
+*.log
+flight-logs/
+*.parquet
+*.mp4
+*.h264
+*.mkv
+
+# Tooling
+.python-version
 
 # Build outputs
 *.whl

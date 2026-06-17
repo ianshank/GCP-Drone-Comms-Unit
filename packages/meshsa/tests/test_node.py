@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from meshsa import LoopbackBus, MessageKind, NodeConfig, NodeTier, Position, build_node
 
 
@@ -93,6 +95,10 @@ def test_transport_option_overrides_router_queue_maxsize():
 
 def test_build_node_forwards_mesh_config_to_meshtastic():
     # MeshConfig was dead config; build_node now threads it to the radio transport.
+    # Building the real Meshtastic transport pulls in pypubsub (the [meshtastic]
+    # extra); skip cleanly when it isn't installed so the lean [dev]-only CI stays
+    # green rather than erroring on an unrelated optional dependency.
+    pytest.importorskip("pubsub")
     cfg = NodeConfig(
         uid="u",
         callsign="U",

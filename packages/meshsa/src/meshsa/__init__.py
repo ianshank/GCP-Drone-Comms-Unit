@@ -11,7 +11,7 @@ from .errors import (
     UnknownComponentError,
 )
 from .health import health_snapshot
-from .metrics import RouterMetrics
+from .metrics import RouterMetrics, render_prometheus
 from .models import ChatPayload, Envelope, MessageKind, NodeInfo, NodeTier, PliPayload, Position
 from .node import Node, build_node
 from .plugins import load_plugins
@@ -40,6 +40,7 @@ from .registry import Registry, codec_registry, transport_registry
 from .router import Router
 from .telemetry import TelemetryCodec
 from .transports import (
+    CrsfSourceTransport,
     LoopbackBus,
     LoopbackTransport,
     MavlinkSourceTransport,
@@ -100,6 +101,7 @@ __all__ = [
     "RoundRobinTelemetry",
     "make_cot_publisher",
     "load_mapping",
+    "render_prometheus",
     "health_snapshot",
     "Node",
     "build_node",
@@ -107,6 +109,7 @@ __all__ = [
     "LoopbackBus",
     "LoopbackTransport",
     "NullTransport",
+    "CrsfSourceTransport",
     "MavlinkSourceTransport",
     "MspSourceTransport",
     "MeshtasticTransport",

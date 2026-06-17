@@ -174,6 +174,14 @@ def test_registry_factory_builds_with_injection():
     assert isinstance(t, MeshtasticTransport) and t.name == "lora"
 
 
+def test_construct_without_pubsub_defers_resolution():
+    # Constructing the transport must not import/resolve pypubsub (so the base
+    # [dev] env without pypubsub can build a node); subscribe/unsubscribe stay
+    # unresolved until start(). Guards against the eager-import regression.
+    t = MeshtasticTransport(name="lora", interface_factory=lambda: FakeIface())
+    assert t._subscribe is None and t._unsubscribe is None
+
+
 # ---- reconnect / backoff ----
 async def test_reconnects_after_connection_lost():
     i1, i2 = FakeIface(), FakeIface()
@@ -344,3 +352,17 @@ def test_default_provisioner_no_region_skips_write():
     iface = type("_I", (), {"localNode": _FakeNode()})()
     _default_provisioner(iface, {"region": None, "channel": None, "psk": None, "freq_khz": None})
     assert iface.localNode.written == []
+
+
+def test_construct_does_not_resolve_pubsub(monkeypatch):
+    # pypubsub is resolved lazily in start(), not __init__, so a transport can be
+    # built (e.g. for config validation in build_node) without the optional dep.
+    import meshsa.transports.meshtastic_radio as mr
+
+    def _boom():  # pragma: no cover - must never be called at construction
+        raise AssertionError("pypubsub resolved at construction")
+
+    monkeypatch.setattr(mr, "_default_pubsub", _boom)
+    transport = mr.MeshtasticTransport(name="lora")
+    assert transport.name == "lora"
+    assert transport._subscribe is None and transport._unsubscribe is None
