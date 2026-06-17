@@ -149,6 +149,16 @@ class FakeSleep:
         self.calls.append(secs)
 
 
+class _FixedClock:
+    """now() never advances on its own — pacing math is fully controlled here."""
+
+    def __init__(self, t: float = 0.0):
+        self.t = t
+
+    def now(self) -> float:
+        return self.t
+
+
 def _conn(reader, writer):
     async def connect():
         return reader, writer
@@ -177,6 +187,26 @@ async def _wait(cond, tries=300):
 
 
 # ============================ TCP transport ============================
+async def test_pacing_delays_sends_after_the_burst():
+    reader, writer = QueueReader(), FakeWriter()
+    clock = _FixedClock()
+    sleep = FakeSleep()
+    t = TakTcpTransport(
+        connector=lambda: _conn(reader, writer),
+        pacing=True,
+        pacing_rate_hz=10.0,
+        pacing_burst=1,
+        clock=clock,
+        sleep=sleep,
+    )
+    await t.start()
+    await t.send(b"<a/></event>")  # initial burst token -> no pacing wait
+    await t.send(b"<b/></event>")  # bucket empty -> paced one interval (0.1 s)
+    await t.stop()
+    assert sleep.calls == [pytest.approx(0.1)]
+    assert writer.buf == b"<a/></event><b/></event>"
+
+
 async def test_tcp_send_writes_with_delimiter():
     reader, writer = QueueReader(), FakeWriter()
     t = TakTcpTransport(connector=lambda: _conn(reader, writer), delimiter=b"\n", sleep=FakeSleep())

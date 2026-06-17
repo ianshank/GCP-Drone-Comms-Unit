@@ -19,9 +19,11 @@ from typing import Any, Protocol
 
 import structlog
 
+from ..protocols import Clock
 from ..registry import transport_registry
 from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
+from .pacing import Pacer
 
 _log = structlog.get_logger("meshsa.tak")
 
@@ -124,6 +126,10 @@ class TakTcpTransport(AbstractTransport):
         tls_verify: bool = True,
         tls_server_hostname: str | None = None,
         ssl_context_factory: Callable[[], ssl.SSLContext] | None = None,
+        clock: Clock | None = None,
+        pacing: bool = False,
+        pacing_rate_hz: float = 10.0,
+        pacing_burst: int = 1,
         read_size: int = 4096,
         delimiter: bytes = b"",
         reconnect: bool = True,
@@ -167,6 +173,13 @@ class TakTcpTransport(AbstractTransport):
         self._reconnect = reconnect
         self._backoff = Backoff(
             initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
+        #: Optional outbound pacer (token bucket) so a fast track stream cannot
+        #: overrun a rate-sensitive sink like FreeTAKServer. Off unless configured.
+        self._pacer = (
+            Pacer(rate_hz=pacing_rate_hz, burst=pacing_burst, clock=clock, sleep=sleep)
+            if pacing
+            else None
         )
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
@@ -241,6 +254,8 @@ class TakTcpTransport(AbstractTransport):
         writer = self._writer
         if writer is None:
             return  # transiently disconnected; best-effort drop
+        if self._pacer is not None:
+            await self._pacer.acquire()
         try:
             writer.write(data + self._delimiter)
             await writer.drain()
