@@ -221,13 +221,13 @@ do_start() {
   ok "stack up (FC_MODE=$FC_MODE). URLs:"
   printf '   FTS Web UI    http://%s:%s/   (login admin/password)\n' "${LAN_IP:-127.0.0.1}" "$FTS_UI_PORT"
   printf '   WebMap        http://%s:%s/tak-map/\n' "${LAN_IP:-127.0.0.1}" "$WEBMAP_PORT"
-  [ "$FC_MODE" != msp ] && \
+  [ "$FC_MODE" = sim ] && \
     printf '   mavlink2rest  http://%s:%s/\n' "${LAN_IP:-127.0.0.1}" "$M2R_PORT"
   printf '   TAK/CoT       %s:%s  (point ATAK here)\n' "${LAN_IP:-127.0.0.1}" "$FTS_COT_PORT"
   if [ "$OPEN_BROWSER" = 1 ]; then
     open_url "http://127.0.0.1:$FTS_UI_PORT/"
     open_url "http://127.0.0.1:$WEBMAP_PORT/tak-map/"
-    [ "$FC_MODE" != msp ] && open_url "http://127.0.0.1:$M2R_PORT/"
+    [ "$FC_MODE" = sim ] && open_url "http://127.0.0.1:$M2R_PORT/"
   fi
 }
 

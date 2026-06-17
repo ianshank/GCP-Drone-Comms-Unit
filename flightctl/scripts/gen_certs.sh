@@ -67,7 +67,8 @@ openssl pkcs12 -export -in atak.crt -inkey atak.key -certfile ca.pem \
 echo "[5/5] ATAK data-package zip"
 cp ca.pem atak.p12 datapackage/certs/
 # Minimal MANIFEST + connection pref so ATAK auto-imports the cert + server entry.
-cat > datapackage/MANIFEST/manifest.xml <<'XML' 2>/dev/null || mkdir -p datapackage/MANIFEST && cat > datapackage/MANIFEST/manifest.xml <<'XML'
+mkdir -p datapackage/MANIFEST
+cat > datapackage/MANIFEST/manifest.xml <<'XML'
 <MissionPackageManifest version="2">
   <Configuration>
     <Parameter name="uid" value="flightctl-tls"/>

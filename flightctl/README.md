@@ -180,12 +180,12 @@ repo**.
 ## Quick local test (no hardware, no services) — works today
 ```bash
 # the meshsa SSD venv already has pymavlink? if not: uv pip install pymavlink (after Phase 1)
-cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # 181 tests, 100% cov
+cd packages/meshsa && /mnt/ssd/venvs/meshsa/bin/python -m pytest -q   # full suite, 100% cov
 ```
 
 ## What is already done vs. what needs root
 
-**Done & verified (no sudo, all on the SSD):** branch + code + 181 tests at 100% cov;
+**Done & verified (no sudo, all on the SSD):** branch + code + full suite at 100% cov;
 `mavp2p` v1.3.3 arm64 staged at `/mnt/ssd/flightctl/bin/mavp2p`; `pymavlink`+`yamspy`
 installed in `/mnt/ssd/venvs/meshsa` (live MAVLink→CoT run confirmed); FreeTAKServer
 installed in a uv-built Python-3.11 venv at `/mnt/ssd/venvs/fts` (entrypoint

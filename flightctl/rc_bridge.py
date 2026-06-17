@@ -49,7 +49,7 @@ _log = structlog.get_logger("flightctl.rc_bridge")
 def _log_future_error(fut: Any) -> None:  # pragma: no cover - loop-thread callback
     exc = fut.exception()
     if exc is not None:
-        _log.warning("cot send failed", err=str(exc))
+        _log.warning("cot send failed", exc_info=exc)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

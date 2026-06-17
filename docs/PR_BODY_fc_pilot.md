@@ -39,7 +39,7 @@ after any failsafe**, and **disarms on shutdown**. All bench/HITL — USB-tether
 - **Held before motor spin**: the props-off arm test is the one remaining bench step (see NEXTSTEPS).
 
 ## Quality
-- **233 tests, 100% line+branch coverage**; `mypy --strict` + `ruff`/`ruff format` clean; wheel/sdist build.
+- **Full suite, 100% line+branch coverage**; `mypy --strict` + `ruff`/`ruff format` clean; wheel/sdist build.
 - New integration/e2e/regression suites (no hardware): MSP fix/fallback/remarks → CoT air track
   through `build_node`; the shipped configs build and honour the AETR channel order (pins the
   throttle/yaw bug caught on the bench); full pilot arm/failsafe lifecycle through the loop;

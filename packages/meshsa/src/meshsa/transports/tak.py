@@ -167,6 +167,10 @@ class TakTcpTransport(AbstractTransport):
         self._sleep = sleep or asyncio.sleep
         # Optional outbound pacing (minimum-hold) so a fast source does not overrun a
         # rate-limited FTS. Disabled by default -> send() is byte-for-byte unchanged.
+        # A negative interval is almost certainly a config mistake (it would silently
+        # disable pacing), so fail fast instead.
+        if pace_min_interval_s < 0:
+            raise ValueError(f"pace_min_interval_s must be >= 0, got {pace_min_interval_s}")
         self._pacer = (
             Pacer(
                 min_interval_s=pace_min_interval_s,

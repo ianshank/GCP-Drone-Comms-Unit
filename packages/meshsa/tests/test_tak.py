@@ -630,6 +630,15 @@ async def test_tcp_send_unpaced_by_default():
     await t.stop()
 
 
+def test_tcp_negative_pace_interval_rejected():
+    # A negative interval silently disabled pacing; it's almost certainly a config
+    # mistake and must fail fast at construction.
+    with pytest.raises(ValueError, match="pace_min_interval_s must be >= 0"):
+        TakTcpTransport(
+            connector=lambda: _conn(QueueReader(), FakeWriter()), pace_min_interval_s=-1.0
+        )
+
+
 async def test_e2e_tls_option_plumbs_through_build_node(clock, ids):
     # The `tls` option round-trips through TransportConfig -> registry -> constructor;
     # the injected connector keeps it hermetic (no real TLS socket).
