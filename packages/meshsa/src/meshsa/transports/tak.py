@@ -246,12 +246,24 @@ class TakMulticastTransport(AbstractTransport):
 
     async def _recv_loop(self) -> None:
         # Mirror the TCP supervisor: a transient recv error must not permanently
-        # kill multicast ingestion. On error, close the wedged socket, rebuild it,
-        # and back off before retrying so a hard-down interface doesn't hot-spin.
+        # kill multicast ingestion. On error, close the wedged socket, back off,
+        # and rebuild it. The rebuild is guarded too — if the interface is still
+        # hard-down, ``_io_factory`` (socket bind + IP_ADD_MEMBERSHIP) raises, and
+        # an unguarded rebuild would kill this task forever; instead we log, back
+        # off, and retry the factory on the next pass so ingestion self-heals once
+        # the interface returns.
         self._backoff.reset()
         while not self._stopping:
+            if self._io is None:
+                try:
+                    self._io = self._io_factory()
+                except Exception:
+                    _log.warning("tak_multicast rebuild failed; retrying", transport=self.name)
+                    await self._backoff.sleep_and_advance()
+                    continue
+                self._backoff.reset()
+                self.reconnects += 1
             try:
-                assert self._io is not None
                 data = await self._io.recv()
                 if data:
                     await self._ingest(data)
@@ -260,10 +272,6 @@ class TakMulticastTransport(AbstractTransport):
                 _log.warning("tak_multicast recv error; rebuilding", transport=self.name)
                 self._close_io()
                 await self._backoff.sleep_and_advance()
-                if self._stopping:
-                    break
-                self._io = self._io_factory()
-                self.reconnects += 1
 
     def _close_io(self) -> None:
         io, self._io = self._io, None

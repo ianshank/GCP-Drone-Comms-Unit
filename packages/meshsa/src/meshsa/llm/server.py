@@ -67,10 +67,13 @@ def resolve_config(env: Mapping[str, str]) -> ServerConfig:
     """Build a :class:`ServerConfig` from an environment mapping (pure/testable).
 
     Every field falls back to its module-level default when the corresponding
-    ``MESHSA_*`` variable is unset; ``port`` is parsed to ``int``. An empty or
-    unset ``MESHSA_LLM_TOKEN`` resolves to ``None`` (no token).
+    ``MESHSA_*`` variable is unset; ``port`` is parsed to ``int``. An empty,
+    whitespace-only, or unset ``MESHSA_LLM_TOKEN`` resolves to ``None`` (no
+    token). Surrounding whitespace is stripped so a secret sourced from a file
+    or here-doc with a trailing newline still matches the bearer presented by a
+    client (which :func:`authorize` strips symmetrically).
     """
-    token = env.get(ENV_TOKEN) or None
+    token = (env.get(ENV_TOKEN) or "").strip() or None
     return ServerConfig(
         host=env.get(ENV_HOST, DEFAULT_HOST),
         port=int(env.get(ENV_PORT, str(DEFAULT_PORT))),
@@ -92,6 +95,11 @@ def authorize(token: str | None, auth_header: str | None) -> bool:
     When no ``token`` is configured the endpoint is open (loopback is enforced
     separately by :func:`validate_bind`). When a token is set, require a
     constant-time-matching ``Authorization: Bearer <token>`` header.
+
+    The comparison runs on UTF-8 bytes, not ``str``: ``hmac.compare_digest``
+    raises ``TypeError`` on non-ASCII ``str`` operands, so a client-supplied
+    (or operator-configured) non-ASCII token would otherwise crash the auth
+    check into a 500 instead of yielding a clean ``False``.
     """
     if token is None:
         return True
@@ -100,7 +108,7 @@ def authorize(token: str | None, auth_header: str | None) -> bool:
     scheme, _, presented = auth_header.partition(" ")
     if scheme.lower() != "bearer" or not presented:
         return False
-    return hmac.compare_digest(presented.strip(), token)
+    return hmac.compare_digest(presented.strip().encode("utf-8"), token.encode("utf-8"))
 
 
 def validate_bind(host: str, token: str | None) -> None:

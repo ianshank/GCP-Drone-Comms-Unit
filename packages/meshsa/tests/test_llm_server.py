@@ -134,6 +134,23 @@ def test_authorize_requires_matching_bearer_when_token_set() -> None:
     assert authorize("s3cr3t", None) is False
 
 
+def test_authorize_handles_non_ascii_without_raising() -> None:
+    # hmac.compare_digest raises TypeError on non-ASCII str; authorize must
+    # compare bytes so an odd/attacker-supplied bearer yields a clean False
+    # (401), never an unhandled 500.
+    assert authorize("s3cr3t", "Bearer café") is False  # non-ASCII presented
+    assert authorize("pâssword", "Bearer pâssword") is True  # non-ASCII token matches
+    assert authorize("pâssword", "Bearer password") is False
+
+
+def test_authorize_strips_token_and_bearer_symmetrically() -> None:
+    # A token sourced with a trailing newline (resolve_config strips it) still
+    # matches a plain bearer — no permanent lockout from stray whitespace.
+    assert resolve_config({"MESHSA_LLM_TOKEN": "s3cr3t\n"}).token == "s3cr3t"
+    assert resolve_config({"MESHSA_LLM_TOKEN": "   "}).token is None
+    assert authorize("s3cr3t", "Bearer s3cr3t\n") is True
+
+
 def test_validate_bind_allows_loopback_without_token() -> None:
     validate_bind("127.0.0.1", None)  # no raise
     validate_bind("localhost", None)

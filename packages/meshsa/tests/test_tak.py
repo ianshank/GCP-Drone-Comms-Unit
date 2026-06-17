@@ -405,6 +405,34 @@ async def test_multicast_close_error_swallowed_during_recovery():
     await t.stop()
 
 
+async def test_multicast_survives_factory_raising_during_rebuild():
+    # The interface is still hard-down when the loop tries to rebuild: the first
+    # socket errors on recv, and the *next* factory call raises (bind /
+    # IP_ADD_MEMBERSHIP failing). An unguarded rebuild would kill the recv task
+    # forever; instead the loop must back off and retry the factory, then ingest
+    # once a healthy socket is finally returned.
+    good = FakeDgram()
+    attempts = {"n": 0}
+
+    def factory():
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            return RaiseOnceDgram()  # first socket: recv() raises once
+        if attempts["n"] == 2:
+            raise OSError("iface still down")  # rebuild attempt fails in the factory
+        return good  # third attempt succeeds
+
+    sleep = FakeSleep()
+    t = TakMulticastTransport(io_factory=factory, sleep=sleep)
+    await t.start()
+    await _wait(lambda: t.reconnects == 1)  # survived the failed rebuild and eventually rebuilt
+    assert attempts["n"] == 3  # factory was retried after it raised
+    good.push(_cot_pli())
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    await t.stop()
+
+
 # ============================ registry ============================
 def test_tak_registered():
     assert transport_registry.has("tak_tcp")
