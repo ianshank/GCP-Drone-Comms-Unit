@@ -40,8 +40,10 @@ curl -s localhost:8090/chat -H 'content-type: application/json' \
 
 The MVP single pane is [Blue Robotics Cockpit](https://github.com/bluerobotics/cockpit)
 (see the dashboard design notes). Add the assistant as an **iframe widget**
-pointed at `http://<unit>:8090/` — the widget is a self-contained page that POSTs
-to its own `/chat`, so no extra wiring is needed.
+pointed at `http://127.0.0.1:8090/` — the widget is a self-contained page that POSTs
+to its own `/chat`, so no extra wiring is needed. The server binds **loopback by
+default**; run Cockpit on the unit (or reverse-proxy it) rather than exposing the
+port directly.
 
 ## Configuration
 
@@ -49,14 +51,22 @@ to its own `/chat`, so no extra wiring is needed.
 | ------- | ------- | ------- |
 | `ANTHROPIC_API_KEY` | — | **Required.** Anthropic API key. |
 | `MESHSA_LLM_MODEL` | `claude-opus-4-8` | Claude model id. |
-| `MESHSA_LLM_HOST` | `0.0.0.0` | Bind host. |
+| `MESHSA_LLM_HOST` | `127.0.0.1` | Bind host. Loopback by default. |
 | `MESHSA_LLM_PORT` | `8090` | Bind port. |
+| `MESHSA_LLM_TOKEN` | — | Bearer token required on `/chat`. **Required to bind a non-loopback host** (the server refuses to start otherwise). |
 | `MESHSA_MAVLINK2REST_URL` | `http://127.0.0.1:8088` | mavlink2rest base URL (from `start_all.sh`). |
 | `MESHSA_DRONE_UID` | `uav-1` | UID used in telemetry replies. |
 | `MESHSA_FTS_TRACKS_URL` | `http://127.0.0.1:19023/ManageGeoObject/getCoTGeoObject` | FreeTAKServer active-CoT endpoint. |
 
 ## Notes / hardening
 
+- **No unauthenticated surface by default.** `/chat` discloses live drone/track
+  positions and spends Anthropic tokens, so the server binds `127.0.0.1` by
+  default. To expose it off-host you **must** set `MESHSA_LLM_TOKEN`; the server
+  then requires `Authorization: Bearer <token>` on `/chat` and refuses to start
+  on a non-loopback host without a token. The static widget (`/`) and `/healthz`
+  stay open (neither returns telemetry); when exposed, the widget must be given
+  the token (e.g. via a reverse proxy that injects the header).
 - **Keep it read-only.** The tool surface (`get_drone_state`, `list_tracks`) only
   reads. If a future command tool is added, gate it behind explicit operator
   confirmation — do not let the model issue commands autonomously.

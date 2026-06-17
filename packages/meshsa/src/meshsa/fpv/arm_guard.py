@@ -17,6 +17,15 @@ intervention**:
   channel low (operator disarm/E-stop). Degraded health in flight therefore
   produces advisory alerts elsewhere, never intervention here — §4.1 made
   mechanical.
+
+Threading contract: this class is **not internally synchronized**. ``update_health``
+(report ingestion) and ``send_rc`` (the RC cycle) must run on a single thread, or the
+caller must serialize them. The reads of ``_last_report`` in ``_arm_allowed`` /
+``_emit_blocked`` already snapshot the reference into a local, so a concurrent
+``update_health`` swap cannot tear a single decision; but a lock is intentionally
+omitted until a real concurrent integration exists (e.g. when a live link-health
+monitor thread and the RC loop are wired separately under the Initiative C commanding
+work). Add a ``Lock`` plus a concurrent-barrier test at that point, not before.
 """
 
 from __future__ import annotations
