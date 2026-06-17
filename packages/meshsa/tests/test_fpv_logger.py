@@ -107,7 +107,7 @@ def test_manifest_contract(tmp_path):
     assert manifest["wiring"] == "half_duplex_tied"
     assert manifest["git_sha"] == "deadbeef"
     assert manifest["package_version"] == "0.2.0"
-    assert manifest["dropped_records"] == {"rc": 0, "telemetry": 0}
+    assert manifest["dropped_records"] == {"rc": 0, "telemetry": 0, "events": 0, "frames": 0}
     assert manifest["telemetry_rates_hz"]["LinkStatistics"] == pytest.approx(1.0)
     assert manifest["settings_snapshot"]["crsf"]["crsf_baud"] == 400000
 

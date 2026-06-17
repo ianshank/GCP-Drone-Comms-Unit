@@ -158,3 +158,23 @@ async def test_coordinate_and_alt_scales_are_configurable():
     assert pos["lat"] == pytest.approx(12.0)
     assert pos["lon"] == pytest.approx(-34.0)
     assert pos["hae"] == pytest.approx(100.0)
+
+
+async def test_poll_drops_message_missing_position_fields():
+    # A message lacking lat/lon/alt must be dropped, not raise AttributeError (the
+    # base reader treats a poll exception as fatal). The reader stays alive and a
+    # subsequent valid fix still produces a frame.
+    conn = FakeConn()
+    t = MavlinkSourceTransport(
+        name="d", connection=conn, source_uid="uav-1", recv_timeout_s=0.05
+    )
+    await t.start()
+    conn.feed(object())  # no lat/lon/alt attributes -> dropped, reader survives
+    conn.feed(FakeMsg(377749000, -1224194000, 100000))  # valid fix still delivered
+    try:
+        frame = await asyncio.wait_for(t.stream().__anext__(), timeout=2.0)
+    finally:
+        await t.stop()
+    env = TelemetryCodec().decode(frame)
+    assert env.msg_id == "uav-1:1"  # only the valid fix produced a frame
+    assert env.payload["position"]["lat"] == pytest.approx(37.7749)

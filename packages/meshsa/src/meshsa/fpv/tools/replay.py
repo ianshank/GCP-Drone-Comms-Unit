@@ -16,6 +16,7 @@ from ...cli import configure_logging
 from ..config import HealthSettings
 from ..crsf.telemetry import message_from_record
 from ..dataset import read_jsonl
+from ..errors import TelemetryParseError
 from ..link_health import HealthReport, LinkHealthMonitor, worst_state
 from ..telemetry_store import TelemetryStore
 
@@ -44,9 +45,16 @@ def replay_records(
     monitor = LinkHealthMonitor(health_settings or HealthSettings(), store, clock)
     reports: list[HealthReport] = []
     for rec in records:
-        msg = message_from_record(rec["type"], rec["data"])
-        clock.t = rec["t"]
-        store.update(msg, rec["t"])
+        # Guard the raw key access: a corrupt log line or a forward dataset that
+        # reshaped the record must fail with TelemetryParseError (uniform with
+        # message_from_record), not a bare KeyError that crashes replay.
+        try:
+            rec_type, data, t = rec["type"], rec["data"], rec["t"]
+        except KeyError as exc:
+            raise TelemetryParseError(f"malformed replay record: missing key {exc}") from exc
+        msg = message_from_record(rec_type, data)
+        clock.t = t
+        store.update(msg, t)
         reports.append(monitor.evaluate())
     return reports
 

@@ -33,7 +33,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--config", default=None, help="FpvSettings JSON file")
     p.add_argument("--record", action="store_true", help="log the session via FlightLogger")
     p.add_argument("--sessions-root", default=None, help="override logger sessions root")
-    p.add_argument("--interval", type=float, default=0.005, help="poll interval seconds")
+    p.add_argument(
+        "--interval", type=float, default=None, help="poll interval seconds (default from settings)"
+    )
     p.add_argument("--log-level", default="INFO", help="DEBUG/INFO/WARNING/ERROR")
     return p.parse_args(argv)
 
@@ -47,6 +49,8 @@ def build_settings(args: argparse.Namespace) -> FpvSettings:
         settings.crsf.crsf_baud = args.baud
     if args.sessions_root is not None:
         settings.logger.sessions_root = args.sessions_root
+    if args.interval is not None:
+        settings.monitor.poll_interval_s = args.interval
     return settings
 
 
@@ -116,7 +120,7 @@ def run(args: argparse.Namespace) -> None:  # pragma: no cover - live hardware l
                 echoes=link.echoes_suppressed,
                 crc_errors=link.crc_errors,
             )
-            time.sleep(args.interval)
+            time.sleep(settings.monitor.poll_interval_s)
     except KeyboardInterrupt:
         pass
     finally:
