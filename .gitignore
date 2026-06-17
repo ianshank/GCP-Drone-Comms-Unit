@@ -29,6 +29,10 @@ Thumbs.db
 *.env
 !*.env.example
 
+# Generated TLS/PKI material (gen_tak_certs.sh) — never commit private keys/certs
+flightctl/certs/
+*.p12
+
 # Runtime / FPV capture artifacts (flight logger, log-convert, camera)
 *.log
 flight-logs/

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ssl
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -51,9 +52,58 @@ class CotFramer:
 
 Connector = Callable[[], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
 
+#: Default CoT ports: plaintext (FreeTAKServer default) and TLS.
+_DEFAULT_PLAINTEXT_PORT = 8087
+_DEFAULT_TLS_PORT = 8089
 
-def _default_connector(host: str, port: int) -> Connector:  # pragma: no cover - real network
+
+def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, int, bool]:
+    """Resolve ``(host, port, tls)`` from a possibly-schemed host + optional port.
+
+    Accepts a bare host or a PyTAK-style ``tls://``/``ssl://``/``tcp://`` URL; a
+    scheme sets TLS, otherwise the ``tls`` flag decides. Port defaults to 8089 for
+    TLS and 8087 for plaintext when not given explicitly or embedded in the host.
+    Pure (no I/O) so the scheme/port logic is unit-tested without a socket.
+    """
+    use_tls = tls
+    embedded_port: int | None = None
+    if "://" in host:
+        scheme, _, host = host.partition("://")
+        use_tls = scheme.lower() in ("tls", "ssl")
+    if host.count(":") == 1:  # host:port (IPv6 literals are out of scope here)
+        host, _, port_str = host.partition(":")
+        embedded_port = int(port_str)
+    resolved = port if port is not None else embedded_port
+    if resolved is None:
+        resolved = _DEFAULT_TLS_PORT if use_tls else _DEFAULT_PLAINTEXT_PORT
+    return host, resolved, use_tls
+
+
+def _build_ssl_context(  # pragma: no cover - real TLS / cert file I/O
+    *, ca_cert: str | None, client_cert: str | None, client_key: str | None, verify: bool
+) -> ssl.SSLContext:
+    """Build a client-side TLS context. Real-cert glue (covered on deploy, not CI)."""
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_cert)
+    if not verify:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    if client_cert is not None:
+        ctx.load_cert_chain(certfile=client_cert, keyfile=client_key)
+    return ctx
+
+
+def _default_connector(  # pragma: no cover - real network
+    host: str,
+    port: int,
+    *,
+    ssl_context: ssl.SSLContext | None = None,
+    server_hostname: str | None = None,
+) -> Connector:
     async def connect() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        if ssl_context is not None:
+            return await asyncio.open_connection(
+                host, port, ssl=ssl_context, server_hostname=server_hostname or host
+            )
         return await asyncio.open_connection(host, port)
 
     return connect
@@ -66,7 +116,14 @@ class TakTcpTransport(AbstractTransport):
         *,
         connector: Connector | None = None,
         host: str = "127.0.0.1",
-        port: int = 8087,
+        port: int | None = None,
+        tls: bool = False,
+        tls_ca_cert: str | None = None,
+        tls_client_cert: str | None = None,
+        tls_client_key: str | None = None,
+        tls_verify: bool = True,
+        tls_server_hostname: str | None = None,
+        ssl_context_factory: Callable[[], ssl.SSLContext] | None = None,
         read_size: int = 4096,
         delimiter: bytes = b"",
         reconnect: bool = True,
@@ -78,7 +135,33 @@ class TakTcpTransport(AbstractTransport):
         **_: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)
-        self._connector = connector or _default_connector(host, port)
+        host, resolved_port, use_tls = _resolve_tak_endpoint(host, port, tls)
+        #: Resolved endpoint (exposed for observability/tests). Plaintext stays the
+        #: default (8087); TLS targets 8089 unless an explicit port is given.
+        self.host = host
+        self.port = resolved_port
+        self.tls = use_tls
+        #: The TLS context in use, or None for plaintext (exposed for tests).
+        self._ssl_context: ssl.SSLContext | None = None
+        if connector is not None:
+            self._connector = connector
+        else:
+            if use_tls:
+                if ssl_context_factory is not None:
+                    self._ssl_context = ssl_context_factory()
+                else:  # pragma: no cover - real TLS context (needs certs on deploy)
+                    self._ssl_context = _build_ssl_context(
+                        ca_cert=tls_ca_cert,
+                        client_cert=tls_client_cert,
+                        client_key=tls_client_key,
+                        verify=tls_verify,
+                    )
+            self._connector = _default_connector(
+                host,
+                resolved_port,
+                ssl_context=self._ssl_context,
+                server_hostname=tls_server_hostname,
+            )
         self._read_size = read_size
         self._delimiter = delimiter
         self._reconnect = reconnect
