@@ -18,7 +18,9 @@
 # override any path below via the environment. Run as your normal user (no sudo).
 #
 # Usage:
-#   flightctl/scripts/start_all.sh start [--browser]   # default
+#   flightctl/scripts/start_all.sh start [--browser]   # default (FC_MODE=sim)
+#   FC_MODE=msp flightctl/scripts/start_all.sh start    # real Betaflight FC over USB (telemetry)
+#   FC_MODE=pilot flightctl/scripts/start_all.sh start  # pilot FC from joystick (props off!) + telemetry
 #   flightctl/scripts/start_all.sh stop
 #   flightctl/scripts/start_all.sh status
 #   flightctl/scripts/start_all.sh restart [--browser]
@@ -44,7 +46,32 @@ FTS_UI_DIR="${FTS_UI_DIR:-$FTS_VENV/lib/python3.11/site-packages/FreeTAKServer-U
 # repo flightctl/ dir (this script lives in flightctl/scripts/)
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLIGHTCTL_DIR="$(cd "$HERE/.." && pwd)"
-GATEWAY_CONFIG="${GATEWAY_CONFIG:-$FLIGHTCTL_DIR/configs/jetson_gateway.proxy.json}"
+
+# --- flight-controller source mode -------------------------------------------
+# FC_MODE selects how the FC reaches the stack:
+#   sim   (default) — bundled MAVLink simulator -> mavp2p -> gateway/mavlink2rest
+#   msp             — real Betaflight FC over USB (MSP), polled directly by the
+#                     gateway. No MAVLink, so sim/mavp2p/mavlink2rest are skipped.
+#   pilot           — pilot the FC from the Jetson (joystick -> MSP RC) AND stream its
+#                     telemetry, via rc_bridge.py. It OWNS the FC serial, so the gateway
+#                     and the whole MAVLink chain are skipped. (Bench, props off.)
+# An explicit GATEWAY_CONFIG always wins over the per-mode default below.
+FC_MODE="${FC_MODE:-sim}"
+case "$FC_MODE" in
+  msp)   GATEWAY_CONFIG="${GATEWAY_CONFIG:-$FLIGHTCTL_DIR/configs/jetson_gateway.msp.json}" ;;
+  sim)   GATEWAY_CONFIG="${GATEWAY_CONFIG:-$FLIGHTCTL_DIR/configs/jetson_gateway.proxy.json}" ;;
+  pilot) : ;;  # rc_bridge sends CoT itself; no gateway config needed
+  *)     echo "unknown FC_MODE='$FC_MODE' (want: sim|msp|pilot)" >&2; exit 2 ;;
+esac
+
+# rc_bridge (FC_MODE=pilot) settings — override via env
+RC_DEVICE="${RC_DEVICE:-/dev/flightctl-fc}"
+RC_JS="${RC_JS:-/dev/input/js0}"
+RC_MAPPING="${RC_MAPPING:-$FLIGHTCTL_DIR/configs/jetson_rc.json}"
+# Leave unset to emit NO track until a real GPS fix (avoids a misleading 0,0 "Null Island"
+# marker); set both to a real bench location to pin the FC's track there.
+RC_FALLBACK_LAT="${RC_FALLBACK_LAT:-}"
+RC_FALLBACK_LON="${RC_FALLBACK_LON:-}"
 
 # --- network endpoints (override via env) ------------------------------------
 FTS_API_PORT="${FTS_API_PORT:-19023}"
@@ -142,53 +169,80 @@ do_start() {
       "$NODE_BIN/node-red" --userDir "$NODE_RED_USERDIR" "$NODE_RED_USERDIR/flows.json" )
   wait_port tcp "$WEBMAP_PORT" webmap 40 || true
 
-  # 4) meshsa gateway — binds udpin:14551, bridges MAVLink->CoT->FTS ----------
-  #    (must be listening BEFORE mavp2p connects its udpc)
-  start_svc gateway "$LOGS/gateway.log" -- \
-    env MESHSA_LOG_LEVEL="${MESHSA_LOG_LEVEL:-INFO}" \
-    "$MESHSA_VENV/bin/python" -u "$FLIGHTCTL_DIR/run_gateway.py" --config "$GATEWAY_CONFIG"
-  wait_port udp "$GW_PORT" gateway 20 || true
+  # 4) meshsa gateway — binds udpin:14551, bridges MAVLink/MSP -> CoT -> FTS ---
+  #    Skipped in pilot mode: rc_bridge owns the FC serial and sends CoT itself, so a
+  #    gateway here would fight it for the exclusive port.
+  if [ "$FC_MODE" != pilot ]; then
+    start_svc gateway "$LOGS/gateway.log" -- \
+      env MESHSA_LOG_LEVEL="${MESHSA_LOG_LEVEL:-INFO}" \
+      "$MESHSA_VENV/bin/python" -u "$FLIGHTCTL_DIR/run_gateway.py" --config "$GATEWAY_CONFIG"
+    wait_port udp "$GW_PORT" gateway 20 || true
+  fi
 
-  # 5) mavlink2rest — binds udpin:14552, serves browser UI :8088 -------------
-  #    (must be listening BEFORE mavp2p connects its udpc)
-  start_svc mavlink2rest "$LOGS/mavlink2rest.log" -- \
-    "$BIN/mavlink2rest" --connect="udpin:127.0.0.1:$M2R_UDP_PORT" --server="0.0.0.0:$M2R_PORT"
-  wait_port udp "$M2R_UDP_PORT" mavlink2rest 20 || true
+  # Steps 5-7 are the MAVLink chain (mavlink2rest + mavp2p + simulator). Only sim mode
+  # uses them; msp polls the FC directly and pilot drives it over MSP RC, so both skip
+  # them — wait_port included, or each unmet bind would burn ~20s.
+  if [ "$FC_MODE" = sim ]; then
+    # 5) mavlink2rest — binds udpin:14552, serves browser UI :8088 -------------
+    #    (must be listening BEFORE mavp2p connects its udpc)
+    start_svc mavlink2rest "$LOGS/mavlink2rest.log" -- \
+      "$BIN/mavlink2rest" --connect="udpin:127.0.0.1:$M2R_UDP_PORT" --server="0.0.0.0:$M2R_PORT"
+    wait_port udp "$M2R_UDP_PORT" mavlink2rest 20 || true
 
-  # 6) mavp2p — router; udpc to the now-listening consumers -------------------
-  start_svc mavp2p "$LOGS/mavp2p.log" -- \
-    "$BIN/mavp2p" "udps:0.0.0.0:$MAVP2P_IN_PORT" \
-    "udpc:127.0.0.1:$GW_PORT" "udpc:127.0.0.1:$M2R_UDP_PORT"
-  wait_port udp "$MAVP2P_IN_PORT" mavp2p 20 || true
+    # 6) mavp2p — router; udpc to the now-listening consumers -----------------
+    start_svc mavp2p "$LOGS/mavp2p.log" -- \
+      "$BIN/mavp2p" "udps:0.0.0.0:$MAVP2P_IN_PORT" \
+      "udpc:127.0.0.1:$GW_PORT" "udpc:127.0.0.1:$M2R_UDP_PORT"
+    wait_port udp "$MAVP2P_IN_PORT" mavp2p 20 || true
 
-  # 7) MAVLink simulator — v2 (MAVLINK20=1) into the proxy -------------------
-  #    Swap for a real autopilot by removing this and wiring serial: in mavp2p.
-  start_svc sim "$LOGS/sim.log" -- \
-    env MAVLINK20=1 "$MESHSA_VENV/bin/python" "$FLIGHTCTL_DIR/sim/mavlink_fake.py" \
-    --endpoint "udpout:127.0.0.1:$MAVP2P_IN_PORT" --hz "$SIM_HZ"
+    # 7) MAVLink simulator — v2 (MAVLINK20=1) into the proxy ------------------
+    #    Swap for a real autopilot by removing this and wiring serial: in mavp2p.
+    start_svc sim "$LOGS/sim.log" -- \
+      env MAVLINK20=1 "$MESHSA_VENV/bin/python" "$FLIGHTCTL_DIR/sim/mavlink_fake.py" \
+      --endpoint "udpout:127.0.0.1:$MAVP2P_IN_PORT" --hz "$SIM_HZ"
+  elif [ "$FC_MODE" = msp ]; then
+    ok "FC_MODE=msp — gateway polls the Betaflight FC over USB (skipping sim/mavp2p/mavlink2rest)"
+  fi
+
+  # pilot mode: rc_bridge owns the FC serial — joystick -> MSP RC + telemetry -> CoT.
+  if [ "$FC_MODE" = pilot ]; then
+    ok "FC_MODE=pilot — rc_bridge pilots the FC over USB (props off!) + streams telemetry"
+    local fb=()
+    if [ -n "$RC_FALLBACK_LAT" ] && [ -n "$RC_FALLBACK_LON" ]; then
+      fb=(--fallback-lat "$RC_FALLBACK_LAT" --fallback-lon "$RC_FALLBACK_LON")
+    fi
+    start_svc rc-bridge "$LOGS/rc-bridge.log" -- \
+      "$MESHSA_VENV/bin/python" -u "$FLIGHTCTL_DIR/rc_bridge.py" \
+      --device "$RC_DEVICE" --js "$RC_JS" --mapping "$RC_MAPPING" \
+      --tak-host 127.0.0.1 --tak-port "$FTS_COT_PORT" "${fb[@]}"
+  fi
 
   echo
-  ok "stack up. URLs:"
+  ok "stack up (FC_MODE=$FC_MODE). URLs:"
   printf '   FTS Web UI    http://%s:%s/   (login admin/password)\n' "${LAN_IP:-127.0.0.1}" "$FTS_UI_PORT"
   printf '   WebMap        http://%s:%s/tak-map/\n' "${LAN_IP:-127.0.0.1}" "$WEBMAP_PORT"
-  printf '   mavlink2rest  http://%s:%s/\n' "${LAN_IP:-127.0.0.1}" "$M2R_PORT"
+  [ "$FC_MODE" = sim ] && \
+    printf '   mavlink2rest  http://%s:%s/\n' "${LAN_IP:-127.0.0.1}" "$M2R_PORT"
   printf '   TAK/CoT       %s:%s  (point ATAK here)\n' "${LAN_IP:-127.0.0.1}" "$FTS_COT_PORT"
   if [ "$OPEN_BROWSER" = 1 ]; then
     open_url "http://127.0.0.1:$FTS_UI_PORT/"
     open_url "http://127.0.0.1:$WEBMAP_PORT/tak-map/"
-    open_url "http://127.0.0.1:$M2R_PORT/"
+    [ "$FC_MODE" = sim ] && open_url "http://127.0.0.1:$M2R_PORT/"
   fi
 }
 
 do_stop() {
   # stop in reverse dependency order
-  for name in sim mavp2p mavlink2rest gateway webmap fts-ui freetakserver; do
+  for name in rc-bridge sim mavp2p mavlink2rest gateway webmap fts-ui freetakserver; do
     local pf="$RUN/$name.pid"
     if [ -f "$pf" ]; then
       local pid; pid="$(cat "$pf" 2>/dev/null)"
       if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
         log "stopping $name (pid $pid)"; kill "$pid" 2>/dev/null
-        sleep 1; kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+        # rc-bridge needs longer: its SIGTERM handler sends a final disarm + joins the
+        # ~2s pilot thread before exit; SIGKILLing too early would skip the disarm.
+        local grace=1; [ "$name" = rc-bridge ] && grace=4
+        sleep "$grace"; kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
       fi
       rm -f "$pf"
     fi
@@ -200,7 +254,7 @@ do_stop() {
 
 do_status() {
   printf '%-14s %-8s %s\n' SERVICE PID STATE
-  for name in freetakserver fts-ui webmap gateway mavlink2rest mavp2p sim; do
+  for name in freetakserver fts-ui webmap gateway mavlink2rest mavp2p sim rc-bridge; do
     local pf="$RUN/$name.pid" pid="-" state="${c_red}down${c_off}"
     if [ -f "$pf" ]; then pid="$(cat "$pf" 2>/dev/null)"; fi
     if [ -n "$pid" ] && [ "$pid" != "-" ] && kill -0 "$pid" 2>/dev/null; then state="${c_grn}up${c_off}"; fi

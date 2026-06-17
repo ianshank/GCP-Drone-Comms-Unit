@@ -33,6 +33,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`flightctl/constraints/fts-constraints.txt`.** The FreeTAKServer dependency pins
   (setuptools/opentelemetry/etc.) verified to boot FTS on the Jetson now live in one
   auditable constraints file; `scripts/setup_fts.sh` installs via `uv pip --constraint`.
+- **TLS CoT for the `tak_tcp` transport** (FreeTAKServer `:8089`). Config-driven
+  `tls`/`tls_cafile`/`tls_certfile`/`tls_keyfile`/`tls_verify`/`tls_check_hostname`/
+  `tls_server_hostname`; the SSL context is built by a pure, tested `_build_ssl_context`
+  and validated at construction. Plain `:8087` is unchanged when `tls=False`. `trustme`
+  added to the `[dev]` extra for hermetic in-test cert generation.
+- **FTS rate-limit pacing** — `meshsa.pacing.Pacer`, an inline minimum-hold pacer so a
+  fast telemetry source does not overrun a rate-limited FreeTAKServer. Per-transport
+  `pace_min_interval_s` (`0` = disabled, the default); `clock` injectable for testing.
+- **Betaflight MSP telemetry** — `msp_source` GPS-less fixed-position `fallback_*` and a
+  battery/RSSI/attitude `remarks` string (rendered into CoT `<remarks>`), re-homed onto
+  the shared `PollingSourceTransport` base. `flightctl/configs/jetson_gateway.msp.json`
+  and `FC_MODE=msp` in `start_all.sh`.
+- **Pilot-from-Jetson (MSP RC)** — `meshsa.rc` hardware-free joystick→RC control logic
+  (`MspPilot`, `RcMapping`, `JoystickChannelSource`, `RoundRobinTelemetry`, …; starts
+  disarmed, fails safe on stale input, never auto-arms), `flightctl/rc_bridge.py` +
+  `jetson_rc.json`, and `FC_MODE=pilot` in `start_all.sh`.
+
+  > **Release note (pending maintainer decision):** these features were developed on a
+  > long-lived branch that cut its own `0.3.0`/`0.4.0`/`0.5.0` tags before `main`
+  > independently released `0.3.0`. They are listed here under `[Unreleased]` and the
+  > package version is held at `0.3.0`; pick the next version (and whether to split these
+  > into separate release sections) when cutting the release.
 
 ### Fixed
 - **`TakMulticastTransport` recovers from receive errors instead of dying.** A transient

@@ -1,0 +1,53 @@
+{
+  "_comment": "Betaflight FC over USB (MSP) -> CoT/TAK. EDIT fallback_lat/fallback_lon below to the FC's real location: a GPS-less bench FC has no position, so the fallback is what places its track on the map. Remove the fallback_* keys to suppress the track until a real GPS fix arrives.",
+  "uid": "jetson-gw-1",
+  "callsign": "GW1",
+  "tier": "base",
+  "pli_interval_s": 30.0,
+  "default_stale_s": 120.0,
+  "transports": [
+    {
+      "name": "fc",
+      "type": "msp_source",
+      "codec": "telemetry",
+      "options": {
+        "device": "/dev/flightctl-fc",
+        "baudrate": 115200,
+        "source_uid": "fc-1",
+        "callsign": "FC1",
+        "poll_interval_s": 1.0,
+        "coord_scale": 1e7,
+        "alt_scale": 1.0,
+        "fallback_lat": 0.0,
+        "fallback_lon": 0.0,
+        "fallback_hae": 0.0
+      }
+    },
+    {
+      "name": "tak",
+      "type": "tak_tcp",
+      "codec": "cot",
+      "options": {
+        "host": "127.0.0.1",
+        "port": 8087
+      },
+      "codec_options": {
+        "pli_type": "a-f-A-M-F-Q",
+        "stale_s": 15
+      }
+    },
+    {
+      "name": "atak_mesh",
+      "type": "tak_multicast",
+      "codec": "cot",
+      "options": {
+        "group": "239.2.3.1",
+        "port": 6969
+      },
+      "codec_options": {
+        "pli_type": "a-f-A-M-F-Q",
+        "stale_s": 15
+      }
+    }
+  ]
+}

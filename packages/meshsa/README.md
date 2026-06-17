@@ -100,8 +100,16 @@ re-encoded as JSON for the `mesh` side (and vice-versa). Backward compatible: om
   options; the backoff `sleep` is injectable for tests). `start()` establishes the
   first connection before returning so early sends aren't dropped; while transiently
   disconnected, sends are best-effort dropped rather than raising.
+  - **TLS** (FreeTAKServer `:8089`): set `tls: true` plus any of `tls_cafile`,
+    `tls_certfile`, `tls_keyfile`, `tls_verify` (default `true`), `tls_check_hostname`
+    (default `true`), `tls_server_hostname`. The SSL context is built and validated at
+    construction (fail-fast); an injected `connector` overrides it. `tls: false`
+    (default) keeps the plain `:8087` path byte-for-byte.
+  - **Pacing**: `pace_min_interval_s` (default `0` = off) enforces a minimum hold
+    between outbound CoT frames (PyTAK `FTS_COMPAT` style) so a fast source doesn't
+    overrun a rate-limited FTS; `clock` is injectable for tests.
 - `tak_multicast` exchanges CoT datagrams on ATAK's SA group (default
-  `239.2.3.1:6969`).
+  `239.2.3.1:6969`). Not paced (fan-out group, no FTS rate limit).
 
 Both put network I/O behind injected collaborators (`connector` for TCP,
 `io_factory` for multicast), so the framing/bridge logic is fully tested with

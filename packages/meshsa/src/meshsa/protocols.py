@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from .models import Envelope
+
+#: An awaitable sleep (e.g. ``asyncio.sleep``); injectable so timing is testable.
+SleepFn = Callable[[float], Awaitable[None]]
 
 
 @runtime_checkable

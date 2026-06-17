@@ -83,6 +83,9 @@ class CotCodec:
         detail = ET.SubElement(ev, "detail")
         ET.SubElement(detail, "contact", callsign=str(node.get("callsign", env.source_uid)))
         ET.SubElement(detail, "__group", name=str(node.get("tier", "")), role="Team Member")
+        remarks = env.payload.get("remarks")
+        if remarks:
+            ET.SubElement(detail, "remarks").text = str(remarks)
         return ET.tostring(ev)
 
     def _encode_chat(self, env: Envelope) -> bytes:
@@ -148,13 +151,17 @@ class CotCodec:
         if contact is not None:
             callsign = contact.attrib.get("callsign", uid)
         kind = MessageKind.PLI if etype.startswith("a-") else MessageKind.MARKER
+        payload: dict[str, Any] = {"node": {"uid": uid, "callsign": callsign}, "position": pos}
+        remarks_el = detail.find("remarks") if detail is not None else None
+        if remarks_el is not None and remarks_el.text:
+            payload["remarks"] = remarks_el.text
         return Envelope(
             schema_version=SCHEMA_VERSION,
             msg_id=f"{uid}:{ev.attrib.get('time', '')}",
             ts=ts,
             source_uid=uid,
             kind=kind,
-            payload={"node": {"uid": uid, "callsign": callsign}, "position": pos},
+            payload=payload,
         )
 
 

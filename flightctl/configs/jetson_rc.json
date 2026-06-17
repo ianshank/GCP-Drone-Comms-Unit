@@ -1,0 +1,16 @@
+{
+  "_comment": "Calibrated for THIS RadioMaster Pocket (EdgeTX USB-joystick mode) + Betaflight default AETR rcmap. Channel order MUST be AETR to match Betaflight: [roll, pitch, THROTTLE, yaw, aux1=ARM, aux2..]. Gimbals: axis0=roll, axis1=pitch, axis2=throttle (rests at bottom), axis3=yaw. Switches are AXES: axis7=2-pos (ARM), axes5/6=3-pos (modes), axis4=spare. Verify with `rc_bridge.py --dry-run`; confirmed against FC MSP_RC read-back.",
+  "channels": [
+    {"type": "axis", "index": 0},
+    {"type": "axis", "index": 1},
+    {"type": "axis", "index": 2},
+    {"type": "axis", "index": 3},
+    {"type": "axis", "index": 7},
+    {"type": "axis", "index": 5},
+    {"type": "axis", "index": 6},
+    {"type": "axis", "index": 4}
+  ],
+  "arm": {"channel": 4, "source_axis": 7, "axis_threshold": 0},
+  "throttle_channel": 2,
+  "failsafe_timeout_s": 0.5
+}

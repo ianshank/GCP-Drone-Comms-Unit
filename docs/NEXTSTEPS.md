@@ -13,6 +13,41 @@
 - Manually verified on-device: fake MAVLink → gateway → live FreeTAKServer `:8087` → ATAK
   viewer received the air track.
 
+## Shipped on this branch — TLS CoT + FTS pacing
+- [x] **TLS CoT (`:8089`)** — config-driven TLS on the `tak_tcp` transport
+      (`tls`/`tls_cafile`/`tls_certfile`/`tls_keyfile`/`tls_verify`/`tls_check_hostname`/
+      `tls_server_hostname`), `flightctl/scripts/gen_certs.sh` (CA/server/client + ATAK
+      data-package template), and `flightctl/configs/jetson_gateway.tls.json`. Plain `:8087`
+      unchanged for closed dev nets.
+- [x] **Pacing / rate-limit** to FTS — inline minimum-hold (`pace_min_interval_s`, PyTAK
+      `FTS_COMPAT` contract) via `meshsa.pacing.Pacer`. Off by default.
+
+## Shipped on this branch — MSP telemetry for a GPS-less FC
+- [x] **`msp_source` fixed-position fallback** (`fallback_lat`/`lon`/`hae`) so a bench FC with no
+      GPS still appears as a track; a real fix always wins.
+- [x] **MSP telemetry remarks** — battery voltage / current / RSSI (`MSP_ANALOG`) + attitude
+      (`MSP_ATTITUDE`) rendered into the CoT `<remarks>` (additive `payload["remarks"]`, no schema
+      bump). `FC_MODE=msp` in `start_all.sh` + `configs/jetson_gateway.msp.json`.
+- [x] Verified live on the Mobula7 1S (BTFL 4.4.2, STM32F411): real MSP poll → fallback track +
+      live attitude remarks decoded end-to-end.
+
+## Shipped on this branch — pilot the FC from the Jetson (MSP RC), HITL-ready
+- [x] **`meshsa.rc`** — joystick→RC mapping + arm/failsafe state machine + `MspPilot` loop behind
+      a pluggable `ChannelSource` (joystick now; sim/autonomy later). `flightctl/rc_bridge.py`
+      daemon + `FC_MODE=pilot` (RC + telemetry on one serial-owning thread via `RoundRobinTelemetry`).
+- [x] **Verified on the bench** (props off where motors could spin): radio calibrated
+      (gimbals axes 0-3, throttle axis 2; switches as axes; ARM=axis 7), FC switched to **MSP RX**
+      over MSP, and the FC's `MSP_RC` read-back confirmed correct **AETR** channel mapping with
+      `armingDisableFlags=0`.
+
+## Immediate next (pending hardware/operator)
+- [ ] **Props-off pilot test:** arm on the bench via `FC_MODE=pilot`, confirm motor spin direction
+      + throttle response, and the `FC1` track on the WebMap simultaneously. (Held: props were on.)
+- [ ] **ELRS handoff:** when the ELRS gear arrives, revert the FC to RF control
+      (`feature -RX_MSP` + **`feature RX_SPI`** + `save` — this board's ELRS is SPI, not serial) and
+      fly over RF; the Jetson reverts to `FC_MODE=msp` telemetry. The `rc_bridge` `ChannelSource`
+      seam stays for HITL/autonomy.
+
 ## GCS commanding (initiative — **CHARTER carve-out ratified 2026-06-16**)
 > Two-way vehicle commanding is now an authorized but **bounded** scope per the
 > [CHARTER.md](CHARTER.md) §3 supervised-commanding carve-out (ratified 2026-06-16). The
@@ -41,14 +76,6 @@
 ## Near-term (M2 hardening)
 - [ ] **Automated FTS e2e** (non-coverage job): bring up FTS in CI on a self-hosted Jetson
       runner; assert a track via the FTS REST API and a multicast CoT listener.
-- [ ] **TLS CoT (`:8089`)** for `TakTcpTransport` (currently plaintext) + signed ATAK
-      data-package / cert generation flow; document the client import. Keep plain `:8087`
-      for closed dev nets. Follow PyTAK conventions: `tls://` scheme + `PYTAK_TLS_CLIENT_CERT`
-      ([PyTAK config](https://pytak.readthedocs.io/en/stable/configuration/)); generate the
-      FTS CA→server→per-user PKI with an `AtakOfTheCerts`-style helper
-      ([ATAK-Certs](https://github.com/lennisthemenace/ATAK-Certs)).
-- [ ] **Pacing / rate-limit** to FTS (PyTAK-style **`FTS_COMPAT=1`**) so fast tracks aren't
-      dropped ([PyTAK](https://github.com/snstac/pytak)).
 - [ ] **Transport observability:** periodic rx-count / link-state structlog fields on
       `mavlink_source` / `msp_source`; surface `dropped_inbox_full` per transport; export
       `RouterMetrics` (Prometheus/JSON). Add a **Grafana dashboard** mapping the existing

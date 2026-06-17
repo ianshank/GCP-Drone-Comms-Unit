@@ -7,17 +7,34 @@ CoT/TAK link. All network I/O is behind an injected seam (``connector`` for TCP,
 framing/reconnect/bridge logic is tested with fakes; only the real socket builders
 are ``# pragma: no cover``. Nothing is hard-coded — host/port/group/read-size/
 delimiter and the backoff schedule all come from config options.
+
+TLS: set ``tls=True`` (plus optional ``tls_cafile`` / ``tls_certfile`` /
+``tls_keyfile`` / ``tls_verify`` / ``tls_check_hostname`` / ``tls_server_hostname``)
+to talk to a hardened FreeTAKServer (typically ``:8089``). When ``tls`` is enabled
+and no explicit ``connector`` is injected, the TCP connector is built with an
+``ssl.SSLContext`` from :func:`_build_ssl_context`. The context is built (and a bad
+or missing cert raises) at construction time — fail-fast, not deferred to
+``start()``. The plain ``:8087`` path is unchanged when ``tls`` is left ``False``.
+
+Pacing: set ``pace_min_interval_s`` to enforce a minimum hold between outbound CoT
+frames (PyTAK ``FTS_COMPAT`` style) so a fast telemetry source does not overrun a
+rate-limited FreeTAKServer. Pacing is inline in ``send()`` (the router's send path is
+already serial and blocking), disabled by default, and applies only to the TCP
+server link — multicast is a fan-out group with no such rate limit.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import ssl
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 import structlog
 
+from ..pacing import Pacer
+from ..protocols import Clock, SystemClock
 from ..registry import transport_registry
 from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
@@ -59,6 +76,44 @@ def _default_connector(host: str, port: int) -> Connector:  # pragma: no cover -
     return connect
 
 
+def _build_ssl_context(
+    *,
+    cafile: str | None = None,
+    certfile: str | None = None,
+    keyfile: str | None = None,
+    verify: bool = True,
+    check_hostname: bool = True,
+) -> ssl.SSLContext:
+    """Build a client TLS context for the CoT/TAK link.
+
+    Pure (no socket): create a default client context, optionally trust ``cafile``
+    and load a client cert chain (``certfile``/``keyfile``), then apply verification
+    settings. When ``verify`` is False, ``check_hostname`` is cleared **before**
+    setting ``CERT_NONE`` — stdlib ``ssl`` raises ``ValueError`` if hostname
+    checking is left enabled with ``CERT_NONE``.
+    """
+    context = ssl.create_default_context(cafile=cafile)
+    if certfile is not None:
+        context.load_cert_chain(certfile=certfile, keyfile=keyfile)
+    if verify:
+        context.check_hostname = check_hostname
+    else:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+def _default_tls_connector(
+    host: str, port: int, context: ssl.SSLContext, server_hostname: str | None
+) -> Connector:  # pragma: no cover - real network
+    async def connect() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        return await asyncio.open_connection(
+            host, port, ssl=context, server_hostname=server_hostname or host
+        )
+
+    return connect
+
+
 class TakTcpTransport(AbstractTransport):
     def __init__(
         self,
@@ -67,6 +122,13 @@ class TakTcpTransport(AbstractTransport):
         connector: Connector | None = None,
         host: str = "127.0.0.1",
         port: int = 8087,
+        tls: bool = False,
+        tls_cafile: str | None = None,
+        tls_certfile: str | None = None,
+        tls_keyfile: str | None = None,
+        tls_verify: bool = True,
+        tls_check_hostname: bool = True,
+        tls_server_hostname: str | None = None,
         read_size: int = 4096,
         delimiter: bytes = b"",
         reconnect: bool = True,
@@ -74,16 +136,49 @@ class TakTcpTransport(AbstractTransport):
         backoff_max_s: float = 30.0,
         backoff_factor: float = 2.0,
         sleep: SleepFn | None = None,
+        pace_min_interval_s: float = 0.0,
+        clock: Clock | None = None,
         queue_maxsize: int = 1000,
         **_: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)
-        self._connector = connector or _default_connector(host, port)
+        # An injected connector always wins (tests, or a custom TLS override). Else,
+        # when tls is requested, build a TLS connector (the SSL context is validated
+        # now — fail-fast). Otherwise fall back to the plaintext connector.
+        if connector is not None:
+            self._connector = connector
+        elif tls:
+            context = _build_ssl_context(
+                cafile=tls_cafile,
+                certfile=tls_certfile,
+                keyfile=tls_keyfile,
+                verify=tls_verify,
+                check_hostname=tls_check_hostname,
+            )
+            self._connector = _default_tls_connector(host, port, context, tls_server_hostname)
+        else:
+            self._connector = _default_connector(host, port)
         self._read_size = read_size
         self._delimiter = delimiter
         self._reconnect = reconnect
         self._backoff = Backoff(
             initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
+        self._sleep = sleep or asyncio.sleep
+        # Optional outbound pacing (minimum-hold) so a fast source does not overrun a
+        # rate-limited FTS. Disabled by default -> send() is byte-for-byte unchanged.
+        # A negative interval is almost certainly a config mistake (it would silently
+        # disable pacing), so fail fast instead.
+        if pace_min_interval_s < 0:
+            raise ValueError(f"pace_min_interval_s must be >= 0, got {pace_min_interval_s}")
+        self._pacer = (
+            Pacer(
+                min_interval_s=pace_min_interval_s,
+                clock=clock or SystemClock(),
+                sleep=self._sleep,
+            )
+            if pace_min_interval_s > 0
+            else None
         )
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
@@ -158,6 +253,8 @@ class TakTcpTransport(AbstractTransport):
         writer = self._writer
         if writer is None:
             return  # transiently disconnected; best-effort drop
+        if self._pacer is not None:
+            await self._pacer.wait()  # minimum-hold so a fast source doesn't overrun FTS
         try:
             writer.write(data + self._delimiter)
             await writer.drain()
