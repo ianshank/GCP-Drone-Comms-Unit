@@ -9,10 +9,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from aiohttp.test_utils import TestClient, TestServer
+import pytest
 
-from meshsa.llm.agent import AgentReply
-from meshsa.llm.server import build_app
+# aiohttp ships in the [llm]/[health] extras, not [dev]; the per-PR `ci` workflow
+# installs only [dev], so skip this end-to-end suite when aiohttp is absent rather
+# than failing collection with ModuleNotFoundError. It still runs on the nightly
+# workflow (full extras) and any dev env with the extra installed. Mirrors the
+# pytest.importorskip guards in test_node.py / test_fpv_convert.py.
+pytest.importorskip("aiohttp")
+
+from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
+
+from meshsa.llm.agent import AgentReply  # noqa: E402
+from meshsa.llm.server import build_app  # noqa: E402
 
 
 class _FakeAgent:
