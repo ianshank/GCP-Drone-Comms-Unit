@@ -219,7 +219,14 @@ class CotCodec:
                 )
         except ValidationError as exc:
             raise MeshSAError(f"invalid CoT track values: {exc}") from exc
-        kind = MessageKind.PLI if etype.startswith("a-") else MessageKind.MARKER
+        # Symmetric with encode (which stamps ``self.pli_type``): a configured
+        # PLI type is always classified as PLI even if it doesn't start with
+        # ``a-``; the ``a-`` prefix stays as a backward-compatible fallback.
+        kind = (
+            MessageKind.PLI
+            if etype == self.pli_type or etype.startswith("a-")
+            else MessageKind.MARKER
+        )
         payload: dict[str, Any] = {
             "node": {"uid": uid, "callsign": callsign},
             "position": pos,
@@ -259,7 +266,9 @@ class CotCodec:
 
             status = detail.find(self.status_element)
             if status is not None and self.battery_attr in status.attrib:
-                telemetry["battery_pct"] = int(status.attrib[self.battery_attr])
+                # via float() so a peer sending a float string (e.g. "75.0")
+                # is accepted, not rejected by int("75.0").
+                telemetry["battery_pct"] = int(float(status.attrib[self.battery_attr]))
 
             vendor = detail.find(self.vendor_element)
             if vendor is not None:

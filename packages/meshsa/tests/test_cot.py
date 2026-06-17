@@ -252,6 +252,26 @@ def test_decode_partial_attitude_and_status():
     assert "course_deg" not in out.payload["position"]
 
 
+def test_decode_float_battery_string_accepted():
+    # A peer reporting battery as a float string ("75.0") must be accepted, not
+    # rejected by int("75.0"); it truncates to the integer percent.
+    xml = (
+        b'<event version="2.0" uid="z" type="a-f-G-U-C" '
+        b'time="2023-11-14T22:13:20.000Z"><point lat="5" lon="6"/>'
+        b'<detail><status battery="75.0"/></detail></event>'
+    )
+    out = CotCodec().decode(xml)
+    assert out.payload["telemetry"]["battery_pct"] == 75
+
+
+def test_custom_pli_type_classified_as_pli_on_decode():
+    # decode() must classify a configured (non-"a-") PLI type as PLI, symmetric
+    # with encode() which stamps self.pli_type.
+    c = CotCodec(pli_type="x-custom-pli")
+    out = c.decode(c.encode(_pli()))
+    assert out.kind == MessageKind.PLI
+
+
 @pytest.mark.parametrize(
     "detail",
     [

@@ -64,6 +64,14 @@ def test_position_negative_speed_rejected():
         Position(lat=0.0, lon=0.0, speed_ms=-0.1)
 
 
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_position_non_finite_speed_rejected(bad):
+    # NaN/inf comparisons are all False, so a bare ``v < 0`` would let them
+    # through and leak ``NaN``/``Infinity`` onto the JSON/CoT wire.
+    with pytest.raises(ValidationError):
+        Position(lat=0.0, lon=0.0, speed_ms=bad)
+
+
 def test_attitude_optional_fields_default_none():
     a = Attitude()
     assert a.roll_deg is None and a.pitch_deg is None and a.yaw_deg is None
@@ -95,6 +103,14 @@ def test_telemetry_valid_battery_bounds_pass():
 def test_telemetry_negative_battery_v_rejected():
     with pytest.raises(ValidationError):
         Telemetry(battery_v=-1.0)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_telemetry_non_finite_fields_rejected(bad):
+    with pytest.raises(ValidationError):
+        Telemetry(battery_v=bad)
+    with pytest.raises(ValidationError):
+        Telemetry(current_a=bad)
 
 
 @pytest.mark.parametrize("battery_pct", [-1, 101, 150])

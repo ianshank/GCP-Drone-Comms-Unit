@@ -4,6 +4,7 @@ never inline here, so behaviour is configuration-driven."""
 from __future__ import annotations
 
 import enum
+import math
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -68,8 +69,11 @@ class Position(BaseModel):
     @field_validator("speed_ms")
     @classmethod
     def _speed_nonneg(cls, v: float | None) -> float | None:
-        if v is not None and v < 0.0:
-            raise ValueError("speed_ms must be >= 0")
+        # Reject non-finite (NaN/inf) before the sign check: NaN comparisons are
+        # all False, so a bare ``v < 0`` would let NaN/inf through and leak into
+        # JSON as ``NaN``/``Infinity`` (non-standard) and into CoT as ``nan``.
+        if v is not None and (not math.isfinite(v) or v < 0.0):
+            raise ValueError("speed_ms must be a finite value >= 0")
         return v
 
 
@@ -93,8 +97,10 @@ class Telemetry(BaseModel):
     @field_validator("battery_v")
     @classmethod
     def _battery_v_nonneg(cls, v: float | None) -> float | None:
-        if v is not None and v < 0.0:
-            raise ValueError("battery_v must be >= 0")
+        # Reject non-finite first (see Position._speed_nonneg) so NaN/inf cannot
+        # leak into encoded payloads/CoT attributes.
+        if v is not None and (not math.isfinite(v) or v < 0.0):
+            raise ValueError("battery_v must be a finite value >= 0")
         return v
 
     @field_validator("battery_pct")
@@ -102,6 +108,15 @@ class Telemetry(BaseModel):
     def _battery_pct_range(cls, v: int | None) -> int | None:
         if v is not None and not 0 <= v <= 100:
             raise ValueError("battery_pct out of range [0, 100]")
+        return v
+
+    @field_validator("current_a")
+    @classmethod
+    def _current_finite(cls, v: float | None) -> float | None:
+        # No sign/magnitude contract on current, but a non-finite value would
+        # still leak as ``nan``/``inf`` onto the wire, so reject it.
+        if v is not None and not math.isfinite(v):
+            raise ValueError("current_a must be a finite value")
         return v
 
 
