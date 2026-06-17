@@ -36,6 +36,10 @@ CLIENT_CN="${CLIENT_CN:-meshsa-client}"
 DAYS="${DAYS:-825}"
 P12_PASS="${P12_PASS:-atakatak}"
 
+# Create keys 0600 from the start: on a multi-user host a private key must not be
+# world-readable even briefly between creation and a later chmod.
+umask 077
+
 mkdir -p "${OUT_DIR}"
 chmod 700 "${OUT_DIR}"
 
@@ -70,6 +74,8 @@ openssl pkcs12 -export -name "${CLIENT_CN}" \
   -out "${OUT_DIR}/client.p12"
 
 chmod 600 "${OUT_DIR}"/*.key
+# Drop intermediate CSRs and the CA serial file — keep only keys/certs/p12.
+rm -f "${OUT_DIR}"/*.csr "${OUT_DIR}"/*.srl
 
 echo "PKI written to ${OUT_DIR}:"
 echo "  ca.crt / ca.key            (root CA)"

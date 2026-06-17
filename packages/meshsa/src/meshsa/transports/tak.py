@@ -74,22 +74,34 @@ def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, 
         use_tls = scheme.lower() in ("tls", "ssl")
     if host.count(":") == 1:  # host:port (IPv6 literals are out of scope here)
         host, _, port_str = host.partition(":")
-        embedded_port = int(port_str)
+        try:
+            embedded_port = int(port_str)
+        except ValueError as exc:
+            raise ValueError(f"invalid port {port_str!r} in TAK host") from exc
     resolved = port if port is not None else embedded_port
     if resolved is None:
         resolved = _DEFAULT_TLS_PORT if use_tls else _DEFAULT_PLAINTEXT_PORT
     return host, resolved, use_tls
 
 
-def _build_ssl_context(  # pragma: no cover - real TLS / cert file I/O
+def _build_ssl_context(
     *, ca_cert: str | None, client_cert: str | None, client_key: str | None, verify: bool
 ) -> ssl.SSLContext:
-    """Build a client-side TLS context. Real-cert glue (covered on deploy, not CI)."""
+    """Build a client-side TLS context from cert paths + a verify toggle.
+
+    The key validation and the verify toggle are pure (unit-tested);
+    ``create_default_context(cafile=None)`` performs no I/O and is exercised by
+    tests. Only loading a real client-cert file touches disk (``# pragma: no cover``).
+    """
+    if client_cert is not None and client_key is None:
+        raise ValueError("tls_client_key is required when tls_client_cert is set")
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_cert)
     if not verify:
+        # Encryption without authentication is MITM-able; leave a forensic trail.
+        _log.warning("tak_tcp TLS verification DISABLED - encryption without authentication")
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    if client_cert is not None:
+    if client_cert is not None:  # pragma: no cover - real cert file I/O
         ctx.load_cert_chain(certfile=client_cert, keyfile=client_key)
     return ctx
 

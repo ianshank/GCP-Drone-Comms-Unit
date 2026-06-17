@@ -60,6 +60,21 @@ async def test_idle_time_refills_tokens():
     assert slept == []
 
 
+async def test_partial_token_refill_waits_only_the_remaining_fraction():
+    # burst=2, drain both, then advance half an interval: 0.5 token accrues, so the
+    # next acquire waits only the remaining 0.5*interval. Exercises the subtlest
+    # (fractional) regime of the bucket where a partial token has refilled.
+    clock = _Clock()
+    slept: list[float] = []
+    pacer = Pacer(rate_hz=10.0, burst=2, clock=clock, sleep=_recording_sleep(clock, slept))
+    await pacer.acquire()  # 2 -> 1
+    await pacer.acquire()  # 1 -> 0
+    assert slept == []
+    clock.t += 0.05  # half of the 0.1 s interval -> 0.5 token refills
+    await pacer.acquire()  # need 1, have 0.5 -> wait the remaining 0.05 s
+    assert slept == [pytest.approx(0.05)]
+
+
 def test_invalid_params_raise():
     with pytest.raises(ValueError, match="rate_hz"):
         Pacer(rate_hz=0.0)

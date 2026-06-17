@@ -59,12 +59,14 @@ def pack_channels(ticks: Sequence[int], *, count: int, pad: int) -> bytes:
     return bytes(out)
 
 
-def unpack_channels(payload: bytes, *, count: int = 16) -> list[int]:
+def unpack_channels(payload: bytes, *, count: int) -> list[int]:
     """Unpack an LSB-first 11-bit channel payload into ``count`` tick values.
 
-    Raises :class:`ValueError` (not a raw ``IndexError``) when ``payload`` is too
-    short for ``count`` channels — e.g. a corrupted frame or a mismatched
-    ``rc_channel_count``.
+    ``count`` (RC channel count) is a required keyword sourced from
+    ``CrsfLinkSettings.rc_channel_count`` by the caller — symmetric with
+    :func:`pack_channels`, with no handset-count literal baked in here. Raises
+    :class:`ValueError` (not a raw ``IndexError``) when ``payload`` is too short
+    for ``count`` channels — e.g. a corrupted frame or a mismatched count.
     """
     required = (count * 11 + 7) // 8
     if len(payload) < required:

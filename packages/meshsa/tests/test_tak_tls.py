@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import ssl
 
-from meshsa.transports.tak import TakTcpTransport, _resolve_tak_endpoint
+import pytest
+
+from meshsa.transports.tak import (
+    TakTcpTransport,
+    _build_ssl_context,
+    _resolve_tak_endpoint,
+)
 
 
 def test_resolve_endpoint_plaintext_default():
@@ -56,3 +62,26 @@ def test_plaintext_default_has_no_ssl_context():
     assert t.tls is False
     assert t.port == 8087
     assert t._ssl_context is None
+
+
+def test_resolve_endpoint_invalid_port_raises():
+    with pytest.raises(ValueError, match="invalid port"):
+        _resolve_tak_endpoint("fts:https", None, False)
+
+
+def test_build_ssl_context_verify_on_keeps_cert_checks():
+    # No cert files needed: create_default_context(cafile=None) does no I/O.
+    ctx = _build_ssl_context(ca_cert=None, client_cert=None, client_key=None, verify=True)
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True
+
+
+def test_build_ssl_context_verify_off_disables_cert_checks():
+    ctx = _build_ssl_context(ca_cert=None, client_cert=None, client_key=None, verify=False)
+    assert ctx.verify_mode == ssl.CERT_NONE
+    assert ctx.check_hostname is False
+
+
+def test_build_ssl_context_client_cert_without_key_raises():
+    with pytest.raises(ValueError, match="tls_client_key is required"):
+        _build_ssl_context(ca_cert=None, client_cert="client.pem", client_key=None, verify=True)
