@@ -165,9 +165,7 @@ async def test_poll_drops_message_missing_position_fields():
     # base reader treats a poll exception as fatal). The reader stays alive and a
     # subsequent valid fix still produces a frame.
     conn = FakeConn()
-    t = MavlinkSourceTransport(
-        name="d", connection=conn, source_uid="uav-1", recv_timeout_s=0.05
-    )
+    t = MavlinkSourceTransport(name="d", connection=conn, source_uid="uav-1", recv_timeout_s=0.05)
     await t.start()
     conn.feed(object())  # no lat/lon/alt attributes -> dropped, reader survives
     conn.feed(FakeMsg(377749000, -1224194000, 100000))  # valid fix still delivered
