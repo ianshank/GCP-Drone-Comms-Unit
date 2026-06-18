@@ -28,11 +28,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+import structlog
+
 from ..protocols import Clock
 from ..registry import transport_registry
 from .polling_source import PollingSourceTransport
 
 ConnectionFactory = Callable[[], Any]
+
+_log = structlog.get_logger("meshsa.mavlink_source")
 
 
 def _default_connection_factory(options: dict[str, Any]) -> ConnectionFactory:  # pragma: no cover
@@ -86,11 +90,21 @@ class MavlinkSourceTransport(PollingSourceTransport):
         )
         if msg is None:
             return []  # idle/timeout — re-check the stop event and poll again
+        lat = getattr(msg, "lat", None)
+        lon = getattr(msg, "lon", None)
+        alt = getattr(msg, "alt", None)
+        if lat is None or lon is None or alt is None:
+            # A partial/foreign message lacking position fields must not raise an
+            # AttributeError: the base reader (polling_source._reader) treats any
+            # poll exception as fatal and stops the thread. Drop it and keep
+            # polling, mirroring crsf_source's per-frame drop-and-continue.
+            _log.warning("mavlink message missing position fields; dropping", transport=self.name)
+            return []
         return [
             self._position_frame(
-                msg.lat / self._coord_scale,  # default degE7 -> degrees
-                msg.lon / self._coord_scale,
-                msg.alt * self._alt_scale,  # default mm -> metres (1e-3)
+                lat / self._coord_scale,  # default degE7 -> degrees
+                lon / self._coord_scale,
+                alt * self._alt_scale,  # default mm -> metres (1e-3)
             )
         ]
 

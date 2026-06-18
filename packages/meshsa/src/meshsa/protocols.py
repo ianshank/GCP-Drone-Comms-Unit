@@ -54,6 +54,17 @@ class SystemClock:
         return time.time()
 
 
+class MonotonicClock:
+    """Monotonic clock for measuring elapsed time.
+
+    Immune to wall-clock jumps (NTP steps, manual changes, DST), so it is the
+    right timebase for rate limiting / backoff where only *elapsed* time matters.
+    """
+
+    def now(self) -> float:
+        return time.monotonic()
+
+
 class UuidFactory:
     """Default message-id source."""
 

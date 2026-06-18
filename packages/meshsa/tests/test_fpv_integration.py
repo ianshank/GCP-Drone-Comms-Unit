@@ -96,7 +96,7 @@ def test_end_to_end_stream_and_manifest(tmp_path):
         manifest = json.loads(fh.read())
     assert manifest["notes"]["echoes_suppressed"] == 2
     assert manifest["notes"]["crc_errors"] == 1
-    assert manifest["dropped_records"] == {"rc": 0, "telemetry": 0}
+    assert manifest["dropped_records"] == {"rc": 0, "telemetry": 0, "events": 0, "frames": 0}
 
 
 def test_armguard_gate_against_live_health():

@@ -40,6 +40,14 @@ class FakeCamera:
         self.closed = True
 
 
+class CloseRaisingCamera(FakeCamera):
+    """A camera whose close() raises — teardown must still join both threads."""
+
+    def close(self) -> None:
+        self.closed = True
+        raise OSError("close failed")
+
+
 def _ls() -> LinkStatistics:
     return LinkStatistics(-60, -60, 100, 8, 0, 0, 100, -60, 100, 8)
 
@@ -66,6 +74,22 @@ def _wait_until(predicate, timeout: float = 2.0) -> None:
             return
         time.sleep(0.005)
     raise AssertionError(f"timed out waiting for {predicate!r} after {timeout}s")
+
+
+def test_close_survives_raising_source(tmp_path):
+    # A source whose close() raises must not abort teardown: close() swallows it
+    # and still joins both threads (otherwise they would leak).
+    clock = ManualClock()
+    logger = _logger(tmp_path, clock)
+    logger.start()
+    cam = CloseRaisingCamera([Frame(idx=0, t=0.0, data="buf")])
+    writer = CaptureWriter(CameraSettings(), cam, logger, encode=lambda _b: None, clock=clock)
+    writer.start()
+    writer.close()  # source.close() raises; must be swallowed, threads still joined
+    logger.close()
+    assert cam.closed  # close() was attempted
+    assert writer._capture_thread is not None and not writer._capture_thread.is_alive()
+    assert writer._encode_thread is not None and not writer._encode_thread.is_alive()
 
 
 def test_capture_writes_frame_index_records(tmp_path):

@@ -151,7 +151,12 @@ class CaptureWriter:
         self._stop.set()
         # Close the source FIRST to unblock any in-flight read_frame, then join;
         # otherwise a backend wedged in read_frame would make the join time out.
-        self._source.close()
+        # Best-effort: a source whose close() raises must not abort teardown before
+        # the joins below, which would leak the capture/encode threads.
+        try:
+            self._source.close()
+        except Exception:
+            _log.debug("capture source close error")
         self._capture_thread.join(timeout=timeout)
         if self._capture_thread.is_alive():  # pragma: no cover - capture wedged
             _log.warning("capture thread did not terminate within timeout")

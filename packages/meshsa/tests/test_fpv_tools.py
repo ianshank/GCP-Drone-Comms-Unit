@@ -18,10 +18,14 @@ def test_parse_args_defaults_and_overrides():
     args = parse_args([])
     assert args.record is False
     assert args.log_level == "INFO"
-    args = parse_args(["--device", "/dev/ttyUSB0", "--baud", "420000", "--record"])
+    assert args.interval is None  # unset -> sourced from settings in build_settings
+    args = parse_args(
+        ["--device", "/dev/ttyUSB0", "--baud", "420000", "--record", "--interval", "0.01"]
+    )
     assert args.device == "/dev/ttyUSB0"
     assert args.baud == 420000
     assert args.record is True
+    assert args.interval == 0.01
 
 
 def test_build_settings_applies_cli_overrides(tmp_path):
@@ -49,6 +53,13 @@ def test_build_settings_defaults_without_config():
     settings = build_settings(parse_args([]))
     assert isinstance(settings, FpvSettings)
     assert settings.crsf.crsf_baud == 400000
+    assert settings.monitor.poll_interval_s == 0.005  # default from MonitorSettings
+
+
+def test_build_settings_interval_override():
+    # --interval overrides the settings-sourced default (no magic number in argparse).
+    settings = build_settings(parse_args(["--interval", "0.02"]))
+    assert settings.monitor.poll_interval_s == 0.02
 
 
 def test_pump_once_ingests_parses_stores_and_evaluates():

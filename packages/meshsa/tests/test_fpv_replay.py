@@ -41,6 +41,14 @@ def test_message_from_record_malformed_data_raises_parse_error():
         message_from_record("GpsSensor", {"unexpected_field": 1})  # extra/wrong field
 
 
+def test_replay_records_malformed_record_raises_parse_error():
+    # A record missing a required key (corrupt log line / forward dataset that
+    # reshaped the record) raises TelemetryParseError, not a bare KeyError that
+    # crashes the replay loop.
+    with pytest.raises(TelemetryParseError, match="missing key"):
+        replay_records([{"type": "LinkStatistics"}])  # missing "data" and "t"
+
+
 def test_message_from_record_roundtrip_gps():
     # GpsSensor is a v2 dataset record type; it must round-trip through replay.
     from dataclasses import asdict

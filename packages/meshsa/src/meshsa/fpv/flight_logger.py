@@ -118,8 +118,10 @@ class FlightLogger:
         #: Free-form provenance merged into the manifest at close (e.g. the
         #: link's ``echoes_suppressed`` / ``crc_errors`` counters).
         self._notes: dict[str, Any] = {}
-        #: Records dropped per lossy stream (overflow); surfaced in the manifest.
-        self.dropped_records: dict[str, int] = {"rc": 0, "telemetry": 0}
+        #: Records dropped per stream (overflow); surfaced in the manifest. Init
+        #: every stream from the single ``_HEADERS`` set so the manifest always
+        #: reports an explicit 0 for each (adding a stream stays a one-line edit).
+        self.dropped_records: dict[str, int] = dict.fromkeys(_HEADERS, 0)
         #: Per-telemetry-type observed counts + monotonic time span (rate at close).
         self._tel_counts: dict[str, int] = {}
         self._tel_t_first: float | None = None

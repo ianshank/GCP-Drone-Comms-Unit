@@ -29,6 +29,15 @@ Thumbs.db
 *.env
 !*.env.example
 
+# Generated TLS/PKI material (gen_tak_certs.sh) — never commit private keys/certs.
+# Globs cover a custom OUT_DIR too, not just the default flightctl/certs/.
+flightctl/certs/
+*.p12
+*.key
+*.crt
+*.csr
+*.srl
+
 # Runtime / FPV capture artifacts (flight logger, log-convert, camera)
 *.log
 flight-logs/

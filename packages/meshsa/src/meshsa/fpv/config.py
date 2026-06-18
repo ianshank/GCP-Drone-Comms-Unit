@@ -170,6 +170,15 @@ class CameraSettings(BaseModel):
     idle_poll_s: float = 0.1
 
 
+class MonitorSettings(BaseModel):
+    """``fpv-telemetry-monitor`` live-loop settings. No magic numbers in code."""
+
+    #: Seconds the live monitor loop sleeps between ingest cycles. The CLI
+    #: ``--interval`` flag overrides this when provided; sourced here so the poll
+    #: cadence is configurable rather than a literal in the argument parser.
+    poll_interval_s: float = 0.005
+
+
 class FpvSettings(BaseModel):
     """Root FPV settings; compose-and-default, no magic numbers in code."""
 
@@ -180,6 +189,7 @@ class FpvSettings(BaseModel):
     crsf: CrsfLinkSettings = Field(default_factory=CrsfLinkSettings)
     prober: ProberSettings = Field(default_factory=ProberSettings)
     camera: CameraSettings = Field(default_factory=CameraSettings)
+    monitor: MonitorSettings = Field(default_factory=MonitorSettings)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> FpvSettings:

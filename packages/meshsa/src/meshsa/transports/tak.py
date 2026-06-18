@@ -13,14 +13,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ssl
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 import structlog
 
+from ..protocols import Clock
 from ..registry import transport_registry
 from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
+from .pacing import Pacer
 
 _log = structlog.get_logger("meshsa.tak")
 
@@ -51,9 +54,80 @@ class CotFramer:
 
 Connector = Callable[[], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
 
+#: Default CoT ports: plaintext (FreeTAKServer default) and TLS.
+_DEFAULT_PLAINTEXT_PORT = 8087
+_DEFAULT_TLS_PORT = 8089
 
-def _default_connector(host: str, port: int) -> Connector:  # pragma: no cover - real network
+
+def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, int, bool]:
+    """Resolve ``(host, port, tls)`` from a possibly-schemed host + optional port.
+
+    Accepts a bare host or a PyTAK-style ``tls://``/``ssl://``/``tcp://`` URL:
+    ``tls``/``ssl`` select TLS, ``tcp`` selects plaintext, and an unknown scheme
+    raises ``ValueError`` (never a silent plaintext fallback on a typo). Without a
+    scheme the ``tls`` flag decides. Port defaults to 8089 for TLS and 8087 for
+    plaintext when not given explicitly or embedded in the host. Pure (no I/O) so
+    the scheme/port logic is unit-tested without a socket.
+    """
+    use_tls = tls
+    embedded_port: int | None = None
+    if "://" in host:
+        scheme, _, host = host.partition("://")
+        scheme = scheme.lower()
+        if scheme in ("tls", "ssl"):
+            use_tls = True
+        elif scheme == "tcp":
+            use_tls = False
+        else:
+            # Never silently fall back to plaintext on a typo (e.g. https://): an
+            # unknown scheme could otherwise disable TLS without the operator knowing.
+            raise ValueError(f"unsupported TAK scheme {scheme!r}: use tls://, ssl://, or tcp://")
+    if host.count(":") == 1:  # host:port (IPv6 literals are out of scope here)
+        host, _, port_str = host.partition(":")
+        try:
+            embedded_port = int(port_str)
+        except ValueError as exc:
+            raise ValueError(f"invalid port {port_str!r} in TAK host") from exc
+    resolved = port if port is not None else embedded_port
+    if resolved is None:
+        resolved = _DEFAULT_TLS_PORT if use_tls else _DEFAULT_PLAINTEXT_PORT
+    return host, resolved, use_tls
+
+
+def _build_ssl_context(
+    *, ca_cert: str | None, client_cert: str | None, client_key: str | None, verify: bool
+) -> ssl.SSLContext:
+    """Build a client-side TLS context from cert paths + a verify toggle.
+
+    The key validation and the verify toggle are pure (unit-tested);
+    ``create_default_context(cafile=None)`` performs no I/O and is exercised by
+    tests. Only loading a real client-cert file touches disk (``# pragma: no cover``).
+    """
+    if client_cert is not None and client_key is None:
+        raise ValueError("tls_client_key is required when tls_client_cert is set")
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_cert)
+    if not verify:
+        # Encryption without authentication is MITM-able; leave a forensic trail.
+        _log.warning("tak_tcp TLS verification DISABLED - encryption without authentication")
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    if client_cert is not None:  # pragma: no cover - real cert file I/O
+        ctx.load_cert_chain(certfile=client_cert, keyfile=client_key)
+    return ctx
+
+
+def _default_connector(  # pragma: no cover - real network
+    host: str,
+    port: int,
+    *,
+    ssl_context: ssl.SSLContext | None = None,
+    server_hostname: str | None = None,
+) -> Connector:
     async def connect() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        if ssl_context is not None:
+            return await asyncio.open_connection(
+                host, port, ssl=ssl_context, server_hostname=server_hostname or host
+            )
         return await asyncio.open_connection(host, port)
 
     return connect
@@ -66,7 +140,18 @@ class TakTcpTransport(AbstractTransport):
         *,
         connector: Connector | None = None,
         host: str = "127.0.0.1",
-        port: int = 8087,
+        port: int | None = None,
+        tls: bool = False,
+        tls_ca_cert: str | None = None,
+        tls_client_cert: str | None = None,
+        tls_client_key: str | None = None,
+        tls_verify: bool = True,
+        tls_server_hostname: str | None = None,
+        ssl_context_factory: Callable[[], ssl.SSLContext] | None = None,
+        clock: Clock | None = None,
+        pacing: bool = False,
+        pacing_rate_hz: float = 10.0,
+        pacing_burst: int = 1,
         read_size: int = 4096,
         delimiter: bytes = b"",
         reconnect: bool = True,
@@ -78,12 +163,45 @@ class TakTcpTransport(AbstractTransport):
         **_: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)
-        self._connector = connector or _default_connector(host, port)
+        host, resolved_port, use_tls = _resolve_tak_endpoint(host, port, tls)
+        #: Resolved endpoint (exposed for observability/tests). Plaintext stays the
+        #: default (8087); TLS targets 8089 unless an explicit port is given.
+        self.host = host
+        self.port = resolved_port
+        self.tls = use_tls
+        #: The TLS context in use, or None for plaintext (exposed for tests).
+        self._ssl_context: ssl.SSLContext | None = None
+        if connector is not None:
+            self._connector = connector
+        else:
+            if use_tls:
+                if ssl_context_factory is not None:
+                    self._ssl_context = ssl_context_factory()
+                else:  # pragma: no cover - real TLS context (needs certs on deploy)
+                    self._ssl_context = _build_ssl_context(
+                        ca_cert=tls_ca_cert,
+                        client_cert=tls_client_cert,
+                        client_key=tls_client_key,
+                        verify=tls_verify,
+                    )
+            self._connector = _default_connector(
+                host,
+                resolved_port,
+                ssl_context=self._ssl_context,
+                server_hostname=tls_server_hostname,
+            )
         self._read_size = read_size
         self._delimiter = delimiter
         self._reconnect = reconnect
         self._backoff = Backoff(
             initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+        )
+        #: Optional outbound pacer (token bucket) so a fast track stream cannot
+        #: overrun a rate-sensitive sink like FreeTAKServer. Off unless configured.
+        self._pacer = (
+            Pacer(rate_hz=pacing_rate_hz, burst=pacing_burst, clock=clock, sleep=sleep)
+            if pacing
+            else None
         )
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
@@ -158,6 +276,8 @@ class TakTcpTransport(AbstractTransport):
         writer = self._writer
         if writer is None:
             return  # transiently disconnected; best-effort drop
+        if self._pacer is not None:
+            await self._pacer.acquire()
         try:
             writer.write(data + self._delimiter)
             await writer.drain()
