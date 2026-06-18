@@ -80,3 +80,22 @@ def test_invalid_params_raise():
         Pacer(rate_hz=0.0)
     with pytest.raises(ValueError, match="burst"):
         Pacer(rate_hz=1.0, burst=0)
+
+
+def test_default_clock_is_monotonic():
+    # Pacing measures elapsed time, so the default timebase must be monotonic.
+    from meshsa.protocols import MonotonicClock
+
+    assert isinstance(Pacer(rate_hz=1.0)._clock, MonotonicClock)
+
+
+async def test_backward_clock_does_not_oversleep():
+    # A clock that jumps backward must clamp elapsed to 0: no negative refill and
+    # no huge spurious sleep — just the normal one-interval wait.
+    clock = _Clock()
+    slept: list[float] = []
+    pacer = Pacer(rate_hz=10.0, burst=1, clock=clock, sleep=_recording_sleep(clock, slept))
+    await pacer.acquire()  # consume the token (last = 0)
+    clock.t = -5.0  # clock steps backward
+    await pacer.acquire()  # clamped -> wait exactly one interval (0.1 s), not 5+ s
+    assert slept == [pytest.approx(0.1)]

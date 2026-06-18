@@ -62,16 +62,26 @@ _DEFAULT_TLS_PORT = 8089
 def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, int, bool]:
     """Resolve ``(host, port, tls)`` from a possibly-schemed host + optional port.
 
-    Accepts a bare host or a PyTAK-style ``tls://``/``ssl://``/``tcp://`` URL; a
-    scheme sets TLS, otherwise the ``tls`` flag decides. Port defaults to 8089 for
-    TLS and 8087 for plaintext when not given explicitly or embedded in the host.
-    Pure (no I/O) so the scheme/port logic is unit-tested without a socket.
+    Accepts a bare host or a PyTAK-style ``tls://``/``ssl://``/``tcp://`` URL:
+    ``tls``/``ssl`` select TLS, ``tcp`` selects plaintext, and an unknown scheme
+    raises ``ValueError`` (never a silent plaintext fallback on a typo). Without a
+    scheme the ``tls`` flag decides. Port defaults to 8089 for TLS and 8087 for
+    plaintext when not given explicitly or embedded in the host. Pure (no I/O) so
+    the scheme/port logic is unit-tested without a socket.
     """
     use_tls = tls
     embedded_port: int | None = None
     if "://" in host:
         scheme, _, host = host.partition("://")
-        use_tls = scheme.lower() in ("tls", "ssl")
+        scheme = scheme.lower()
+        if scheme in ("tls", "ssl"):
+            use_tls = True
+        elif scheme == "tcp":
+            use_tls = False
+        else:
+            # Never silently fall back to plaintext on a typo (e.g. https://): an
+            # unknown scheme could otherwise disable TLS without the operator knowing.
+            raise ValueError(f"unsupported TAK scheme {scheme!r}: use tls://, ssl://, or tcp://")
     if host.count(":") == 1:  # host:port (IPv6 literals are out of scope here)
         host, _, port_str = host.partition(":")
         try:

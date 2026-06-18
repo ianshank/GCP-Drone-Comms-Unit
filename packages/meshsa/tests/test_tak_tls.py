@@ -69,6 +69,13 @@ def test_resolve_endpoint_invalid_port_raises():
         _resolve_tak_endpoint("fts:https", None, False)
 
 
+def test_resolve_endpoint_unknown_scheme_raises():
+    # A typo'd scheme (e.g. https://) must raise, not silently force plaintext —
+    # even when tls=True was requested.
+    with pytest.raises(ValueError, match="unsupported TAK scheme"):
+        _resolve_tak_endpoint("https://fts.example", None, True)
+
+
 def test_build_ssl_context_verify_on_keeps_cert_checks():
     # No cert files needed: create_default_context(cafile=None) does no I/O.
     ctx = _build_ssl_context(ca_cert=None, client_cert=None, client_key=None, verify=True)

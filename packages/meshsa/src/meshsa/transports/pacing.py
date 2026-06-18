@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ..protocols import Clock, SystemClock
+from ..protocols import Clock, MonotonicClock
 from .backoff import SleepFn
 
 
@@ -39,7 +39,9 @@ class Pacer:
             raise ValueError("burst must be >= 1")
         self._interval = 1.0 / rate_hz
         self._capacity = float(burst)
-        self._clock: Clock = clock or SystemClock()
+        # Monotonic by default: pacing measures elapsed time, so a wall-clock step
+        # backward must never produce a huge spurious sleep.
+        self._clock: Clock = clock or MonotonicClock()
         self._sleep: SleepFn = sleep or asyncio.sleep
         self._tokens = float(burst)
         self._last = self._clock.now()
@@ -47,8 +49,11 @@ class Pacer:
     async def acquire(self) -> None:
         """Consume one token, waiting for a refill if the bucket is empty."""
         now = self._clock.now()
-        # Refill for the elapsed interval, capped at capacity.
-        self._tokens = min(self._capacity, self._tokens + (now - self._last) / self._interval)
+        # Refill for the elapsed interval, capped at capacity. Clamp negative
+        # elapsed to 0 so a non-monotonic clock jumping backward never refills into
+        # a negative token count (which would otherwise cause a huge spurious sleep).
+        elapsed = max(0.0, now - self._last)
+        self._tokens = min(self._capacity, self._tokens + elapsed / self._interval)
         self._last = now
         if self._tokens < 1.0:
             await self._sleep((1.0 - self._tokens) * self._interval)
