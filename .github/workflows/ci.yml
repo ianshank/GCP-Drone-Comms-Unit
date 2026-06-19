@@ -31,14 +31,17 @@ jobs:
           pip install -e "packages/meshsa[dev]"
 
       - name: Lint
-        run: ruff check packages/meshsa
+        run: ruff check packages/meshsa flightctl
 
       - name: Format check
-        run: ruff format --check packages/meshsa
+        run: ruff format --check packages/meshsa flightctl
 
       - name: Type check
         working-directory: packages/meshsa
         run: mypy src
+
+      - name: Type check flightctl glue
+        run: mypy --config-file mypy.ini flightctl/run_commander.py flightctl/run_gateway.py
 
       - name: Test
         working-directory: packages/meshsa

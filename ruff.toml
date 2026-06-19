@@ -1,0 +1,16 @@
+# Root ruff config for repo files OUTSIDE packages/meshsa (e.g. flightctl/).
+# packages/meshsa keeps its own [tool.ruff] in packages/meshsa/pyproject.toml; ruff
+# uses the closest config per file, so that subtree is unaffected by this file.
+# Kept in sync with packages/meshsa/pyproject.toml so style is uniform repo-wide.
+line-length = 100
+target-version = "py310"
+extend-exclude = [".venv", ".venv-main", ".venv-crsf", "build", "dist"]
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501", # line length handled by the formatter
+]
+
+[format]
+quote-style = "double"

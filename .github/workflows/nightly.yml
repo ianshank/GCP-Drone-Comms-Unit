@@ -1,10 +1,11 @@
 name: nightly
 
 # Scheduled deeper run that the per-PR `ci` workflow intentionally skips:
-#   * installs the FULL optional dependency graph ([dev,meshtastic,health,mavlink,msp,fpv,camera])
-#     so mypy/tests run against the real meshtastic/pypubsub/aiohttp/pymavlink/yamspy/
-#     pyserial/pyarrow types — this catches optional-dependency typing drift the
-#     [dev]-only CI cannot see, and exercises the fpv-log-convert Parquet path.
+#   * installs the FULL optional dependency graph
+#     ([dev,meshtastic,health,mavlink,msp,fpv,camera,llm]) so mypy/tests run against the
+#     real meshtastic/pypubsub/aiohttp/pymavlink/yamspy/pyserial/pyarrow/anthropic types —
+#     this catches optional-dependency typing drift the [dev]-only CI cannot see, and
+#     exercises the fpv-log-convert Parquet path and the SA-assistant (llm) path.
 #   * runs any @pytest.mark.slow soak/fuzz tests; Hypothesis explores fresh
 #     randomized inputs on each nightly run.
 
@@ -30,7 +31,7 @@ jobs:
       - name: Install (full extras)
         run: |
           python -m pip install --upgrade pip
-          pip install -e "packages/meshsa[dev,meshtastic,health,mavlink,msp,fpv,camera]"
+          pip install -e "packages/meshsa[dev,meshtastic,health,mavlink,msp,fpv,camera,llm]"
 
       - name: Type check with optional deps present
         working-directory: packages/meshsa

@@ -37,9 +37,7 @@ async def _run(config_path: str) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Run a meshsa gateway node from a config file"
-    )
+    ap = argparse.ArgumentParser(description="Run a meshsa gateway node from a config file")
     ap.add_argument("--config", required=True, help="path to a NodeConfig JSON file")
     args = ap.parse_args()
     configure_logging(os.environ.get("MESHSA_LOG_LEVEL", "INFO"))
