@@ -36,6 +36,31 @@ def test_build_ssl_context_no_certs_is_fine():
     assert ctx.verify_mode.name == "CERT_REQUIRED"
 
 
+def test_build_ssl_context_requires_cert_when_key_set(tmp_path):
+    key = tmp_path / "client.key"
+    key.write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError, match="tls_client_cert is required when tls_client_key"):
+        _build_ssl_context(ca_cert=None, client_cert=None, client_key=str(key), verify=True)
+
+
+def test_require_file_distinguishes_unreadable_from_missing(tmp_path):
+    import os as _os
+
+    from meshsa.transports.tak import _require_file
+
+    if hasattr(_os, "geteuid") and _os.geteuid() == 0:
+        pytest.skip("root bypasses file permission checks")
+    f = tmp_path / "ca.pem"
+    f.write_text("x", encoding="utf-8")
+    _os.chmod(f, 0o000)
+    try:
+        # exists but unreadable -> PermissionError, not a misleading FileNotFoundError
+        with pytest.raises(PermissionError, match="not readable"):
+            _require_file("tls_ca_cert", str(f))
+    finally:
+        _os.chmod(f, 0o644)  # restore so tmp cleanup can remove it
+
+
 # ============================ framer ============================
 def test_framer_splits_concatenated_and_partial():
     f = CotFramer()

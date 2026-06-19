@@ -143,9 +143,9 @@ class MavlinkCommandPump:
                     source_system=int(msg.get_srcSystem()),
                 )
             except (TypeError, ValueError, AttributeError):
-                # A malformed COMMAND_ACK must be logged, not silently dropped into
-                # the read-loop's generic except (where it would look like a read error
-                # and could hide a real ACK going missing).
+                # _dispatch runs OUTSIDE _drain_once's recv_match guard, so without this
+                # an exception here would propagate up _run and crash the reader thread
+                # (killing all ACK/heartbeat delivery). Log and drop the bad frame instead.
                 _log.warning("dropping malformed COMMAND_ACK", exc_info=True)
                 return False
             self._acks.put(ack)
