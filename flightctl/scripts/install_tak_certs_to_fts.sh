@@ -31,16 +31,45 @@ done
 # 1. Back up the existing FTS PKI (timestamped, never overwritten).
 BACKUP="$FTS_CERTS/backup-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$BACKUP"
-cp -a "$FTS_CERTS"/*.pem "$FTS_CERTS"/*.key "$BACKUP"/ 2>/dev/null || true
+cp -a "$FTS_CERTS"/*.pem "$FTS_CERTS"/*.key "$FTS_CERTS"/FTS_CRL.json "$BACKUP"/ 2>/dev/null || true
 echo "backed up existing FTS certs -> $BACKUP"
 
-# 2. Install our PKI under the filenames FTS's MainConfig expects.
+# 2. Generate an EMPTY CRL signed by our CA. FTS's ssl_cot_service sets
+#    VERIFY_CRL_CHECK_LEAF and loads only the CA file per client connection
+#    (SSLSocketController.wrap_client_socket), so that file MUST also contain a CRL
+#    for our CA or every mTLS client is rejected ("unable to get certificate CRL").
+#    Requires the CA private key in SRC_CERTS.
+[ -f "$SRC_CERTS/ca.key" ] || { echo "error: $SRC_CERTS/ca.key required to generate the CRL" >&2; exit 1; }
+CRLDIR="$SRC_CERTS/crldir"
+mkdir -p "$CRLDIR"
+: > "$CRLDIR/index.txt"
+[ -f "$CRLDIR/crlnumber" ] || echo 01 > "$CRLDIR/crlnumber"
+cat > "$SRC_CERTS/crl_openssl.cnf" <<CFG
+[ ca ]
+default_ca = CA_default
+[ CA_default ]
+database = $CRLDIR/index.txt
+crlnumber = $CRLDIR/crlnumber
+default_md = sha256
+default_crl_days = 3650
+[ req ]
+distinguished_name = dn
+[ dn ]
+CFG
+openssl ca -gencrl -config "$SRC_CERTS/crl_openssl.cnf" \
+  -keyfile "$SRC_CERTS/ca.key" -cert "$SRC_CERTS/ca.crt" -out "$SRC_CERTS/crl.pem"
+
+# 3. Install our PKI under the filenames FTS's MainConfig expects. ca.pem carries
+#    CA cert + CRL (so the per-connection CA load satisfies the CRL-leaf check);
+#    FTS_CRL.json carries the CRL for the createSocket/get_context path.
 install -m 0644 "$SRC_CERTS/server.crt" "$FTS_CERTS/server.pem"
 install -m 0600 "$SRC_CERTS/server.key" "$FTS_CERTS/server.key"
 install -m 0600 "$SRC_CERTS/server.key" "$FTS_CERTS/server.key.unencrypted"
-install -m 0644 "$SRC_CERTS/ca.crt"     "$FTS_CERTS/ca.pem"
+cat "$SRC_CERTS/ca.crt" "$SRC_CERTS/crl.pem" > "$FTS_CERTS/ca.pem"
+chmod 0644 "$FTS_CERTS/ca.pem"
+install -m 0644 "$SRC_CERTS/crl.pem"    "$FTS_CERTS/FTS_CRL.json"
 
-echo "installed meshsa PKI into $FTS_CERTS (server.pem/server.key/ca.pem)"
+echo "installed meshsa PKI + CRL into $FTS_CERTS (server.pem/server.key/ca.pem/FTS_CRL.json)"
 echo "NOW: restart FreeTAKServer, then verify with:"
 echo "  GATEWAY_CONFIG=flightctl/configs/jetson_gateway.tls.json flightctl/scripts/start_all.sh restart"
 echo "Re-issue $SRC_CERTS/client.p12 + ca.crt to any ATAK clients (old CA no longer trusted)."
