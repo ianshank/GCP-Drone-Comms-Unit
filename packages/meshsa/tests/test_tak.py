@@ -16,7 +16,24 @@ from meshsa import (
     build_node,
     transport_registry,
 )
-from meshsa.transports.tak import CotFramer
+from meshsa.transports.tak import CotFramer, _build_ssl_context
+
+
+# ============================ TLS context ============================
+def test_build_ssl_context_clear_error_on_missing_cert_files(tmp_path):
+    missing = str(tmp_path / "nope.pem")
+    with pytest.raises(FileNotFoundError, match="tls_ca_cert not found"):
+        _build_ssl_context(ca_cert=missing, client_cert=None, client_key=None, verify=True)
+    real = tmp_path / "ca.pem"
+    real.write_text("x", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="tls_client_cert not found"):
+        _build_ssl_context(ca_cert=None, client_cert=missing, client_key=str(real), verify=True)
+
+
+def test_build_ssl_context_no_certs_is_fine():
+    # No cert paths configured -> no file checks, default verifying context.
+    ctx = _build_ssl_context(ca_cert=None, client_cert=None, client_key=None, verify=True)
+    assert ctx.verify_mode.name == "CERT_REQUIRED"
 
 
 # ============================ framer ============================

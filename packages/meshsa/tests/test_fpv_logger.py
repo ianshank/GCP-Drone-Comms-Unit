@@ -29,6 +29,30 @@ def _read_json(path: str) -> dict:
         return json.loads(fh.read())
 
 
+def test_start_open_failure_closes_partial_handles(tmp_path, monkeypatch):
+    # If opening one stream file fails partway through start(), the handles already
+    # opened this call must be closed (not leaked) and the registry left empty.
+    logger = _logger(tmp_path)
+    real_open = open
+    opened: list = []
+    calls = {"n": 0}
+
+    def flaky_open(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:  # fail on the second stream file
+            raise OSError("disk full")
+        fh = real_open(*args, **kwargs)
+        opened.append(fh)
+        return fh
+
+    monkeypatch.setattr("builtins.open", flaky_open)
+    with pytest.raises(OSError, match="disk full"):
+        logger.start()
+    assert logger._files == {}  # no leaked/closed-handle refs left behind
+    assert all(fh.closed for fh in opened)  # the first handle was closed by ExitStack
+    assert logger._started is False
+
+
 def _logger(tmp_path, **kw) -> FlightLogger:
     settings = LoggerSettings(sessions_root=str(tmp_path), **kw.pop("settings", {}))
     return FlightLogger(

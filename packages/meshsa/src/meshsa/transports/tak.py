@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import ssl
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, Protocol
 
 import structlog
@@ -94,6 +95,12 @@ def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, 
     return host, resolved, use_tls
 
 
+def _require_file(label: str, path: str | None) -> None:
+    """Fail clearly if a configured cert path is set but missing/not a regular file."""
+    if path is not None and not Path(path).is_file():
+        raise FileNotFoundError(f"{label} not found or not a file: {path}")
+
+
 def _build_ssl_context(
     *, ca_cert: str | None, client_cert: str | None, client_key: str | None, verify: bool
 ) -> ssl.SSLContext:
@@ -105,6 +112,12 @@ def _build_ssl_context(
     """
     if client_cert is not None and client_key is None:
         raise ValueError("tls_client_key is required when tls_client_cert is set")
+    # Pre-flight the cert files so a missing/typo'd path fails with a clear message
+    # here, not as an obscure ssl/OSError deep inside create_default_context /
+    # load_cert_chain at connect time (the "works in the lab, fails on the vehicle").
+    _require_file("tls_ca_cert", ca_cert)
+    _require_file("tls_client_cert", client_cert)
+    _require_file("tls_client_key", client_key)
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_cert)
     if not verify:
         # Encryption without authentication is MITM-able; leave a forensic trail.

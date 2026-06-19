@@ -114,6 +114,12 @@ class CommandSender:
         the command fails closed and the error propagates.
         """
         base = {"command": spec.command, "name": spec.name}
+        # Discard ACKs left over from a prior command before we send this one, so a
+        # stale ACK can't be mistaken for this command's reply. Optional on the link
+        # (only the live pump buffers ACKs); fakes/simple links omit it.
+        drain = getattr(self._link, "drain", None)
+        if callable(drain):
+            drain()
         last_result: int | None = None
         for attempt in range(1, self._s.max_attempts + 1):
             self._audit.record("command_attempt", {**base, "attempt": attempt})

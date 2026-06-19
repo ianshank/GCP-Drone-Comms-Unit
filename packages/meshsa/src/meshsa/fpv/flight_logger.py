@@ -17,6 +17,7 @@ drains the queue, and joins the writer thread.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import os
@@ -143,18 +144,31 @@ class FlightLogger:
         dir_name = f"{self._created_utc.replace(':', '-')}-{self._session_id}"
         self.session_dir = os.path.join(self._s.sessions_root, dir_name)
         os.makedirs(self.session_dir, exist_ok=True)
-        for stream in _HEADERS:
-            # Filenames derive from the single stream set (_HEADERS); adding a
-            # stream is a one-line _HEADERS edit. The handle is owned by the writer
-            # thread for the session's lifetime and closed in close(); a context
-            # manager does not fit this ownership.
-            fname = f"{stream}.jsonl"
-            fh = open(os.path.join(self.session_dir, fname), "w", encoding="utf-8")  # noqa: SIM115
-            header = {"schema_version": DATASET_SCHEMA, "file": stream, "fields": _HEADERS[stream]}
-            fh.write(json.dumps(header) + "\n")
-            fh.flush()
-            self._files[stream] = fh
-        self._write_manifest()
+        # Open all stream files atomically: if any open/write fails partway, the
+        # ExitStack closes the handles already opened this call (otherwise they'd
+        # leak — start() aborts with _started=False, so close() early-returns and
+        # never reaches them). On success, pop_all() hands the open handles to the
+        # writer thread, which owns them for the session and closes them in close().
+        try:
+            with contextlib.ExitStack() as stack:
+                for stream in _HEADERS:
+                    fname = f"{stream}.jsonl"
+                    fh = stack.enter_context(
+                        open(os.path.join(self.session_dir, fname), "w", encoding="utf-8")
+                    )
+                    header = {
+                        "schema_version": DATASET_SCHEMA,
+                        "file": stream,
+                        "fields": _HEADERS[stream],
+                    }
+                    fh.write(json.dumps(header) + "\n")
+                    fh.flush()
+                    self._files[stream] = fh
+                self._write_manifest()
+                stack.pop_all()  # success: keep handles open, owned by the writer thread
+        except Exception:
+            self._files.clear()  # ExitStack closed the partial handles; drop the refs
+            raise
         self._started = True
         self._thread = threading.Thread(target=self._writer, name="fpv-logger", daemon=True)
         self._thread.start()

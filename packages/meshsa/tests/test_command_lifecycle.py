@@ -63,6 +63,32 @@ def _sender(link, audit, *, max_attempts=3, ack_timeout_s=2.0, clock=None, expec
     )
 
 
+class DrainableLink(FakeLink):
+    """A link that buffers ACKs and supports drain() (like the live pump)."""
+
+    def __init__(self, acks: list[Ack | None]) -> None:
+        super().__init__(acks)
+        self.events: list[str] = []
+
+    def drain(self) -> int:
+        self.events.append("drain")
+        return 0
+
+    def send(self, spec: object) -> None:
+        self.events.append("send")
+        super().send(spec)
+
+
+def test_execute_drains_stale_acks_before_first_send():
+    # The safety property: stale ACKs are cleared BEFORE we send, so the drain can
+    # never evict this command's (later-arriving) ACK. We assert drain precedes send.
+    link = DrainableLink([Ack(CMD, MAV_RESULT_ACCEPTED)])
+    out = _sender(link, FakeAudit()).execute(_rtl())
+    assert link.events[0] == "drain" and "send" in link.events
+    assert link.events.index("drain") < link.events.index("send")
+    assert out.accepted is True  # the real ACK still matched after draining
+
+
 def test_accepted_first_attempt():
     link = FakeLink([Ack(CMD, MAV_RESULT_ACCEPTED)])
     audit = FakeAudit()
