@@ -29,15 +29,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 from pathlib import Path
 from typing import Any
 
 import structlog
 from meshsa.command import (
+    CommanderConfig,
     CommandError,
-    CommanderSettings,
     CommandSender,
     CommandService,
     ConfirmationGate,
@@ -56,6 +55,7 @@ from meshsa.command.errors import (
 )
 from meshsa.llm.server import authorize, is_loopback
 from meshsa.protocols import MonotonicClock, SystemClock, UuidFactory
+from pydantic import ValidationError
 
 _log = structlog.get_logger("flightctl.commander")
 
@@ -74,24 +74,20 @@ _STATUS_FOR: dict[type[CommandError], int] = {
 }
 
 
-def load_config(path: str) -> dict[str, Any]:
-    """Load the JSON policy/endpoint config (secrets come from the environment)."""
-    data: dict[str, Any] = json.loads(Path(path).read_text(encoding="utf-8"))
-    return data
+def load_config(path: str) -> CommanderConfig:
+    """Load + validate the commander config, failing closed with a clear message."""
+    try:
+        return CommanderConfig.from_file(path)
+    except FileNotFoundError as exc:
+        raise SystemExit(f"commander config not found: {path}") from exc
+    except ValidationError as exc:
+        raise SystemExit(f"invalid commander config {path}:\n{exc}") from exc
+    except ValueError as exc:  # malformed JSON
+        raise SystemExit(f"commander config {path} is not valid JSON: {exc}") from exc
 
 
-def _settings_from(cfg: dict[str, Any]) -> CommanderSettings:
-    return CommanderSettings(
-        allowed=frozenset(cfg.get("allowed", ["set_mode", "rtl"])),
-        allow_force_disarm=bool(cfg.get("allow_force_disarm", False)),
-        ack_timeout_s=float(cfg.get("ack_timeout_s", 2.0)),
-        max_attempts=int(cfg.get("max_attempts", 3)),
-        arm_report_max_age_s=float(cfg.get("arm_report_max_age_s", 2.0)),
-    )
-
-
-def _read_signing_key(env: dict[str, str]) -> bytes | None:
-    path = env.get(ENV_SIGNING_KEY_FILE)
+def _read_signing_key(path: str | None) -> bytes | None:
+    """Read the optional 32-byte MAVLink2 signing key file (fail closed on bad size)."""
     if not path:
         return None
     key = Path(path).read_bytes()
@@ -103,32 +99,34 @@ def _read_signing_key(env: dict[str, str]) -> bytes | None:
 
 
 def build_service(
-    cfg: dict[str, Any], env: dict[str, str]
+    cfg: CommanderConfig, *, signing_key: bytes | None
 ) -> tuple[CommandService, JsonlAuditLog, MavlinkCommandPump]:
-    """Wire the live link + pump + audit + gate + sender + service from config/env.
+    """Wire the live link + pump + audit + gate + sender + service from the config.
 
     The :class:`MavlinkCommandPump` is the single owner of the autopilot socket: it
     serves COMMAND_ACKs to the sender *and* feeds autopilot heartbeats to the
     pre-arm interlock, so ``arm`` is gated on live link health rather than failing
     closed unconditionally. The pump is returned so the caller can shut it down.
+
+    The only secret this needs (the signing key) is passed explicitly; the process
+    environment is *not* handed in, so no token/key can leak through this seam.
     """
     from pymavlink import mavutil  # local import: needs the [mavlink] extra
 
-    settings = _settings_from(cfg)
-    endpoint = cfg["mavlink_endpoint"]
-    target_system = int(cfg.get("target_system", 1))
-    target_component = int(cfg.get("target_component", 1))
+    settings = cfg.to_settings()
+    target_system = cfg.target_system
+    target_component = cfg.target_component
 
-    audit = JsonlAuditLog(cfg["audit_path"], clock=SystemClock())
+    audit = JsonlAuditLog(cfg.audit_path, clock=SystemClock())
     audit.start()
 
     # One connection, one reader (pump), one writer (link): see mavlink_pump docs.
-    connection = mavutil.mavlink_connection(endpoint)
+    connection = mavutil.mavlink_connection(cfg.mavlink_endpoint)
     link = MavlinkCommandLink(
         connection=connection,
         target_system=target_system,
         target_component=target_component,
-        signing_key=_read_signing_key(env),
+        signing_key=signing_key,
     )
 
     clock = MonotonicClock()  # same timebase as HealthReport.t_mono (arm freshness)
@@ -283,14 +281,15 @@ def main() -> None:  # pragma: no cover - process entry point
     from aiohttp import web
 
     cfg = load_config(args.config)
-    host = str(cfg.get("host", "127.0.0.1"))
-    port = int(cfg.get("port", 8095))
     token = (os.environ.get(ENV_TOKEN) or "").strip() or None
-    validate_bind(host, token)  # fail closed before opening a socket
+    validate_bind(cfg.host, token)  # fail closed before opening a socket
 
-    service, audit, pump = build_service(cfg, dict(os.environ))
+    # Read only the one secret we need from the environment — never hand the whole
+    # process environment to build_service (no token/key can leak through it).
+    signing_key = _read_signing_key(os.environ.get(ENV_SIGNING_KEY_FILE))
+    service, audit, pump = build_service(cfg, signing_key=signing_key)
     try:
-        web.run_app(build_app(service, token), host=host, port=port)
+        web.run_app(build_app(service, token), host=cfg.host, port=cfg.port)
     finally:
         pump.close()
         audit.close()

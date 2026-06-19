@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **Commander service no longer receives the whole process environment.**
+  `flightctl/run_commander.py` previously passed `dict(os.environ)` into
+  `build_service`; it now reads only the one secret it needs (the MAVLink2 signing-key
+  path) and passes that explicitly, so no token/key can leak through that seam (e.g.
+  into a future audit "config snapshot" record).
+- **SA-assistant `/chat` now bounds prompt length** (`MAX_PROMPT_CHARS = 8000`),
+  returning 400 instead of forwarding an unbounded prompt to the model — closes a
+  cost/latency DoS on the (optionally off-loopback) endpoint.
+
+### Changed
+- **Commander config is now schema-validated** (`meshsa.command.CommanderConfig`,
+  pydantic). Loading is unchanged for valid files; unknown keys are still ignored and
+  types are still coerced. `mavlink_endpoint` and `audit_path` remain **required**
+  (previously a bare `KeyError`; now a clear startup message). Out-of-range numerics
+  (`ack_timeout_s`, `max_attempts`, `arm_report_max_age_s`, `port`,
+  `target_system`/`target_component`) **log a warning this release and will be rejected
+  in a future release** — fix flagged values now.
+- **Operator-facing numeric parsing reports the offending setting.** Env/CLI/config
+  scalars (`meshsa.config.NodeConfig.from_env`, `meshsa.cli`, `meshsa.llm` port) now
+  parse via a shared helper that names the field on a bad value instead of raising a
+  bare `invalid literal for int()`. `MESHSA_LLM_PORT` is additionally range-checked to
+  `1..65535`.
+
+### Migration (already-merged commanding changes worth calling out)
+- `MavlinkCommandLink.start()` is **required** before `send()`/`recv_ack()` (signing is
+  configured in `start()`; sending first would transmit unsigned frames). The
+  production path (`MavlinkCommandPump.start()` → `link.start()`) already does this.
+- The commander audit JSONL record shape is pinned as `command.AUDIT_RECORD_FIELDS`
+  = `("t", "event", "data")`; treat changes to it as a wire-format break.
 - **SA-assistant server no longer exposes an unauthenticated surface by default.**
   `meshsa.llm` bound `0.0.0.0` with no auth, so `/chat` — which discloses live
   drone/track positions and spends Anthropic tokens — was reachable off-host. It now

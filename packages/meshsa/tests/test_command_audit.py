@@ -5,7 +5,7 @@ import json
 import pytest
 from conftest import FakeClock
 
-from meshsa.command import JsonlAuditLog
+from meshsa.command import AUDIT_RECORD_FIELDS, JsonlAuditLog
 
 
 def test_records_appended_as_jsonl_in_order(tmp_path):
@@ -21,6 +21,8 @@ def test_records_appended_as_jsonl_in_order(tmp_path):
     assert [r["event"] for r in recs] == ["command_attempt", "command_accepted"]
     assert recs[0]["data"] == {"name": "rtl"}
     assert recs[0]["t"] == 1001.0  # FakeClock first tick
+    # Pin the on-disk record shape to the published contract (wire-format guard).
+    assert tuple(recs[0].keys()) == AUDIT_RECORD_FIELDS
 
 
 def test_record_before_start_raises(tmp_path):

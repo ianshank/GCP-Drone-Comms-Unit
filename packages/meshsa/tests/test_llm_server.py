@@ -10,6 +10,7 @@ from meshsa.llm.agent import AgentReply
 from meshsa.llm.server import (
     DEFAULT_HOST,
     DEFAULT_PORT,
+    MAX_PROMPT_CHARS,
     authorize,
     chat_reply,
     is_loopback,
@@ -66,6 +67,20 @@ async def test_chat_reply_non_object_payload() -> None:
     assert "JSON object" in body["error"]
 
 
+async def test_chat_reply_rejects_oversized_prompt_without_calling_model() -> None:
+    agent = _FakeAgent(AgentReply(text="x", stop_reason="end_turn"))
+    body, status = await chat_reply(agent, {"prompt": "A" * (MAX_PROMPT_CHARS + 1)})
+    assert status == 400
+    assert "too long" in body["error"]
+    assert agent.prompts == []  # cost/latency DoS guard: model never invoked
+
+
+async def test_chat_reply_accepts_prompt_at_limit() -> None:
+    agent = _FakeAgent(AgentReply(text="ok", stop_reason="end_turn"))
+    _body, status = await chat_reply(agent, {"prompt": "A" * MAX_PROMPT_CHARS})
+    assert status == 200
+
+
 async def test_chat_reply_agent_error_becomes_502_without_leaking_detail() -> None:
     agent = _FakeAgent(raises=RuntimeError("internal url https://secret:9/x"))
     body, status = await chat_reply(agent, {"prompt": "hi"})
@@ -81,6 +96,13 @@ def test_resolve_config_defaults_when_env_empty() -> None:
     assert cfg.mavlink2rest_url == DEFAULT_MAVLINK2REST_URL
     assert cfg.drone_uid == DEFAULT_DRONE_UID
     assert cfg.fts_tracks_url == DEFAULT_FTS_TRACKS_URL
+
+
+def test_resolve_config_rejects_bad_or_out_of_range_port() -> None:
+    with pytest.raises(ValueError, match="MESHSA_LLM_PORT: expected an integer"):
+        resolve_config({"MESHSA_LLM_PORT": "notaport"})
+    with pytest.raises(ValueError, match="above the maximum 65535"):
+        resolve_config({"MESHSA_LLM_PORT": "70000"})
 
 
 def test_resolve_config_applies_env_overrides() -> None:
