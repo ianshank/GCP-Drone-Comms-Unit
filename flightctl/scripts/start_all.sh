@@ -151,8 +151,13 @@ do_start() {
 
   # 5) mavlink2rest — binds udpin:14552, serves browser UI :8088 -------------
   #    (must be listening BEFORE mavp2p connects its udpc)
+  #    Bind the REST/web server to loopback: it is an UNAUTHENTICATED MAVLink
+  #    surface, so it must not be reachable from the LAN. Once a bidirectional
+  #    autopilot is wired, a 0.0.0.0 bind would be a command-injection vector
+  #    (see docs/specs/initiative-c-commanding-design.md GATE). Override via
+  #    M2R_BIND only on a trusted, isolated network.
   start_svc mavlink2rest "$LOGS/mavlink2rest.log" -- \
-    "$BIN/mavlink2rest" --connect="udpin:127.0.0.1:$M2R_UDP_PORT" --server="0.0.0.0:$M2R_PORT"
+    "$BIN/mavlink2rest" --connect="udpin:127.0.0.1:$M2R_UDP_PORT" --server="${M2R_BIND:-127.0.0.1}:$M2R_PORT"
   wait_port udp "$M2R_UDP_PORT" mavlink2rest 20 || true
 
   # 6) mavp2p — router; udpc to the now-listening consumers -------------------
