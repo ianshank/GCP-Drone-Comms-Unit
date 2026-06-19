@@ -11,9 +11,22 @@ _ident = st.text(alphabet=st.characters(min_codepoint=32, max_codepoint=126), ma
 _lat = st.floats(min_value=-90, max_value=90, allow_nan=False, allow_infinity=False)
 _lon = st.floats(min_value=-180, max_value=180, allow_nan=False, allow_infinity=False)
 _alt = st.floats(min_value=-1000, max_value=10000, allow_nan=False, allow_infinity=False)
+# Optional richer-track fields (M3.1): None | in-range value.
+_course = st.one_of(
+    st.none(), st.floats(min_value=0, max_value=359.999, allow_nan=False, allow_infinity=False)
+)
+_speed = st.one_of(
+    st.none(), st.floats(min_value=0, max_value=400, allow_nan=False, allow_infinity=False)
+)
 
 
-def _pli(msg_id, uid, callsign, lat, lon, hae):
+def _pli(msg_id, uid, callsign, lat, lon, hae, course=None, speed=None):
+    position = {"lat": lat, "lon": lon, "hae": hae, "ce": 10.0, "le": 10.0}
+    # Mirror the wire contract: absent (None) richer keys never enter the payload.
+    if course is not None:
+        position["course_deg"] = course
+    if speed is not None:
+        position["speed_ms"] = speed
     return Envelope(
         schema_version=1,
         msg_id=msg_id,
@@ -22,15 +35,15 @@ def _pli(msg_id, uid, callsign, lat, lon, hae):
         kind=MessageKind.PLI,
         payload={
             "node": {"uid": uid, "callsign": callsign, "tier": "user"},
-            "position": {"lat": lat, "lon": lon, "hae": hae, "ce": 10.0, "le": 10.0},
+            "position": position,
         },
     )
 
 
 @settings(max_examples=75)
-@given(_ident, _ident, _ident, _lat, _lon, _alt)
-def test_json_roundtrip_is_lossless(msg_id, uid, callsign, lat, lon, hae):
-    env = _pli(msg_id or "m", uid or "u", callsign or "c", lat, lon, hae)
+@given(_ident, _ident, _ident, _lat, _lon, _alt, _course, _speed)
+def test_json_roundtrip_is_lossless(msg_id, uid, callsign, lat, lon, hae, course, speed):
+    env = _pli(msg_id or "m", uid or "u", callsign or "c", lat, lon, hae, course, speed)
     out = JsonCodec().decode(JsonCodec().encode(env))
     assert out.msg_id == env.msg_id
     assert out.source_uid == env.source_uid

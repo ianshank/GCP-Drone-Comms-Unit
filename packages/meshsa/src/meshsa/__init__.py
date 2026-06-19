@@ -12,7 +12,17 @@ from .errors import (
 )
 from .health import health_snapshot
 from .metrics import RouterMetrics, render_prometheus
-from .models import ChatPayload, Envelope, MessageKind, NodeInfo, NodeTier, PliPayload, Position
+from .models import (
+    Attitude,
+    ChatPayload,
+    Envelope,
+    MessageKind,
+    NodeInfo,
+    NodeTier,
+    PliPayload,
+    Position,
+    Telemetry,
+)
 from .node import Node, build_node
 from .plugins import load_plugins
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
@@ -42,6 +52,8 @@ __all__ = [
     "HealthConfig",
     "TransportConfig",
     "Position",
+    "Attitude",
+    "Telemetry",
     "NodeInfo",
     "NodeTier",
     "MessageKind",

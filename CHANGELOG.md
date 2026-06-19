@@ -33,6 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`flightctl/constraints/fts-constraints.txt`.** The FreeTAKServer dependency pins
   (setuptools/opentelemetry/etc.) verified to boot FTS on the Jetson now live in one
   auditable constraints file; `scripts/setup_fts.sh` installs via `uv pip --constraint`.
+- **Richer PLI tracks (M3.1): optional course/speed/battery/attitude.** `Position`
+  gained optional `course_deg` (validated `[0, 360)`) and `speed_ms` (validated `>= 0`)
+  fields, and new `Attitude` and `Telemetry` models carry optional
+  roll/pitch/yaw and battery voltage/percent/current. `PliPayload` gained an
+  optional `telemetry` block. All fields are optional with `None` defaults and are
+  emitted via `model_dump(exclude_none=True)`, so absent keys never reach the wire
+  and old readers see byte-identical payloads — **no `SCHEMA_VERSION` bump**.
+- **Detail-aware CoT codec.** `CotCodec` now encodes the richer track data as
+  guarded `<track>`, `<status>`, `<_meshsa>` (voltage/current) and `<attitude>`
+  detail children when present, and decodes them back losslessly while ignoring
+  unknown `<detail>` children. The element/attribute names are constructor
+  parameters (`track_element`/`status_element`/`attitude_element`/`battery_attr`/
+  `vendor_element`) and the whole additive block can be disabled with
+  `emit_detail=False`. The `telemetry` codec carries the same optional fields.
 
 ### Fixed
 - **`TakMulticastTransport` recovers from receive errors instead of dying.** A transient
@@ -74,6 +88,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read-modify-write updates to `dropped_records`, `_tel_counts`, `_tel_t_first`/`_tel_t_last`, and
   `_notes` shared across the capture thread, the writer thread, and caller threads, so concurrent
   increments can no longer be lost. The lock is never held across blocking I/O.
+- **CoT decode enforces the model bounds on peer values.** `CotCodec.decode` now
+  validates the assembled position/telemetry through the `Position`/`Telemetry` models
+  (reusing their validators), so numeric-but-out-of-contract CoT attributes (course
+  `[0,360)`, speed `>=0`, `battery_pct [0,100]`, `battery_v >=0`) are rejected as
+  `MeshSAError` rather than producing an out-of-contract envelope.
+- **Telemetry codec `encode` wraps validation errors.** `encode()` validates the
+  optional telemetry block too; a pydantic `ValidationError` is now surfaced as
+  `MeshSAError` (matching `decode`), so the codec never leaks a raw pydantic exception.
+- **CoT decoder hardens richer-detail parsing against malformed peers.**
+  `CotCodec._decode_richer_detail` now wraps every `float`/`int` parse of
+  `<track>`/`<status>`/`<_meshsa>`/`<attitude>` attributes in
+  `try/except (TypeError, ValueError)` and raises `MeshSAError` (logging the
+  malformed input at debug). A peer sending e.g. `course="invalid"` no longer
+  escapes as a raw `ValueError`.
+- **`Telemetry` model now validates battery bounds.** `battery_v` must be `>= 0`
+  and `battery_pct` must be in `[0, 100]` when present, mirroring the `Position`
+  validators; out-of-range values raise `ValidationError`.
+- **Telemetry codec catches pydantic `ValidationError` on decode.**
+  `TelemetryCodec.decode` now imports and catches `pydantic.ValidationError`
+  alongside `TypeError`/`ValueError`, so a frame with an out-of-range
+  `battery_pct`/`course_deg` surfaces as the codec's `MeshSAError` instead of
+  leaking a raw `ValidationError`.
 - **`flightctl/run_gateway.py` no longer crashes on Windows.** Its
   `loop.add_signal_handler` calls are now wrapped in `contextlib.suppress(NotImplementedError)`,
   matching `meshsa.cli.run`, so the gateway degrades gracefully where signal handlers are

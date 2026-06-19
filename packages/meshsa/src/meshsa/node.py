@@ -48,7 +48,8 @@ class Node:
 
     async def publish_position(self, position: Position) -> Envelope:
         env = self._envelope(
-            MessageKind.PLI, PliPayload(node=self.info, position=position).model_dump()
+            MessageKind.PLI,
+            PliPayload(node=self.info, position=position).model_dump(exclude_none=True),
         )
         await self.router.publish(env)
         return env
