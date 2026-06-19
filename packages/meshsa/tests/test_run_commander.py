@@ -11,15 +11,12 @@ from __future__ import annotations
 
 import inspect
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-# run_commander lives in flightctl/, outside the meshsa package; add it to the path.
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "flightctl"))
-
-import run_commander  # noqa: E402
+# run_commander lives in flightctl/, made importable via the pytest `pythonpath`
+# option in pyproject.toml (no per-test sys.path mutation -> no cross-test leakage).
+import run_commander
 
 
 def _write_cfg(tmp_path, **over) -> str:
@@ -49,6 +46,12 @@ def test_load_config_bad_json_is_clean_systemexit(tmp_path):
     p.write_text("{not json", encoding="utf-8")
     with pytest.raises(SystemExit, match="invalid commander config"):
         run_commander.load_config(str(p))
+
+
+def test_load_config_unreadable_path_is_clean_systemexit(tmp_path):
+    # A directory (or other unreadable target) raises OSError in read -> clean SystemExit.
+    with pytest.raises(SystemExit, match="cannot read commander config"):
+        run_commander.load_config(str(tmp_path))  # a directory, not a file
 
 
 def test_load_config_missing_required_field_is_clean_systemexit(tmp_path):

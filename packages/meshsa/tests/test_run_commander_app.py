@@ -8,17 +8,12 @@ is skipped on the per-PR CI (mirrors test_llm_server_app.py) and runs on nightly
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
 pytest.importorskip("aiohttp")
 
-# run_commander lives in flightctl/, outside the meshsa package; add it to the path
-# before importing it (and the third-party group below).
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "flightctl"))
-
+# run_commander lives in flightctl/, made importable via the pytest `pythonpath` option
+# in pyproject.toml (no per-test sys.path mutation -> no cross-test leakage).
 import run_commander  # noqa: E402
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 
