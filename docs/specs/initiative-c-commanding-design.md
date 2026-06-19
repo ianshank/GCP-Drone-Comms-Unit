@@ -238,3 +238,60 @@ connection, no hardware). They would assert, at minimum:
 
 These tests are described here for completeness only; **nothing is implemented and
 nothing ships before the gate at the top of this document clears.**
+
+-----
+
+## 10. PROPOSED AMENDMENT — registry-seam → standalone supervised service
+
+> **Status: PROPOSED (pending ratification).** This section records a design
+> deviation discovered when the §2 registry-seam approach was reviewed against the
+> actual `meshsa` code (adversarial peer review, 2026-06-18). It does **not** change
+> the GATE or the §4 safety layer — those stand. It revises only the *structural
+> placement* of the command path. Ratify via the [CHARTER.md](../CHARTER.md) §6
+> process before implementation relies on it.
+
+**Why the original §2 seam does not hold for MAVLink.** Three independent code facts:
+
+1. **Router fan-out.** `Router.publish` / `Router._pump` send every envelope to **all
+   other transports' `send()`** (`router.py:80,107-110`) with no `kind` filter. A
+   write-capable command transport added to a node would receive forwarded telemetry
+   envelopes and attempt to transmit them as commands.
+2. **No request→ACK channel.** `Transport.send()` is fire-and-forget returning `None`
+   (`protocols.py:26`); the Router discards its result. A COMMAND_ACK can only return
+   out-of-band via the independent `stream()` path, so an ACK/retry/timeout state
+   machine **cannot** live behind `send()` as Invariant 4 assumes.
+3. **Encoding is connection-stateful.** pymavlink `command_long_encode` /
+   `command_int_encode` are methods on a live `MAVLink` instance and packing a frame
+   needs its sequence counter and MAVLink2 **signing** state. A pure, no-I/O codec
+   (Invariant 4) cannot produce signed wire bytes — unlike the self-contained
+   JSON/XML codecs (`telemetry.py`, `cot.py`) that *are* pure.
+
+**Revised structure.** The command path is a **dedicated, standalone supervised
+service** (`flightctl/run_commander.py`) that owns a pymavlink connection on a
+**dedicated link to the autopilot** (mavp2p v1.3.3 exposes no signing configuration,
+so the command channel is not multiplexed through it). Commands **do not** become
+`meshsa.Envelope`s and **do not** traverse `Router`. Consequence for the §8
+invariants:
+
+- Invariant 1 is **better** preserved, not worse: `router.py` / `node.py` / **`models.py`**
+  are untouched (no `MessageKind.COMMAND`, no schema bump, no back-compat hazard).
+- Invariant 4's "stateful I/O in transports, not codecs" is reframed: the ACK/retry
+  machine and audit writes live in the **service**; a pure frame-builder produces an
+  intermediate representation, and the live `MAVLink` instance packs/signs it.
+- Invariants 2, 3, 5, 6, 7 are unchanged (DI + fakes-only tests, config-driven,
+  quality gates, no secrets).
+
+**Narrow reuse (corrected from earlier assumptions).**
+
+- Pre-arm interlock reuses **only** the freshness/`arm_permitted` predicate
+  (`ArmGuard._arm_allowed` + `link_health.HealthReport`) — **not** the RC-clamp
+  `ArmGuard` itself, which gates PWM channels and has no `MAV_CMD_COMPONENT_ARM_DISARM`
+  path. Note: `ArmGuard` latches and never disarms, so it gives **no** in-flight
+  backstop against force-disarm; that hazard rests entirely on §5's separate gate.
+- The audit sink reuses the `FlightLogger.record_event` **durability contract**
+  (block-then-`LoggerOverflowError`, single-writer append-only JSONL, off the asyncio
+  loop thread) re-implemented purpose-fit — **not** the whole `FlightLogger`, whose
+  flight-session/manifest/video model does not fit a service-lifetime audit log.
+- The authenticated command endpoint reuses the **`meshsa.llm` server auth pattern**
+  (loopback-default bind + bearer token, fail-closed on a non-loopback bind without a
+  token) — the same pattern §6 credits as the gate precedent.
