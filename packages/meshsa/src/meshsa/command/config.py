@@ -28,13 +28,15 @@ from .commands import CommanderSettings
 
 _log = structlog.get_logger("meshsa.command.config")
 
-#: Bounds enforced as warnings now, hard rejections in a future release.
-#: (field name, predicate(value) -> ok, human requirement)
+#: Policy-tuning bounds enforced as warnings now, hard rejections in a future release
+#: (warn-not-reject so an out-of-range value can't fail-closed a node on restart).
+#: Each entry is ``(field_name, human_requirement)``; the predicates live in
+#: ``model_post_init``. ``port`` is NOT here — it is hard-validated (an unbindable port
+#: can never have worked, so rejecting it is safe and beats an obscure bind crash).
 _BOUNDS: tuple[tuple[str, str], ...] = (
     ("ack_timeout_s", "must be > 0"),
     ("max_attempts", "must be >= 1"),
     ("arm_report_max_age_s", "must be > 0"),
-    ("port", "must be in 1..65535"),
     ("target_system", "must be in 1..255"),
     ("target_component", "must be in 1..255"),
 )
@@ -46,7 +48,9 @@ class CommanderConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     host: str = "127.0.0.1"
-    port: int = 8095
+    # Hard-validated (not warn-not-reject): an out-of-range port can never bind, so
+    # reject it up front instead of warning then crashing obscurely in web.run_app.
+    port: int = Field(default=8095, ge=1, le=65535)
     mavlink_endpoint: str
     audit_path: str
     target_system: int = 1
@@ -63,7 +67,6 @@ class CommanderConfig(BaseModel):
             "ack_timeout_s": self.ack_timeout_s > 0,
             "max_attempts": self.max_attempts >= 1,
             "arm_report_max_age_s": self.arm_report_max_age_s > 0,
-            "port": 1 <= self.port <= 65535,
             "target_system": 1 <= self.target_system <= 255,
             "target_component": 1 <= self.target_component <= 255,
         }
@@ -89,5 +92,10 @@ class CommanderConfig(BaseModel):
 
     @classmethod
     def from_file(cls, path: str | Path) -> CommanderConfig:
-        """Load + validate the commander JSON config from ``path``."""
-        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+        """Load + validate the commander JSON config from ``path``.
+
+        Reads raw bytes so pydantic owns decoding: malformed UTF-8 or JSON surfaces as
+        a ``ValidationError`` (not a stray ``UnicodeDecodeError``), keeping the caller's
+        error handling to ``FileNotFoundError``/``OSError``/``ValidationError``.
+        """
+        return cls.model_validate_json(Path(path).read_bytes())

@@ -10,6 +10,8 @@ callers that already catch ``ValueError`` keep working — only the message impr
 
 from __future__ import annotations
 
+import math
+
 
 def parse_int(
     name: str, value: str | int | float, *, lo: int | None = None, hi: int | None = None
@@ -31,6 +33,10 @@ def parse_float(
         parsed = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{name}: expected a number, got {value!r}") from exc
+    if not math.isfinite(parsed):
+        # NaN/±inf parse fine but slip past < / > range checks (all comparisons are
+        # False for NaN), so reject them explicitly rather than let them through.
+        raise ValueError(f"{name}: expected a finite number, got {value!r}")
     _check_range(name, parsed, lo, hi)
     return parsed
 

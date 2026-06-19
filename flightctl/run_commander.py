@@ -81,9 +81,10 @@ def load_config(path: str) -> CommanderConfig:
     except FileNotFoundError as exc:
         raise SystemExit(f"commander config not found: {path}") from exc
     except ValidationError as exc:
+        # pydantic reports both malformed JSON/encoding and schema violations here.
         raise SystemExit(f"invalid commander config {path}:\n{exc}") from exc
-    except ValueError as exc:  # malformed JSON
-        raise SystemExit(f"commander config {path} is not valid JSON: {exc}") from exc
+    except OSError as exc:  # unreadable (permissions) / is-a-directory / I/O error
+        raise SystemExit(f"cannot read commander config {path}: {exc}") from exc
 
 
 def _read_signing_key(path: str | None) -> bytes | None:

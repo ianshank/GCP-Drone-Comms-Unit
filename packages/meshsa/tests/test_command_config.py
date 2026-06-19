@@ -41,12 +41,18 @@ def test_types_are_coerced_not_strict():
     assert cfg.max_attempts == 5
 
 
-def test_out_of_range_warns_but_does_not_reject(caplog):
-    # Staging: a node with an out-of-range value still loads (warning), this release.
-    cfg = CommanderConfig.model_validate(_minimal(ack_timeout_s=0, max_attempts=0, port=70000))
+def test_out_of_range_policy_warns_but_does_not_reject():
+    # Staging: a node with out-of-range *policy* values still loads (warning) this release.
+    cfg = CommanderConfig.model_validate(_minimal(ack_timeout_s=0, max_attempts=0))
     assert cfg.ack_timeout_s == 0  # accepted (not rejected) this release
-    # structlog routes through stdlib logging in tests; the warning is emitted.
-    # (We assert the values survived; warning emission is covered by the call not raising.)
+
+
+def test_out_of_range_port_is_hard_rejected():
+    # Port is structurally unbindable when out of range -> reject up front, not warn.
+    with pytest.raises(ValidationError):
+        CommanderConfig.model_validate(_minimal(port=70000))
+    with pytest.raises(ValidationError):
+        CommanderConfig.model_validate(_minimal(port=0))
 
 
 def test_to_settings_projects_policy_subset():

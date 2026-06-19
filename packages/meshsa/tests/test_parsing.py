@@ -29,3 +29,10 @@ def test_parse_float_ok_and_errors():
         parse_float("lat", "NaNsense")
     with pytest.raises(ValueError, match="below the minimum"):
         parse_float("interval", -1.0, lo=0.0)
+
+
+def test_parse_float_rejects_non_finite():
+    # NaN/inf parse as floats but bypass < / > range checks; must be rejected.
+    for bad in ("nan", "inf", "-inf", float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite"):
+            parse_float("x", bad, lo=0.0, hi=100.0)
