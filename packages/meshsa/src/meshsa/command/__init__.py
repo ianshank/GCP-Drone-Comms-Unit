@@ -38,6 +38,7 @@ from .lifecycle import (
     CommandSender,
 )
 from .mavlink_link import MavlinkCommandLink
+from .mavlink_pump import MavlinkCommandPump
 from .safety import ConfirmationGate, arm_allowed
 from .service import CommandService, HealthProvider, StagedCommand
 
@@ -60,6 +61,7 @@ __all__ = [
     "HeartbeatHealth",
     "JsonlAuditLog",
     "MavlinkCommandLink",
+    "MavlinkCommandPump",
     "StagedCommand",
     "UnknownCommandError",
     "UnknownConfirmationError",
