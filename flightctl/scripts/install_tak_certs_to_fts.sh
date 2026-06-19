@@ -61,7 +61,9 @@ openssl ca -gencrl -config "$SRC_CERTS/crl_openssl.cnf" \
 
 # 3. Install our PKI under the filenames FTS's MainConfig expects. ca.pem carries
 #    CA cert + CRL (so the per-connection CA load satisfies the CRL-leaf check);
-#    FTS_CRL.json carries the CRL for the createSocket/get_context path.
+#    FTS_CRL.json carries the CRL for the createSocket/get_context path. NOTE:
+#    FTS_CRL.json is PEM-encoded despite the .json extension -- the name is the
+#    filename FTS expects, not the format; it is not JSON.
 install -m 0644 "$SRC_CERTS/server.crt" "$FTS_CERTS/server.pem"
 install -m 0600 "$SRC_CERTS/server.key" "$FTS_CERTS/server.key"
 install -m 0600 "$SRC_CERTS/server.key" "$FTS_CERTS/server.key.unencrypted"

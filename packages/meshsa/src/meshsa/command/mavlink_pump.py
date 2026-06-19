@@ -58,7 +58,14 @@ class MavlinkCommandPump:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        """Start the send link (signing) and spawn the single reader thread."""
+        """Start the send link (signing) and spawn the single reader thread.
+
+        Refuses a second concurrent start: a second reader thread on one connection
+        would reintroduce the dual-reader race this class exists to prevent.
+        """
+        if self._thread is not None:
+            raise RuntimeError("MavlinkCommandPump is already started")
+        self._stop.clear()
         self._link.start()
         thread = threading.Thread(target=self._run, name="cmd-mav-pump", daemon=True)
         self._thread = thread
@@ -120,10 +127,18 @@ class MavlinkCommandPump:
         return False
 
     def close(self) -> None:
-        """Stop the reader thread and close the underlying link (idempotent)."""
+        """Stop the reader thread and close the underlying link (idempotent).
+
+        The thread handle is cleared only once the reader has actually stopped; if
+        the join times out the handle is kept (and a warning logged) so a still-
+        running reader stays observable rather than being silently orphaned.
+        """
         self._stop.set()
         thread = self._thread
         if thread is not None:
             thread.join(timeout=self._read_timeout_s + 2.0)
-            self._thread = None
+            if thread.is_alive():
+                _log.warning("command pump reader did not stop within join timeout")
+            else:
+                self._thread = None
         self._link.close()

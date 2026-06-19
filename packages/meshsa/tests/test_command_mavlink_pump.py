@@ -2,6 +2,8 @@
 
 import threading
 
+import pytest
+
 from meshsa.command import Ack, MavlinkCommandPump
 
 
@@ -149,3 +151,31 @@ def test_start_runs_reader_and_close_stops_it():
     assert link.closed is True
     assert pump._thread is None
     pump.close()  # idempotent: second close is a no-op
+
+
+def test_double_start_is_refused():
+    pump = MavlinkCommandPump(FakeLink(), connection=ScriptedConn(), read_timeout_s=0.01)
+    pump.start()
+    try:
+        with pytest.raises(RuntimeError):
+            pump.start()  # a second reader would reintroduce the dual-reader race
+    finally:
+        pump.close()
+
+
+def test_close_keeps_handle_when_reader_does_not_stop():
+    link = FakeLink()
+    pump = MavlinkCommandPump(link, connection=ScriptedConn())
+
+    class StuckThread:
+        def join(self, timeout=None) -> None:
+            pass  # never actually stops
+
+        def is_alive(self) -> bool:
+            return True
+
+    pump._thread = StuckThread()  # type: ignore[assignment]
+    pump.close()
+    # The handle is retained (not orphaned) but the link is still closed.
+    assert pump._thread is not None
+    assert link.closed is True

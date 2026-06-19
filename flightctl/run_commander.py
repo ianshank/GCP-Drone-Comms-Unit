@@ -195,6 +195,10 @@ def build_app(service: CommandService, token: str | None) -> Any:
             staged = await _run(service.stage, name, params)
         except CommandError as exc:
             return web.json_response({"error": str(exc)}, status=_STATUS_FOR.get(type(exc), 400))
+        except (TypeError, ValueError) as exc:
+            # build_command forwards **params to the builder; a bad kwarg name or a
+            # non-numeric value raises TypeError/ValueError -> client error, not 500.
+            return web.json_response({"error": f"bad params: {exc}"}, status=400)
         return web.json_response(
             {
                 "confirmation_id": staged.confirmation_id,
