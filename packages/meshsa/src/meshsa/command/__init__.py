@@ -29,6 +29,7 @@ from .errors import (
     UnknownCommandError,
     UnknownConfirmationError,
 )
+from .health import HeartbeatHealth
 from .lifecycle import (
     Ack,
     AuditLog,
@@ -56,6 +57,7 @@ __all__ = [
     "ForceConfirmationRequired",
     "ForceDisarmDisabledError",
     "HealthProvider",
+    "HeartbeatHealth",
     "JsonlAuditLog",
     "MavlinkCommandLink",
     "StagedCommand",
