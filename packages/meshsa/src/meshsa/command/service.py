@@ -21,16 +21,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import structlog
-
 from ..fpv.link_health import HealthReport
 from ..protocols import Clock
 from .commands import CommanderSettings, build_command
 from .errors import ArmBlockedError
 from .lifecycle import AuditLog, CommandOutcome, CommandSender
 from .safety import ConfirmationGate, arm_allowed
-
-_log = structlog.get_logger("meshsa.command.service")
 
 #: Returns the latest health report (or ``None`` if none yet), e.g. from a
 #: link-health monitor fed by the telemetry stream.

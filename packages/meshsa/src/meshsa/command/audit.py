@@ -36,9 +36,19 @@ class JsonlAuditLog:
         self._closed = False
 
     def start(self) -> None:
-        """Open the log for appending, creating the parent directory if needed."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = self._path.open("a", encoding="utf-8")
+        """Open the log for appending, creating the parent directory if needed.
+
+        Lock-serialised and idempotent: a second ``start`` while already open is a
+        no-op (so an existing handle is never overwritten/leaked), and ``start``
+        after :meth:`close` raises rather than silently reopening a closed log.
+        """
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("JsonlAuditLog is already closed")
+            if self._fh is not None:
+                return  # already started; don't leak the open handle
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._fh = self._path.open("a", encoding="utf-8")
 
     def record(self, event: str, data: dict[str, Any]) -> None:
         """Append one durable ``{t, event, data}`` line. Blocks until fsync'd.

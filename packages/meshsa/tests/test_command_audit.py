@@ -44,6 +44,25 @@ def test_close_is_idempotent(tmp_path):
     log.close()  # second close: fh already None -> no error
 
 
+def test_double_start_does_not_leak_handle(tmp_path):
+    # Second start() while open is a no-op: the first handle is preserved, not leaked.
+    log = JsonlAuditLog(tmp_path / "a.jsonl", clock=FakeClock())
+    log.start()
+    first = log._fh
+    log.start()
+    assert log._fh is first  # same handle; not overwritten
+    log.record("e", {"k": 1})
+    log.close()
+
+
+def test_start_after_close_raises(tmp_path):
+    log = JsonlAuditLog(tmp_path / "a.jsonl")
+    log.start()
+    log.close()
+    with pytest.raises(RuntimeError):
+        log.start()  # never silently reopen a closed log
+
+
 def test_fsync_disabled_still_writes(tmp_path):
     path = tmp_path / "a.jsonl"
     log = JsonlAuditLog(path, clock=FakeClock(), fsync=False)

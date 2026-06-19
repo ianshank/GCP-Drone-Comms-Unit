@@ -45,14 +45,21 @@ class MavlinkCommandLink:
         self._target_component = target_component
         self._signing_key = signing_key
         self._link_id = link_id
+        self._started = False
 
     def start(self) -> None:
-        """Open the link (if a factory was given) and enable MAVLink2 signing."""
+        """Open the link (if a factory was given) and enable MAVLink2 signing.
+
+        Must be called before :meth:`send`/:meth:`recv_ack`: MAVLink2 signing is set
+        up here, so sending before ``start`` would silently transmit *unsigned*
+        commands. The send/recv guards fail closed until this has run.
+        """
         if self._conn is None:  # pragma: no cover - real link construction
             assert self._factory is not None
             self._conn = self._factory()
         if self._signing_key is not None:  # pragma: no cover - touches real mav
             self._conn.setup_signing(self._signing_key, link_id=self._link_id)
+        self._started = True
 
     def send(self, spec: CommandSpec) -> None:
         """Pack ``spec`` as COMMAND_INT (positional) or COMMAND_LONG and transmit."""
@@ -111,6 +118,9 @@ class MavlinkCommandLink:
             self._conn = None
 
     def _require_conn(self) -> Any:
-        if self._conn is None:
-            raise RuntimeError("MavlinkCommandLink is not started (no connection)")
+        if not self._started or self._conn is None:
+            raise RuntimeError(
+                "MavlinkCommandLink is not started; call start() before send/recv_ack "
+                "(signing setup happens in start())"
+            )
         return self._conn

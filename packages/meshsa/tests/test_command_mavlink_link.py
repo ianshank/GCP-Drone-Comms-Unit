@@ -55,6 +55,7 @@ def test_start_is_safe_with_injected_connection_and_no_signing():
 def test_send_long_packs_command_long():
     conn = FakeConn()
     link = MavlinkCommandLink(connection=conn, target_system=7, target_component=3)
+    link.start()
     link.send(_rtl())  # kind="long", command=20
     assert len(conn.mav.long) == 1
     args = conn.mav.long[0]
@@ -69,6 +70,7 @@ def test_send_long_packs_command_long():
 def test_send_int_packs_command_int_with_positional_fields():
     conn = FakeConn()
     link = MavlinkCommandLink(connection=conn, target_system=1, target_component=1)
+    link.start()
     link.send(_goto(lat_deg=37.0, lon_deg=-122.0, alt_m=25.0))  # kind="int"
     assert len(conn.mav.int) == 1
     args = conn.mav.int[0]
@@ -83,18 +85,30 @@ def test_send_int_packs_command_int_with_positional_fields():
 def test_recv_ack_maps_message_fields():
     conn = FakeConn(ack=FakeAck(command=400, result=0, src=3))
     link = MavlinkCommandLink(connection=conn)
+    link.start()
     ack = link.recv_ack(timeout=1.0)
     assert ack == Ack(command=400, result=0, source_system=3)
 
 
 def test_recv_ack_returns_none_on_timeout():
     link = MavlinkCommandLink(connection=FakeConn(ack=None))
+    link.start()
     assert link.recv_ack(timeout=0.1) is None
+
+
+def test_send_before_start_raises():
+    # Fail closed: sending before start() would skip signing setup (unsigned frames).
+    link = MavlinkCommandLink(connection=FakeConn())
+    with pytest.raises(RuntimeError):
+        link.send(_rtl())
+    with pytest.raises(RuntimeError):
+        link.recv_ack(timeout=0.1)
 
 
 def test_close_then_use_raises():
     conn = FakeConn()
     link = MavlinkCommandLink(connection=conn)
+    link.start()
     link.close()
     link.close()  # idempotent: second close with conn already None is a no-op
     assert conn.closed is True
