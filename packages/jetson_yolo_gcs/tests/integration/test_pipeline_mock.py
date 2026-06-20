@@ -11,7 +11,7 @@ from jetson_yolo_gcs.core.config import MavlinkSettings
 from jetson_yolo_gcs.core.errors import DetectionError
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge
-from jetson_yolo_gcs.pipeline import Pipeline
+from jetson_yolo_gcs.pipeline import Pipeline, _should_log_drop
 from jetson_yolo_gcs.streaming.camera import Frame
 from jetson_yolo_gcs.utils.fps import FpsCounter
 from tests.conftest import FakeCamera, FakeClock, FakeDetector, FakeStreamWriter
@@ -258,6 +258,50 @@ def test_snapshot_before_any_frame_is_not_live() -> None:
     assert snap["live"] is False
     assert snap["last_frame_age_s"] is None
     assert snap["landing_target_published"] == 0
+
+
+def test_snapshot_uses_configured_liveness_timeout() -> None:
+    # 5s since the last frame: live under a 10s timeout, but would be dead under the 2s default.
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        clock=FakeClock(times=[100.0, 105.0]),
+        fps=FpsCounter(clock=FakeClock()),
+        liveness_timeout_s=10.0,
+    )
+    pipeline.step()
+    snap = pipeline.snapshot()  # no explicit max_age_s -> uses the configured 10.0
+    assert snap["last_frame_age_s"] == 5.0
+    assert snap["live"] is True
+
+
+@pytest.mark.parametrize(
+    ("count", "every", "expected"),
+    [(1, 100, True), (2, 100, False), (100, 100, True), (200, 100, True), (3, 1, True)],
+)
+def test_should_log_drop(count: int, every: int, expected: bool) -> None:
+    assert _should_log_drop(count, every) is expected
+
+
+def test_repeated_detection_drops_are_counted_not_relogged() -> None:
+    class _AlwaysRaises:
+        def detect(self, frame: Any) -> DetectionResult:
+            raise DetectionError("bad")
+
+        def close(self) -> None:
+            pass
+
+    pipeline = Pipeline(camera=FakeCamera(_frames(2)), detector=_AlwaysRaises())
+    assert pipeline.run(max_consecutive_empty=1) == 2  # both frames read despite drops
+    assert pipeline.dropped_detections == 2  # 2nd drop exercises the no-relog branch
+
+
+def test_run_respects_max_iterations() -> None:
+    camera = FakeCamera(_frames(5))
+    detector = FakeDetector(_sample())
+    pipeline = Pipeline(camera=camera, detector=detector)
+    assert pipeline.run(max_iterations=2) == 2  # stops at the bound, not end-of-stream
+    assert detector.calls == 2
 
 
 def test_close_swallows_raising_closer() -> None:

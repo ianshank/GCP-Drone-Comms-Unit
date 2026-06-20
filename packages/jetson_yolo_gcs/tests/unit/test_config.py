@@ -70,6 +70,13 @@ def test_pipeline_defaults_run_forever() -> None:
     assert s.pipeline.idle_poll_s == 0.01
     assert s.pipeline.max_consecutive_empty is None  # tolerate transient empties
     assert s.pipeline.liveness_timeout_s == 2.0
+    assert s.pipeline.drop_log_every == 100
+
+
+def test_drop_log_every_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_DROP_LOG_EVERY", "0")
+    with pytest.raises(ValidationError):
+        get_settings()
 
 
 def test_pipeline_env_override(monkeypatch: pytest.MonkeyPatch) -> None:

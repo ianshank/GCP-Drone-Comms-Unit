@@ -27,16 +27,16 @@ from .utils.fps import FpsCounter
 #: Injectable idle back-off (defaults to ``time.sleep``); tests substitute a fake.
 SleepCallable = Callable[[float], None]
 
-#: Drop counters log on the first occurrence and every Nth thereafter, so a persistent
-#: fault never floods the log at frame rate (mirrors meshsa's drop-and-count pattern).
-_DROP_LOG_EVERY = 100
+#: Default liveness / drop-log thresholds (overridable per-pipeline and via PipelineSettings).
+_DEFAULT_LIVENESS_TIMEOUT_S = 2.0
+_DEFAULT_DROP_LOG_EVERY = 100
 
 _log = structlog.get_logger("jetson_yolo_gcs.pipeline")
 
 
-def _should_log_drop(count: int) -> bool:
-    """True on the 1st drop and every :data:`_DROP_LOG_EVERY` drops thereafter."""
-    return count == 1 or count % _DROP_LOG_EVERY == 0
+def _should_log_drop(count: int, every: int) -> bool:
+    """True on the 1st drop and every ``every`` drops thereafter (rate-limited logging)."""
+    return count == 1 or count % every == 0
 
 
 class Pipeline:
@@ -52,6 +52,8 @@ class Pipeline:
         target_classes: frozenset[str] | None = None,
         fps: FpsCounter | None = None,
         clock: Clock | None = None,
+        liveness_timeout_s: float = _DEFAULT_LIVENESS_TIMEOUT_S,
+        drop_log_every: int = _DEFAULT_DROP_LOG_EVERY,
     ) -> None:
         self._camera = camera
         self._detector = detector
@@ -60,6 +62,8 @@ class Pipeline:
         self._target_classes = target_classes
         self._clock: Clock = clock or MonotonicClock()
         self._fps = fps or FpsCounter(clock=self._clock)
+        self._liveness_timeout_s = liveness_timeout_s
+        self._drop_log_every = drop_log_every
         self._stop = threading.Event()
 
         #: Frames dropped because detection failed recoverably (malformed output).
@@ -77,17 +81,19 @@ class Pipeline:
     def fps(self) -> float:
         return self._fps.fps
 
-    def snapshot(self, *, max_age_s: float = 2.0) -> dict[str, object]:
+    def snapshot(self, *, max_age_s: float | None = None) -> dict[str, object]:
         """Return a runtime health/metrics snapshot (pure; safe to call any time).
 
-        ``live`` is ``True`` only if a frame was read within ``max_age_s`` — a true
-        liveness signal that, unlike :attr:`fps`, goes ``False`` when the camera stalls.
+        ``live`` is ``True`` only if a frame was read within ``max_age_s`` (defaults to the
+        configured ``liveness_timeout_s``) — a true liveness signal that, unlike :attr:`fps`,
+        goes ``False`` when the camera stalls.
         """
+        threshold = self._liveness_timeout_s if max_age_s is None else max_age_s
         last_age: float | None = None
         live = False
         if self._last_frame_t is not None:
             last_age = self._clock.now() - self._last_frame_t
-            live = last_age <= max_age_s
+            live = last_age <= threshold
         return {
             "fps": round(self._fps.fps, 2),
             "dropped_detections": self.dropped_detections,
@@ -120,7 +126,7 @@ class Pipeline:
             result = self._detector.detect(frame.data)
         except DetectionError:
             self.dropped_detections += 1
-            if _should_log_drop(self.dropped_detections):
+            if _should_log_drop(self.dropped_detections, self._drop_log_every):
                 _log.warning("detection failed; dropping frame", dropped=self.dropped_detections)
             return True
 
@@ -129,7 +135,7 @@ class Pipeline:
                 self._stream.write(frame.data)
             except Exception:  # noqa: BLE001 - egress is best-effort; never kill the loop
                 self.dropped_stream += 1
-                if _should_log_drop(self.dropped_stream):
+                if _should_log_drop(self.dropped_stream, self._drop_log_every):
                     _log.warning("stream write failed; dropping", dropped=self.dropped_stream)
 
         if self._bridge is not None:
@@ -216,4 +222,6 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
         stream=stream,
         bridge=bridge,
         target_classes=settings.mavlink.target_class_set,
+        liveness_timeout_s=settings.pipeline.liveness_timeout_s,
+        drop_log_every=settings.pipeline.drop_log_every,
     )

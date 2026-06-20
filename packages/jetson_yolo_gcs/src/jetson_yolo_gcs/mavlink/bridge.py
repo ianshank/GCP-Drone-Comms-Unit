@@ -119,4 +119,7 @@ class LandingTargetBridge:
         if conn is not None:
             close = getattr(conn, "close", None)
             if callable(close):
-                close()
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 - teardown is best-effort; never raise on close
+                    _log.debug("error closing MAVLink connection")

@@ -27,7 +27,18 @@ TimeoutStopSec=10
 User=flightctl
 # video: camera (v4l2/CSI) access;  dialout: serial MAVLink links if used.
 SupplementaryGroups=video dialout
+# Sandboxing — conservative set that does NOT touch /dev (camera) or /mnt/ssd (models):
+# ProtectSystem=full keeps /usr,/boot,/etc read-only; do not use =strict (would block
+# device/SSD writes). No DevicePolicy/DeviceAllow here — that would cut off the camera.
 NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
 WantedBy=multi-user.target

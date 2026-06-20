@@ -90,6 +90,27 @@ def test_close_is_idempotent_and_closes_connection() -> None:
     assert conn.closed is True
 
 
+def test_close_swallows_connection_close_error() -> None:
+    class _BadConn:
+        def __init__(self) -> None:
+            self.mav = _FakeMav()
+
+        def close(self) -> None:
+            raise OSError("link already gone")
+
+    bridge = LandingTargetBridge(MavlinkSettings(), connection=_BadConn())
+    bridge.close()  # best-effort teardown must not raise
+
+
+def test_close_with_non_callable_close_attr() -> None:
+    class _NoCloseConn:
+        mav = _FakeMav()
+        close = None  # not callable
+
+    bridge = LandingTargetBridge(MavlinkSettings(), connection=_NoCloseConn())
+    bridge.close()  # no-op, must not raise
+
+
 def test_publish_raises_mavlink_error_when_no_connection() -> None:
     # Factory yields no connection; publish must fail loud, not silently drop.
     bridge = LandingTargetBridge(

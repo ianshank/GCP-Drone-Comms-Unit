@@ -32,6 +32,7 @@ def test_health_report_resolves_plan() -> None:
     assert report["pipeline"]["idle_poll_s"] == 0.01
     assert report["pipeline"]["max_consecutive_empty"] is None
     assert report["pipeline"]["liveness_timeout_s"] == 2.0
+    assert report["pipeline"]["drop_log_every"] == 100
 
 
 def test_main_health_check_prints_json(capsys: pytest.CaptureFixture[str]) -> None:

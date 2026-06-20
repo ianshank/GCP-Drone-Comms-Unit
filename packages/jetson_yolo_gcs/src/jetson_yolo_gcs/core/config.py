@@ -104,6 +104,9 @@ class PipelineSettings(BaseSettings):
     #: A frame must be read within this many seconds for the pipeline to report "live"
     #: (liveness != fps, which only ticks on successful frames).
     liveness_timeout_s: float = Field(default=2.0, gt=0.0)
+    #: Log a dropped-frame warning on the 1st drop and every Nth thereafter, so a
+    #: persistent fault never floods the log at frame rate.
+    drop_log_every: int = Field(default=100, ge=1)
 
 
 class Settings(BaseSettings):
