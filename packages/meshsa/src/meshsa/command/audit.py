@@ -23,6 +23,11 @@ from typing import IO, Any
 
 from ..protocols import Clock, SystemClock
 
+#: The on-disk audit record shape, pinned as a contract for downstream log parsers.
+#: Each JSONL line is exactly these keys: ``t`` (float, clock time), ``event`` (str),
+#: ``data`` (dict). Changing this is a wire-format break — bump deliberately.
+AUDIT_RECORD_FIELDS: tuple[str, ...] = ("t", "event", "data")
+
 
 class JsonlAuditLog:
     """Single-writer (lock-serialised), append-only, fsync-durable JSONL sink."""

@@ -21,6 +21,7 @@ from typing import Any, Protocol
 import structlog
 from pydantic import BaseModel
 
+from .._parsing import parse_int
 from .agent import AgentReply
 from .sources import (
     DEFAULT_DRONE_UID,
@@ -33,6 +34,11 @@ _log = structlog.get_logger(__name__)
 
 #: Stable, non-sensitive message returned to the browser on an upstream failure.
 _UPSTREAM_ERROR = "assistant unavailable; check the server logs"
+
+#: Max accepted chat prompt length. The endpoint can be exposed off-loopback (with a
+#: token) and each prompt spends model tokens, so an unbounded prompt is a cost/latency
+#: DoS. Generous for real SA questions; oversized prompts get a 400, not a model call.
+MAX_PROMPT_CHARS = 8000
 
 # Server bind defaults + the environment-variable names that override every
 # setting. Centralized so there are no scattered magic strings/ports.
@@ -76,7 +82,7 @@ def resolve_config(env: Mapping[str, str]) -> ServerConfig:
     token = (env.get(ENV_TOKEN) or "").strip() or None
     return ServerConfig(
         host=env.get(ENV_HOST, DEFAULT_HOST),
-        port=int(env.get(ENV_PORT, str(DEFAULT_PORT))),
+        port=parse_int(ENV_PORT, env.get(ENV_PORT, str(DEFAULT_PORT)), lo=1, hi=65535),
         token=token,
         mavlink2rest_url=env.get(ENV_MAVLINK2REST_URL, DEFAULT_MAVLINK2REST_URL),
         drone_uid=env.get(ENV_DRONE_UID, DEFAULT_DRONE_UID),
@@ -142,6 +148,8 @@ async def chat_reply(agent: _Agent, payload: Any) -> tuple[dict[str, Any], int]:
     prompt = payload.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         return {"error": "missing 'prompt'"}, 400
+    if len(prompt) > MAX_PROMPT_CHARS:
+        return {"error": f"prompt too long (max {MAX_PROMPT_CHARS} chars)"}, 400
     try:
         reply = await agent.ask(prompt.strip())
     except Exception as exc:

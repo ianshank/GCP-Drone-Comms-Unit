@@ -22,6 +22,7 @@ import signal
 
 import structlog
 
+from ._parsing import parse_float, parse_int
 from .config import NodeConfig
 from .health import serve_healthz
 from .models import Envelope, Position
@@ -35,11 +36,11 @@ def _env(key: str, default: str) -> str:
 
 
 def _env_int(key: str, default: int) -> int:
-    return int(_env(key, str(default)))
+    return parse_int(f"MESHSA_{key}", _env(key, str(default)))
 
 
 def _env_float(key: str, default: float) -> float:
-    return float(_env(key, str(default)))
+    return parse_float(f"MESHSA_{key}", _env(key, str(default)))
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

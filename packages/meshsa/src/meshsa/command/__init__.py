@@ -14,12 +14,13 @@ must pass the :class:`ConfirmationGate` and the :class:`CommandSender` lifecycle
 
 from __future__ import annotations
 
-from .audit import JsonlAuditLog
+from .audit import AUDIT_RECORD_FIELDS, JsonlAuditLog
 from .commands import (
     CommanderSettings,
     CommandSpec,
     build_command,
 )
+from .config import CommanderConfig
 from .errors import (
     ArmBlockedError,
     CommandError,
@@ -43,9 +44,11 @@ from .safety import ConfirmationGate, arm_allowed
 from .service import CommandService, HealthProvider, StagedCommand
 
 __all__ = [
+    "AUDIT_RECORD_FIELDS",
     "Ack",
     "ArmBlockedError",
     "AuditLog",
+    "CommanderConfig",
     "CommanderSettings",
     "CommandError",
     "CommandLink",
