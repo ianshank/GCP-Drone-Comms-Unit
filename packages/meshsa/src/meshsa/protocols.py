@@ -9,7 +9,10 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import AsyncIterator
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from .models import Envelope
 
 
 @runtime_checkable
@@ -30,8 +33,8 @@ class Codec(Protocol):
 
     name: str
 
-    def encode(self, envelope: object) -> bytes: ...
-    def decode(self, data: bytes) -> object: ...
+    def encode(self, envelope: Envelope) -> bytes: ...
+    def decode(self, data: bytes) -> Envelope: ...
 
 
 @runtime_checkable

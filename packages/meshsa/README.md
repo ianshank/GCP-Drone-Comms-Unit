@@ -35,6 +35,7 @@ meshsa/
   protocols.py    Transport/Codec/Clock/IdFactory + default impls
   registry.py     open/closed component registry
   codec.py        JsonCodec (CoT/XML codec can be added later)
+  inference.py    AI tactical inference service via Nemotron
   router.py       publish / pump / dedupe / bridge / subscribe
   node.py         build_node(config) -> Node
   transports/     loopback, null, meshtastic_radio (real API),
@@ -67,7 +68,7 @@ Then reference `{"name": "lora", "type": "meshtastic", "options": {"port": "..."
 in the node config. Same pattern for a HaLow/IP transport or a CoT codec.
 
 ## Tests & coverage
-`pytest` → **98 passed, 100% statement + branch coverage** (`--cov-fail-under=90`
+`pytest` → **101 passed, 100% statement + branch coverage** (`--cov-fail-under=90`
 enforced in `pyproject.toml`). Tests inject a `FakeClock`, sequential id factory,
 in-memory `LoopbackBus`, and a fake Meshtastic interface + pubsub, so they run with
 no radio and no network. Hardware/library binding glue (building the real serial/TCP
@@ -101,12 +102,12 @@ re-encoded as JSON for the `mesh` side (and vice-versa). Backward compatible: om
 - `tak_multicast` exchanges CoT datagrams on ATAK's SA group (default
   `239.2.3.1:6969`).
 
-Both put network I/O behind an injected seam (`connector` for TCP, `io_factory`
-for multicast), so the framing/bridge logic is fully tested with fakes; only the
-real socket builders are `# pragma: no cover`. The suite includes a runnable
-end-to-end test: a node with a loopback mesh (JSON) and a `tak_tcp` link (CoT)
-publishes a position — JSON reaches the mesh peer, CoT reaches the FTS writer — and
-an inbound CoT event from the server is bridged back onto the mesh as JSON.
+Both put network I/O behind injected collaborators (`connector` for TCP,
+`io_factory` for multicast), so the framing/bridge logic is fully tested with
+fakes; only the real socket builders are `# pragma: no cover`. The suite includes
+a config-driven bridge e2e test: a node with a loopback mesh side (JSON) and a
+loopback TAK side (CoT) publishes a position, then bridges an inbound CoT event
+back onto the mesh as JSON.
 
 ## Runnable field example (real hardware)
 `src/meshsa/examples/base_node.py` wires a **real** T-Beam (Meshtastic over USB) to a **real**

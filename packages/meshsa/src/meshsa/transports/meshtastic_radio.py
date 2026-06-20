@@ -96,7 +96,7 @@ class MeshtasticTransport(AbstractTransport):
         self._sleep = sleep or asyncio.sleep
         self._iface: Any | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._lost: asyncio.Event | None = None
         self._started = False
         self._stopping = False
@@ -178,7 +178,7 @@ class MeshtasticTransport(AbstractTransport):
         except Exception:
             _log.warning("meshtastic send failed; dropping frame", transport=self.name)
 
-    def _on_receive(self, packet: dict | None = None, interface: Any = None) -> None:
+    def _on_receive(self, packet: dict[str, Any] | None = None, interface: Any = None) -> None:
         decoded = (packet or {}).get("decoded") or {}
         if decoded.get("portnum") not in (self.portnum, self.portnum_name):
             return

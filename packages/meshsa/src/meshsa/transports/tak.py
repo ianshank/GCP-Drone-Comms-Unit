@@ -87,7 +87,7 @@ class TakTcpTransport(AbstractTransport):
         self._sleep = sleep or asyncio.sleep
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._started = False
         self._stopping = False
 
@@ -227,7 +227,7 @@ class TakMulticastTransport(AbstractTransport):
         super().__init__(name, queue_maxsize)
         self._io_factory = io_factory or (lambda: _default_multicast_io(group, port, iface))
         self._io: DatagramIO | None = None
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         await super().start()

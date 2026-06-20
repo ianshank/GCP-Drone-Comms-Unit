@@ -4,7 +4,7 @@ Thanks for your interest in contributing.
 
 ## Repository layout
 
-```
+```text
 packages/meshsa/      Python framework (src layout, all tests live here)
 ops/                  Deployment kits (pi5-node, base-service)
 hardware/             3D-printable cases and parts
@@ -24,6 +24,7 @@ pre-commit install
 ```
 
 For real-radio work, also install the optional extra:
+
 ```bash
 pip install -e "packages/meshsa[dev,meshtastic]"
 ```
@@ -35,11 +36,15 @@ pip install -e "packages/meshsa[dev,meshtastic]"
 | Test       | `make test` (or `cd packages/meshsa && pytest`)           |
 | Lint       | `make lint` (`ruff check .`)                              |
 | Format     | `make format` (`ruff format .`)                           |
-| Type-check | `make type` (`mypy packages/meshsa/src`)                  |
+| Type-check | `make type` (`cd packages/meshsa && mypy src`)            |
 | Build      | `make build` (`python -m build packages/meshsa`)          |
 | Container  | `make docker`                                             |
 
 CI runs lint + type + test + build on every push and pull request.
+
+AI coding agents should read [AGENTS.md](AGENTS.md) first, then any nested
+`AGENTS.md` in the folder they edit. Repeatable agent workflows live under
+[.agents/skills](.agents/skills).
 
 ## Branch / PR model
 

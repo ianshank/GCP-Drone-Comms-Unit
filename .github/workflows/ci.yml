@@ -37,8 +37,8 @@ jobs:
         run: ruff format --check packages/meshsa
 
       - name: Type check
-        run: mypy packages/meshsa/src
-        continue-on-error: true  # baseline; flip to required once mypy is clean
+        working-directory: packages/meshsa
+        run: mypy src
 
       - name: Test
         working-directory: packages/meshsa

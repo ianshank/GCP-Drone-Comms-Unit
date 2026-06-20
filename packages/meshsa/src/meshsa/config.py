@@ -34,6 +34,18 @@ class MeshConfig(BaseModel):
     freq_khz: int | None = None
 
 
+class NemotronConfig(BaseModel):
+    enabled: bool = False
+    api_key: str = ""
+    base_url: str = "https://integrate.api.nvidia.com/v1"
+    model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    system_prompt: str = "You are a tactical AI assistant. Summarize the user's message clearly. Keep it under 100 words."
+    temperature: float = 0.6
+    max_tokens: int = 512
+    timeout_s: float = 30.0
+    max_retries: int = 3
+
+
 class NodeConfig(BaseModel):
     uid: str
     callsign: str
@@ -43,6 +55,7 @@ class NodeConfig(BaseModel):
     mesh: MeshConfig = Field(default_factory=MeshConfig)
     router: RouterConfig = Field(default_factory=RouterConfig)
     transports: list[TransportConfig] = Field(default_factory=list)
+    inference: NemotronConfig = Field(default_factory=NemotronConfig)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> NodeConfig:

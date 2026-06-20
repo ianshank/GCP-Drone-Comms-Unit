@@ -2,7 +2,7 @@
 
 from .codec import JsonCodec
 from .compact import CompactCodec
-from .config import MeshConfig, NodeConfig, RouterConfig, TransportConfig
+from .config import MeshConfig, NemotronConfig, NodeConfig, RouterConfig, TransportConfig
 from .cot import CotCodec
 from .errors import (
     DuplicateRegistrationError,
@@ -10,6 +10,7 @@ from .errors import (
     MeshSAError,
     UnknownComponentError,
 )
+from .inference import InferenceResult, InferenceService, NemotronClient
 from .models import ChatPayload, Envelope, MessageKind, NodeInfo, NodeTier, PliPayload, Position
 from .node import Node, build_node
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
@@ -33,6 +34,7 @@ __all__ = [
     "MeshConfig",
     "RouterConfig",
     "TransportConfig",
+    "NemotronConfig",
     "Position",
     "NodeInfo",
     "NodeTier",
@@ -65,4 +67,7 @@ __all__ = [
     "IncompatibleSchemaError",
     "UnknownComponentError",
     "DuplicateRegistrationError",
+    "InferenceResult",
+    "NemotronClient",
+    "InferenceService",
 ]

@@ -3,6 +3,27 @@
 This document describes the structure and design of the `meshsa` framework that
 ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+## C4 Architecture
+
+```mermaid
+C4Context
+    title System Context for meshsa Framework
+
+    Person(user, "Field User", "Uses a mesh node or ATAK device")
+    System(meshsa, "meshsa Framework", "Routes, dedupes, and translates SA messages")
+    
+    System_Ext(meshtastic, "Meshtastic Radio", "LoRa mesh hardware")
+    System_Ext(tak, "TAK Server", "FreeTAKServer / ATAK")
+    System_Ext(nemotron, "NVIDIA Nemotron API", "Provides tactical AI insights")
+
+    Rel(user, meshtastic, "Broadcasts PLI/CHAT via")
+    Rel(user, tak, "Broadcasts CoT via")
+    
+    Rel(meshsa, meshtastic, "Sends/Receives binary payloads via serial/TCP/BLE")
+    Rel(meshsa, tak, "Sends/Receives CoT XML via TCP/UDP")
+    Rel(meshsa, nemotron, "Analyzes mesh traffic & generates insights", "HTTPS/REST")
+```
+
 ## Goals
 
 1. **Transport-agnostic.** Add new radios, IP transports, or TAK servers without
@@ -29,6 +50,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.compact`                | `CompactCodec` (LoRa-sized binary, ~40 B)                            |
 | `meshsa.cot`                    | `CotCodec` (ATAK / TAK Cursor-on-Target XML)                         |
 | `meshsa.router`                 | Async broker: dedupe, bridge, per-transport codec selection         |
+| `meshsa.inference`              | AI integration via `NemotronClient` and `InferenceService`           |
 | `meshsa.node`                   | `Node` dataclass + `build_node(config)` factory                      |
 | `meshsa.transports.base`        | `AbstractTransport` (async inbox, `stream()`, `send()`)              |
 | `meshsa.transports.loopback`    | `LoopbackBus`, `LoopbackTransport`, `NullTransport`                  |

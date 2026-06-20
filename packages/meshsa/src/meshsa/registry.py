@@ -7,9 +7,12 @@ requires editing the core (forward/backward compatible by construction).
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .errors import DuplicateRegistrationError, UnknownComponentError
+
+if TYPE_CHECKING:
+    from .protocols import Codec, Transport
 
 T = TypeVar("T")
 
@@ -42,5 +45,5 @@ class Registry(Generic[T]):
         return sorted(self._factories)
 
 
-transport_registry: Registry = Registry("transport")
-codec_registry: Registry = Registry("codec")
+transport_registry: Registry[Transport] = Registry("transport")
+codec_registry: Registry[Codec] = Registry("codec")

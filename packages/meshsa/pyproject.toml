@@ -34,6 +34,9 @@ meshtastic = [
     "pypubsub>=4.0",
 ]
 tak = []
+inference = [
+    "aiohttp>=3.9",
+]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
@@ -43,6 +46,9 @@ dev = [
     "pre-commit>=3.7",
     "build>=1.2",
     "twine>=5",
+    "pytest-aiohttp>=1.0",
+    "aioresponses>=0.7",
+    "hypothesis>=6.0",
 ]
 
 [project.scripts]
