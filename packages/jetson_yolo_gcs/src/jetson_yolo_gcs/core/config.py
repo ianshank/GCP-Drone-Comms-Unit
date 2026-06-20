@@ -1,0 +1,100 @@
+"""Configuration via pydantic-settings v2 (no magic numbers, per-domain prefixes).
+
+Each domain is its own ``BaseSettings`` with an env prefix so operational values are
+grouped and overridable from the environment or a ``.env`` file:
+
+* ``YOLO_*``    — detection model + thresholds
+* ``CAMERA_*``  — capture source / geometry
+* ``STREAM_*``  — GCS video egress
+* ``MAVLINK_*`` — LANDING_TARGET publisher (disabled by default)
+* ``APP_*``     — top-level (logging)
+
+The :class:`StreamEncoder` / :class:`CameraType` enums live here (core) so both the
+config and the ``streaming`` layer import them in one direction (core -> streaming),
+avoiding an import cycle.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = ".env"
+
+
+class CameraType(str, Enum):
+    """How the camera source string is interpreted when building a pipeline."""
+
+    USB = "usb"
+    CSI = "csi"
+    RTSP = "rtsp"
+
+
+class StreamEncoder(str, Enum):
+    """Video encoder element for the outbound GStreamer pipeline."""
+
+    X264 = "x264"  # CPU encoder (Orin Nano, dev hosts without HW encode)
+    NVV4L2 = "nvv4l2"  # Jetson hardware encoder (Orin NX / AGX)
+
+
+class YoloSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="YOLO_", env_file=_ENV_FILE, extra="ignore")
+
+    model_path: str = "yolov8n.pt"
+    confidence: float = Field(default=0.25, ge=0.0, le=1.0)
+    iou: float = Field(default=0.45, ge=0.0, le=1.0)
+    device: str = "cpu"
+    imgsz: int = Field(default=640, gt=0)
+
+
+class CameraSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="CAMERA_", env_file=_ENV_FILE, extra="ignore")
+
+    type: CameraType = CameraType.USB
+    source: str = "/dev/video0"
+    width: int = Field(default=1280, gt=0)
+    height: int = Field(default=720, gt=0)
+    fps: int = Field(default=30, gt=0)
+
+
+class StreamSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="STREAM_", env_file=_ENV_FILE, extra="ignore")
+
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = Field(default=5600, gt=0, le=65535)
+    encoder: StreamEncoder = StreamEncoder.X264
+    bitrate_kbps: int = Field(default=4000, gt=0)
+
+
+class MavlinkSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="MAVLINK_", env_file=_ENV_FILE, extra="ignore")
+
+    endpoint: str = "udpout:127.0.0.1:14550"
+    target_system: int = Field(default=1, ge=0, le=255)
+    target_component: int = Field(default=1, ge=0, le=255)
+    #: Opt-in per the charter carve-out: LANDING_TARGET is advisory and OFF by default.
+    enable_landing_target: bool = False
+    #: Camera field of view used to convert a bbox centre into MAVLink angular offsets.
+    fov_x_rad: float = Field(default=1.204, gt=0.0)  # ~69 deg horizontal
+    fov_y_rad: float = Field(default=0.733, gt=0.0)  # ~42 deg vertical
+
+
+class Settings(BaseSettings):
+    """Top-level settings composing every domain (each reads its own env prefix)."""
+
+    model_config = SettingsConfigDict(env_prefix="APP_", env_file=_ENV_FILE, extra="ignore")
+
+    log_level: str = "INFO"
+    json_logs: bool = False
+    yolo: YoloSettings = Field(default_factory=YoloSettings)
+    camera: CameraSettings = Field(default_factory=CameraSettings)
+    stream: StreamSettings = Field(default_factory=StreamSettings)
+    mavlink: MavlinkSettings = Field(default_factory=MavlinkSettings)
+
+
+def get_settings() -> Settings:
+    """Build a fresh :class:`Settings` from the environment / ``.env``."""
+    return Settings()

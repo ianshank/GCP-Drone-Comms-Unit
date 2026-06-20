@@ -53,6 +53,47 @@ jobs:
           pip install build
           python -m build
 
+  perception:
+    name: perception (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "packages/jetson_yolo_gcs[dev]"
+
+      - name: Lint
+        run: ruff check packages/jetson_yolo_gcs
+
+      - name: Format check
+        run: ruff format --check packages/jetson_yolo_gcs
+
+      - name: Type check
+        working-directory: packages/jetson_yolo_gcs
+        run: mypy src
+
+      - name: Test
+        working-directory: packages/jetson_yolo_gcs
+        run: pytest
+
+      - name: Build sdist + wheel
+        working-directory: packages/jetson_yolo_gcs
+        run: |
+          pip install build
+          python -m build
+
   shell:
     name: shell lint
     runs-on: ubuntu-latest
