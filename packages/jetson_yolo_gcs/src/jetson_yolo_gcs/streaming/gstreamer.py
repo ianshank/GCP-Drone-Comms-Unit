@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from ..core.config import StreamEncoder, StreamSettings
+from ..core.errors import StreamError
 
 #: Fixed RTP/H.264 payload constants (protocol-defined, not operator-tunable):
 #: 96 is the standard dynamic payload type; config-interval=1 re-sends SPS/PPS each IDR.
@@ -78,6 +79,10 @@ def _default_stream_writer(
         fps,
         (width, height),
     )
+    # Fail fast: OpenCV opens GStreamer writers lazily and silently drops frames if the
+    # pipeline is invalid or GStreamer is missing. Surface that at wiring time.
+    if not writer.isOpened():
+        raise StreamError(f"could not open stream pipeline: {pipeline}")
 
     class _CvWriter:
         def write(self, frame: Any) -> None:

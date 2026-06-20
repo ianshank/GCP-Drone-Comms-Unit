@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from ..core.config import CameraSettings, CameraType
+from ..core.errors import CameraError
 
 #: Builds a :class:`CameraSource` (the real backend lives behind the factory).
 CameraFactory = Callable[[], "CameraSource"]
@@ -80,10 +81,17 @@ def _default_camera_factory(settings: CameraSettings) -> CameraFactory:  # pragm
     """Build an OpenCV/GStreamer-backed :class:`CameraSource` (real hardware)."""
 
     def factory() -> CameraSource:
+        import time
+
         import cv2
 
         pipeline = build_capture_pipeline(settings)
         cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+        # Fail fast: a pipeline that never opens would otherwise read () forever and,
+        # with max_consecutive_empty=None, idle-loop indefinitely with no actionable error.
+        if not cap.isOpened():
+            cap.release()
+            raise CameraError(f"could not open camera pipeline: {pipeline}")
 
         class _OpenCvSource:
             def __init__(self) -> None:
@@ -93,7 +101,7 @@ def _default_camera_factory(settings: CameraSettings) -> CameraFactory:  # pragm
                 ok, data = cap.read()
                 if not ok:
                     return None
-                frame = Frame(idx=self._idx, t=0.0, data=data)
+                frame = Frame(idx=self._idx, t=time.monotonic(), data=data)
                 self._idx += 1
                 return frame
 

@@ -55,9 +55,10 @@ def test_detect_parses_boxes_and_geometry() -> None:
     assert best.bbox == (10.0, 20.0, 110.0, 220.0)
     # Unknown class id falls back to its string form.
     assert result.detections[1].class_name == "7"
-    # Settings are forwarded to the model call.
+    # Settings are forwarded to the model call (incl. device placement).
     assert model.kwargs["conf"] == 0.3
     assert model.kwargs["imgsz"] == 320
+    assert model.kwargs["device"] == "cpu"
 
 
 def test_close_releases_model() -> None:

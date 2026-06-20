@@ -39,3 +39,11 @@ class DetectionError(JetsonYoloError):
 
 class MavlinkError(JetsonYoloError):
     """A MAVLink operation failed (e.g. no connection available to publish on)."""
+
+
+class CameraError(JetsonYoloError):
+    """A camera capture device could not be opened."""
+
+
+class StreamError(JetsonYoloError):
+    """A video egress pipeline could not be opened."""

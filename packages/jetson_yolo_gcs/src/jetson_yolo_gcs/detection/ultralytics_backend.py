@@ -40,6 +40,7 @@ class UltralyticsDetector(DetectorBase):
             conf=self._settings.confidence,
             iou=self._settings.iou,
             imgsz=self._settings.imgsz,
+            device=self._settings.device,
             verbose=False,
         )
         if not results:
