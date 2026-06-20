@@ -1,0 +1,44 @@
+# /etc/systemd/system/jetson-yolo-gcs.service — on-board perception (Initiative D).
+# Camera -> YOLO/Hailo detection -> GStreamer video to a GCS -> opt-in MAVLink LANDING_TARGET.
+# Install (venv + models live on the SSD; Jetson eMMC is space-constrained — see
+# flightctl/scripts/relocate_to_ssd.sh):
+#   sudo -u flightctl /mnt/ssd/venvs/jetson_yolo_gcs/bin/pip install -e "packages/jetson_yolo_gcs[ultralytics,camera,mavlink]"
+#   sudo install -d /etc/jetson-yolo-gcs && sudo cp packages/jetson_yolo_gcs/.env.example /etc/jetson-yolo-gcs/jetson-yolo-gcs.env
+#   sudo cp flightctl/systemd/jetson-yolo-gcs.service /etc/systemd/system/
+#   sudo systemctl enable --now jetson-yolo-gcs
+# Verify config with no hardware first: jetson-yolo-gcs --health-check
+[Unit]
+Description=Jetson on-board perception (YOLO -> GCS video + MAVLink LANDING_TARGET)
+# Only hard dependency is the MAVLink link (via mavp2p); models live on the SSD mount.
+After=network-online.target mnt-ssd.mount mavp2p.service
+Wants=network-online.target
+RequiresMountsFor=/mnt/ssd
+
+[Service]
+Type=simple
+# All config is via env (YOLO_*, CAMERA_*, STREAM_*, MAVLINK_*, PIPELINE_*); no secrets here.
+EnvironmentFile=/etc/jetson-yolo-gcs/jetson-yolo-gcs.env
+ExecStart=/mnt/ssd/venvs/jetson_yolo_gcs/bin/jetson-yolo-gcs
+Restart=always
+RestartSec=3
+# The CLI traps SIGINT/SIGTERM -> Pipeline.request_stop() for a clean, draining shutdown.
+KillSignal=SIGINT
+TimeoutStopSec=10
+User=flightctl
+# video: camera (v4l2/CSI) access;  dialout: serial MAVLink links if used.
+SupplementaryGroups=video dialout
+# Sandboxing — conservative set that does NOT touch /dev (camera) or /mnt/ssd (models):
+# ProtectSystem=full keeps /usr,/boot,/etc read-only; do not use =strict (would block
+# device/SSD writes). No DevicePolicy/DeviceAllow here — that would cut off the camera.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

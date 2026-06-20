@@ -18,6 +18,7 @@ the deployment/runtime layer. See the approved plan for the full design and sequ
 | `sim/mavlink_fake.py` | pymavlink `udpout` simulator — emits HEARTBEAT + GLOBAL_POSITION_INT for dev/e2e (no autopilot needed). |
 | `systemd/mavp2p.service` + `mavp2p.env.example` | MAVLink proxy (mavp2p) unit. |
 | `systemd/freetakserver.service` + `fts.env.example` | FreeTAKServer unit (Python 3.11 venv). |
+| `systemd/jetson-yolo-gcs.service` | On-board **perception** unit (Initiative D): camera → YOLO/Hailo detection → GStreamer video to a GCS → opt-in MAVLink `LANDING_TARGET`. Config via env (`/etc/jetson-yolo-gcs/jetson-yolo-gcs.env`); ordered `After=mavp2p.service`. See [Perception deployment](#perception-deployment-initiative-d). |
 | `scripts/setup_fts.sh` | Builds the FTS Python 3.11 venv and installs FreeTAKServer with the verified dep pins via `--constraint`. |
 | `constraints/fts-constraints.txt` | Dependency pins (setuptools/opentelemetry/etc.) verified to boot FTS 2.x on this box; consumed by `setup_fts.sh --constraint`. |
 | `udev/99-flightctl-serial.rules.example` | Stable `/dev/flightctl-*` serial symlinks for autopilot/FC. |
@@ -109,3 +110,30 @@ sudo apt-get install -y chromium-browser
 3. **FreeTAKServer** — `uv venv --python 3.11 /mnt/ssd/venvs/fts && uv pip install 'FreeTAKServer[ui]'`; enable `freetakserver.service`.
 4. **Gateway** — run a meshsa node with `configs/jetson_gateway.json`; drone tracks appear in ATAK.
 5. **Betaflight** — install Chromium, open `https://app.betaflight.com` (WebSerial) for tuning; the `msp_source` transport (Phase 5) ingests MSP telemetry headlessly.
+
+## Perception deployment (Initiative D)
+
+The `jetson_yolo_gcs` perception package ships its own systemd unit
+(`systemd/jetson-yolo-gcs.service`). It is **standalone** — no meshsa/FTS dependency — and ordered
+only `After=mavp2p.service` (it publishes MAVLink `LANDING_TARGET` through the same proxy fan-out)
+plus the `/mnt/ssd` mount (model + venv live on the SSD; the Nano eMMC is tight — relocate first
+via `scripts/relocate_to_ssd.sh`).
+
+```bash
+# venv + package (pick extras for your hardware: ultralytics|hailo, camera, mavlink)
+sudo -u flightctl /mnt/ssd/venvs/jetson_yolo_gcs/bin/pip install -e "packages/jetson_yolo_gcs[ultralytics,camera,mavlink]"
+# config is env-only (YOLO_*, CAMERA_*, STREAM_*, MAVLINK_*, PIPELINE_*); no secrets in the repo
+sudo install -d /etc/jetson-yolo-gcs
+sudo cp packages/jetson_yolo_gcs/.env.example /etc/jetson-yolo-gcs/jetson-yolo-gcs.env  # then edit
+# validate the resolved plan with NO hardware before enabling the service:
+/mnt/ssd/venvs/jetson_yolo_gcs/bin/jetson-yolo-gcs --health-check
+sudo cp flightctl/systemd/jetson-yolo-gcs.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now jetson-yolo-gcs
+```
+
+> **Safety:** `MAVLINK_ENABLE_LANDING_TARGET=false` by default. The published target is *advisory*;
+> the autopilot acts on it only when the operator enables precision-landing mode. There is **no
+> autopilot-heartbeat gate or cadence floor yet** (see the perception backlog in
+> [docs/NEXTSTEPS.md](../docs/NEXTSTEPS.md)) — the operator owns that risk until it lands. On the
+> Orin Nano keep `STREAM_ENCODER=x264` (no hardware H.264 encoder); use `nvv4l2` only on Orin
+> NX/AGX. Run `jetson_clocks` + active cooling for sustained inference.

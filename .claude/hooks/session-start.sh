@@ -24,9 +24,11 @@ cd "$ROOT"
 # let that abort the hook (the existing pip installs the package fine).
 python -m pip install --quiet --upgrade pip 2>/dev/null || true
 python -m pip install --quiet -e "packages/meshsa[dev]"
+python -m pip install --quiet -e "packages/jetson_yolo_gcs[dev]"
 
 # Gate invocation note: this environment ships `mypy`/`pytest` as isolated uv-tool
-# installs that don't see the project deps. Run the gates from packages/meshsa via
-# the project interpreter so they resolve correctly (ruff needs no resolution):
+# installs that don't see the project deps. Run the gates from the relevant package
+# dir via the project interpreter so they resolve correctly (ruff needs no resolution):
 #   ruff check .  |  ruff format --check .  |  python -m mypy src  |  python -m pytest
-echo "meshsa[dev] toolchain ready. Gates: ruff check . | python -m mypy src | python -m pytest"
+echo "meshsa[dev] + jetson_yolo_gcs[dev] toolchains ready."
+echo "Gates (run from the package dir): ruff check . | python -m mypy src | python -m pytest"

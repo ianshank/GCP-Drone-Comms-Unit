@@ -26,6 +26,7 @@ ratified extension (see [CHARTER.md](CHARTER.md) §3).
 | **M4** | Fleet & resilience | planned |
 | **M5** | Packaging & appliance | planned |
 | **C** | Supervised commanding (cross-cutting initiative) | ratified, gated on M2 |
+| **D** | On-board perception (`jetson_yolo_gcs`) | ratified, in progress |
 
 ### M1 — Telemetry → CoT MVP (done)
 `mavlink_source` + `msp_source` + `crsf_source` + `telemetry`/`cot` codecs → CoT **air** tracks;
@@ -61,6 +62,20 @@ per-command operator confirmation, command-channel authentication, append-only a
 and `health_all_ok`-style preconditions. **No command code path ships before M2 hardening
 lands.** Mission/waypoint autonomy, swarm, and BVLOS autonomy stay out of scope pending a
 separate amendment.
+
+### Initiative D — On-board perception: `jetson_yolo_gcs` (ratified 2026-06-20)
+A self-contained Jetson perception package ([CHARTER.md](CHARTER.md) §3 perception carve-out):
+camera → **YOLO/Hailo detection** → **GStreamer video to a GCS** (QGroundControl) and an
+**opt-in, advisory MAVLink `LANDING_TARGET`** publisher (disabled by default; never arms or
+flies). It reuses meshsa's proven patterns — structlog logging, the `Clock` Protocol, the
+open/closed `Registry`, and the injectable `CameraSource`/`Frame` seam — but carries **no
+runtime dependency on `meshsa`**, so it stays usable as a standalone library in other
+projects. Detection backends are selected from the model file extension (`.pt`/`.engine`/
+`.onnx` → Ultralytics, `.hef` → Hailo stub) and added through the registry with no pipeline
+edits. Lives at `packages/jetson_yolo_gcs`; on-device GPU/encoder validation is a follow-up
+(CI exercises only the pure, fakes-first paths). The concrete, changeable backlog (Hailo `.hef`
+inference, PX4 `LOCAL_NED` dialect, TIMESYNC, precision-landing safety hardening, on-device
+runbook) lives in [NEXTSTEPS.md](NEXTSTEPS.md) under "Perception (initiative D)".
 
 ## Invariants that gate every milestone
 These never relax as the roadmap advances (full list in [CHARTER.md](CHARTER.md) §4):

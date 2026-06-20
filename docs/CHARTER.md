@@ -22,8 +22,9 @@ available (LoRa, HaLow, IP, cellular/VPN), with or without internet.
 
 ## 3. Scope
 **In scope:** the `meshsa` framework (transports, codecs, router/bridge), the `flightctl`
-ops layer (gateway, FreeTAKServer, MAVLink proxy, simulators, deployment scripts), and the
-hardware enclosures.
+ops layer (gateway, FreeTAKServer, MAVLink proxy, simulators, deployment scripts), the
+hardware enclosures, and the `jetson_yolo_gcs` on-board perception package (detection → GCS
+video + precision-landing guidance — see the perception carve-out below).
 
 **Out of scope (non-goals):** flying/controlling aircraft (we are read-only on telemetry
 **by default**, not a general ground control station — see the bounded carve-outs below:
@@ -72,6 +73,30 @@ TAK server.
 > command-capable code path is enabled by default, and none ships until M2 hardening (TLS +
 > transport auth) and the safety/auth/audit layer land. Mission/waypoint autonomy, swarm, and
 > BVLOS autonomy remain out of scope pending a separate amendment.
+
+> **Carve-out (deliberate amendment — ratified by the maintainer on 2026-06-20 per §6):
+> on-board perception & precision-landing guidance.** A new, self-contained package
+> (`jetson_yolo_gcs`) MAY run on-board **object detection** (YOLO/Hailo), **stream video** to a
+> ground control station (e.g. QGroundControl), and **publish MAVLink `LANDING_TARGET`**
+> precision-landing guidance to a connected autopilot. This lifts the "no on-board video / no
+> detection" non-goal for that package only, and adds a narrow write path. Constraints (all
+> required):
+> - **Advisory only, opt-in, off by default.** `LANDING_TARGET` is *advisory* input to the
+>   autopilot's own precision-landing mode. The publisher is gated behind
+>   `MavlinkSettings.enable_landing_target` (default **false**) and ships disabled; it does
+>   **not** arm, set modes, send RC, or otherwise fly the aircraft. Authority to act on the
+>   hint stays entirely with the autopilot and the pilot.
+> - **Same invariants as the rest of the repo.** Detection backends are added through a
+>   registry (Invariant 1); detector/camera/stream/MAVLink seams are `Protocol`s so tests use
+>   fakes and need no GPU/camera/autopilot (Invariant 3); every operational value is a config
+>   field with an explicit default (Invariant 5); hardware/encoder glue is the only
+>   `# pragma: no cover` and the gates stay green at high coverage (Invariant 6).
+> - **Reuses, does not fork, the proven primitives.** It mirrors meshsa's logging, clock,
+>   registry, and camera-source abstractions rather than introducing a parallel stack, and
+>   carries no runtime dependency on `meshsa` so it remains usable as a standalone library.
+>
+> This narrowly-scoped exception does not make the unit a general ground control station or a
+> mission/waypoint/autonomy platform; everything else in the non-goal above still stands.
 
 ## 4. Invariants (must not drift — enforce in review)
 1. **Open/closed extensibility.** New mediums and wire formats are added through

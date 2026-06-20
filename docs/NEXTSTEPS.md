@@ -13,6 +13,46 @@
 - Manually verified on-device: fake MAVLink → gateway → live FreeTAKServer `:8087` → ATAK
   viewer received the air track.
 
+## Perception (initiative D — **CHARTER carve-out ratified 2026-06-20**)
+> On-board `jetson_yolo_gcs`: camera → YOLO/Hailo detection → GStreamer video to a GCS →
+> opt-in MAVLink `LANDING_TARGET`. Self-contained (no meshsa runtime dep). MVP shipped in
+> PR #20 (hardened: ruff/mypy-strict, ~98% cov). Target hardware: **Orin Nano + Hailo-8**;
+> support **both ArduPilot and PX4**.
+>
+> ⚠️ **Current safety posture:** `LANDING_TARGET` is advisory and **off by default**
+> (`MAVLINK_ENABLE_LANDING_TARGET=false`). Today there is **no autopilot-heartbeat gate and
+> no cadence floor** — the operator owns that risk until the hardening items below land.
+
+- [x] **MVP + hardening** (PR #20): detection factory (ext→backend), pure GStreamer pipeline
+      builders, pymavlink `LANDING_TARGET` bridge, DI pipeline with path-specific error policy
+      (detect=drop-and-count, egress=best-effort, **publish=fail-loud**), `--health-check`.
+- [x] **Deploy glue** (this iteration): `flightctl/systemd/jetson-yolo-gcs.service` + deploy
+      note; pipeline runtime counters + **liveness** snapshot (`fps` ≠ liveness during a stall).
+- [ ] **Real Hailo-8 `.hef` inference** (preferred offload; TensorRT GPU is the fallback).
+      `.pt`→ONNX→`.hef` is built on an **x86 Ubuntu host only** (Hailo DFC is not ARM); the
+      `.hef` is an offline artifact. Add a `[hailo]` extra + model-prep note.
+- [ ] **PX4 `LOCAL_NED` dialect:** PX4 ignores `angle_x/angle_y` and needs `MAV_FRAME_LOCAL_NED`
+      x/y/z (`position_valid=1`). Add `MAVLINK_FRAME` (`body_frd`|`local_ned`) + pixel→bearing→NED
+      (FOV + attitude/alt + `GPS_GLOBAL_ORIGIN`). First add a test pinning the current
+      `landing_target_send` arg arity / `position_valid=0` default.
+      ([landing_target](https://mavlink.io/en/services/landing_target.html) /
+      [PX4 precland](https://docs.px4.io/main/en/advanced_features/precland.html))
+- [ ] **TIMESYNC + capture-time `time_usec`:** align to the vehicle clock, *then* stamp frame
+      capture time. Until then keep publish-time or send `0` (ArduPilot ignores the field; raw
+      unsynced monotonic is a fusion hazard). ([TIMESYNC](https://mavlink.io/en/services/timesync.html))
+- [ ] **Precision-landing safety hardening:** autopilot-**heartbeat** gate (reuse the
+      `meshsa.command.health.HeartbeatHealth` pattern, fail-closed); **≥10 Hz cadence floor +
+      stale-target suppression**; reconsider in-flight publish-failure policy (count/escalate, do
+      not crash the camera+stream loop); CHARTER wording (advisory hint, but **authoritative for
+      final approach** once the operator enables precision landing) + `PLND_STRICT` failsafe note.
+- [ ] **On-device runbook:** TensorRT `.engine` export (FP16; INT8 `imgsz=320,batch=1,workspace=1`
+      on JetPack 6); realistic **~30–40 FPS YOLOv8n FP16 @640 on Orin Nano** (60 FPS is NX/INT8);
+      `nvv4l2` NVMM-caps smoke (NX/AGX); QGroundControl RTP smoke (`udp:5600`, `pt=96`).
+- [ ] **Live `/healthz` + watchdog:** optional `[health]` aiohttp listener (lazy in-function
+      import, mirroring `meshsa.health`); wire liveness → systemd `WatchdogSec`/`sd_notify`.
+- [ ] **Tighten coverage** (patch/per-file) on the safety files `pipeline.py` + `mavlink/bridge.py`.
+- [ ] **(Longer, M3)** detections → `cot` codec sensor PoI/FoV (needs pixel→geo / camera pose).
+
 ## GCS commanding (initiative — **CHARTER carve-out ratified 2026-06-16**)
 > Two-way vehicle commanding is now an authorized but **bounded** scope per the
 > [CHARTER.md](CHARTER.md) §3 supervised-commanding carve-out (ratified 2026-06-16). The
