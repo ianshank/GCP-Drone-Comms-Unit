@@ -123,9 +123,11 @@ class CotCodec:
         is labelled on the map) and a ``<remarks>`` line, plus a vendor detection element
         for lossless round-trip. ``ce``/``le`` carry the (often crude) position error.
         """
-        pos = env.payload.get("position", {})
-        det = env.payload.get("detection", {})
-        node = env.payload.get("node", {})
+        # ``or {}`` (not ``.get(k, {})``): a key explicitly set to None must still
+        # fall back to a dict, not None.
+        pos = env.payload.get("position") or {}
+        det = env.payload.get("detection") or {}
+        node = env.payload.get("node") or {}
         label = str(det.get("label", "detection"))
         # The map callsign honors a configured node.callsign (DetectionCodec sets it to the
         # class label by default, or an override), falling back to the class label.

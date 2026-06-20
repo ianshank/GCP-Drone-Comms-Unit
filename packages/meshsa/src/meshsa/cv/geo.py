@@ -26,6 +26,8 @@ from dataclasses import dataclass
 _EARTH_R_M = 6_371_000.0
 #: Crude pointing uncertainty (deg) folded into the ground error estimate.
 _POINTING_UNCERTAINTY_DEG = 1.0
+#: Below this depression the flat-earth model is unusable (range -> very large / horizon).
+_MIN_DEPRESSION_DEG = 0.1
 
 
 @dataclass(frozen=True)
@@ -66,7 +68,11 @@ def destination(lat: float, lon: float, bearing_deg: float, range_m: float) -> t
     north = range_m * math.cos(brg)
     east = range_m * math.sin(brg)
     dlat = math.degrees(north / _EARTH_R_M)
-    dlon = math.degrees(east / (_EARTH_R_M * math.cos(math.radians(lat))))
+    # Guard the cos(lat) denominator near the poles (it -> 0, blowing up longitude).
+    cos_lat = math.cos(math.radians(lat))
+    if abs(cos_lat) < 1e-6:
+        cos_lat = math.copysign(1e-6, cos_lat) if cos_lat != 0 else 1e-6
+    dlon = math.degrees(east / (_EARTH_R_M * cos_lat))
     return lat + dlat, lon + dlon
 
 
@@ -93,7 +99,8 @@ def project_to_ground(pose: Pose, cam: Camera, cx: float, cy: float) -> GroundFi
     """Cast the ray through pixel (cx, cy) onto the flat ground; ``None`` if it misses.
 
     Returns a :class:`GroundFix` (lat/lon + crude ``ce_m``) or ``None`` when the ray is at
-    or above the horizon, or there is no usable height (``alt_agl_m <= 0``).
+    or above the horizon (or within ``_MIN_DEPRESSION_DEG`` of it, where the flat-earth
+    model produces unbounded ranges), or there is no usable height (``alt_agl_m <= 0``).
     """
     if pose.alt_agl_m <= 0:
         return None
@@ -101,7 +108,7 @@ def project_to_ground(pose: Pose, cam: Camera, cx: float, cy: float) -> GroundFi
     # Image y grows downward; a pixel below the optical axis (cy > centre) adds depression.
     pitch_off = _angle_off_axis((2.0 * cy / cam.img_h) - 1.0, cam.v_fov_deg)
     depression_deg = pose.pitch_deg + pitch_off
-    if depression_deg <= 0.0:  # at/above the horizon -> no ground intersection
+    if depression_deg < _MIN_DEPRESSION_DEG:  # at/near/above horizon -> unusable projection
         return None
     ground_range = pose.alt_agl_m / math.tan(math.radians(depression_deg))
     azimuth = (pose.heading_deg + yaw_off) % 360.0

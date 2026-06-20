@@ -29,7 +29,13 @@ class _DetectionDatagramProtocol(asyncio.DatagramProtocol):
         self._ingest = ingest
 
     def datagram_received(self, data: bytes, addr: tuple[str | Any, int]) -> None:
-        self._ingest(data)
+        # Never let an ingest error propagate to the event loop (which could tear down the
+        # UDP endpoint and stop reception). _ingest_nowait already drops on a full queue;
+        # this guards any other unexpected failure so the receiver stays up.
+        try:
+            self._ingest(data)
+        except Exception:
+            _log.warning("failed to ingest detection datagram", addr=addr, exc_info=True)
 
 
 class DetectionIngestTransport(AbstractTransport):

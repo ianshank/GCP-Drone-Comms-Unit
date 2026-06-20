@@ -44,10 +44,10 @@ class DetectionCodec:
         codec never emits an out-of-contract frame (e.g. a bogus 0,0 position from a
         missing block); invalid input surfaces as the codec's standard ``MeshSAError``.
         """
-        node = envelope.payload.get("node", {})
+        node = envelope.payload.get("node") or {}  # None-safe (key may be explicitly None)
         try:
-            position = Position.model_validate(envelope.payload.get("position", {}))
-            detection = Detection.model_validate(envelope.payload.get("detection", {}))
+            position = Position.model_validate(envelope.payload.get("position") or {})
+            detection = Detection.model_validate(envelope.payload.get("detection") or {})
         except ValidationError as exc:
             raise MeshSAError(f"invalid detection envelope: {exc}") from exc
         frame: dict[str, Any] = {

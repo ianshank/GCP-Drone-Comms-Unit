@@ -1,5 +1,7 @@
 """meshsa.cv.geo: pixel->ground projection + bearing degradation (pure, fakes-only)."""
 
+import math
+
 import pytest
 
 from meshsa.cv.geo import Camera, Pose, destination, project_to_ground, relative_bearing
@@ -53,3 +55,16 @@ def test_project_horizon_and_no_alt_return_none():
     # No usable height -> None (the no-GPS/no-alt degradation).
     no_alt = Pose(lat=0.0, lon=0.0, alt_agl_m=0.0, heading_deg=0.0, pitch_deg=45.0)
     assert project_to_ground(no_alt, CAM, CAM.img_w / 2, CAM.img_h / 2) is None
+
+
+def test_project_shallow_depression_returns_none():
+    # A near-horizon depression (< 0.1 deg) would give an unbounded range -> None, not a
+    # wild out-of-range lat/lon.
+    shallow = Pose(lat=0.0, lon=0.0, alt_agl_m=100.0, heading_deg=0.0, pitch_deg=0.05)
+    assert project_to_ground(shallow, CAM, CAM.img_w / 2, CAM.img_h / 2) is None
+
+
+def test_destination_is_finite_near_pole():
+    # cos(lat) -> 0 near the pole; the guard keeps longitude finite (no div-by-zero blowup).
+    lat, lon = destination(89.9999999, 0.0, bearing_deg=90.0, range_m=100.0)
+    assert math.isfinite(lat) and math.isfinite(lon)
