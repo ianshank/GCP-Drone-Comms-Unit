@@ -38,26 +38,34 @@ class DetectionCodec:
         pass
 
     def encode(self, envelope: Envelope) -> bytes:
-        """Serialise a MARKER envelope back to a detection frame (symmetry/round-trip)."""
+        """Serialise a MARKER envelope back to a detection frame (symmetry/round-trip).
+
+        Validates the position/detection blocks (like ``TelemetryCodec.encode``) so the
+        codec never emits an out-of-contract frame (e.g. a bogus 0,0 position from a
+        missing block); invalid input surfaces as the codec's standard ``MeshSAError``.
+        """
         node = envelope.payload.get("node", {})
-        pos = envelope.payload.get("position", {})
-        det = envelope.payload.get("detection", {})
+        try:
+            position = Position.model_validate(envelope.payload.get("position", {}))
+            detection = Detection.model_validate(envelope.payload.get("detection", {}))
+        except ValidationError as exc:
+            raise MeshSAError(f"invalid detection envelope: {exc}") from exc
         frame: dict[str, Any] = {
             "src": envelope.source_uid,
-            "callsign": node.get("callsign", envelope.source_uid),
+            "callsign": node.get("callsign", detection.label),
             "msg_id": envelope.msg_id,
             "ts": envelope.ts,
-            "lat": pos.get("lat", 0.0),
-            "lon": pos.get("lon", 0.0),
-            "hae": pos.get("hae", 0.0),
-            "ce": pos.get("ce", UNKNOWN_ERROR_M),
-            "le": pos.get("le", UNKNOWN_ERROR_M),
-            "label": det.get("label", "detection"),
-            "confidence": det.get("confidence", 0.0),
+            "lat": position.lat,
+            "lon": position.lon,
+            "hae": position.hae,
+            "ce": position.ce,
+            "le": position.le,
+            "label": detection.label,
+            "confidence": detection.confidence,
         }
-        for key in ("track_id", "bearing_deg"):
-            if det.get(key) is not None:
-                frame[key] = det[key]
+        for key, val in (("track_id", detection.track_id), ("bearing_deg", detection.bearing_deg)):
+            if val is not None:
+                frame[key] = val
         return json.dumps(frame).encode("utf-8")
 
     def decode(self, data: bytes) -> Envelope:

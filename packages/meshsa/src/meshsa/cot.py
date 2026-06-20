@@ -125,8 +125,17 @@ class CotCodec:
         """
         pos = env.payload.get("position", {})
         det = env.payload.get("detection", {})
+        node = env.payload.get("node", {})
         label = str(det.get("label", "detection"))
-        ev = self._event(env.source_uid, self.marker_type, env.ts)
+        # The map callsign honors a configured node.callsign (DetectionCodec sets it to the
+        # class label by default, or an override), falling back to the class label.
+        callsign = str(node.get("callsign", label))
+        # CoT uid is the entity key in TAK/ATAK: a per-track uid (source:track) gives one
+        # updated marker per tracked object instead of every detection overwriting the same
+        # uid. Falls back to the detector uid when there is no tracker id.
+        track_id = det.get("track_id")
+        uid = f"{env.source_uid}:{track_id}" if track_id is not None else env.source_uid
+        ev = self._event(uid, self.marker_type, env.ts)
         ET.SubElement(
             ev,
             "point",
@@ -137,7 +146,7 @@ class CotCodec:
             le=str(pos.get("le", UNKNOWN_ERROR_M)),
         )
         detail = ET.SubElement(ev, "detail")
-        ET.SubElement(detail, "contact", callsign=label)
+        ET.SubElement(detail, "contact", callsign=callsign)
         # Vendor element preserves the structured detection for round-trip/decode.
         det_attrs = {"label": label}
         conf = det.get("confidence")

@@ -20,9 +20,11 @@ def test_relative_bearing_center_and_offset():
     # Centre column -> optical axis: sensor-relative 0, absolute = heading.
     assert relative_bearing(CAM.img_w / 2, CAM) == pytest.approx(0.0, abs=1e-6)
     assert relative_bearing(CAM.img_w / 2, CAM, heading_deg=100.0) == pytest.approx(100.0)
-    # Right of centre -> positive offset (to the right of heading).
-    assert relative_bearing(CAM.img_w, CAM) > 0
-    assert relative_bearing(0, CAM) < 0
+    # Normalised to [0, 360): right of centre -> small positive; left of centre -> wraps
+    # toward 360 (never negative, so it satisfies the Detection.bearing_deg contract).
+    assert 0.0 < relative_bearing(CAM.img_w, CAM) < 90.0
+    assert relative_bearing(0, CAM) > 270.0
+    assert 0.0 <= relative_bearing(0, CAM) < 360.0
 
 
 def test_project_nadir_is_near_drone():

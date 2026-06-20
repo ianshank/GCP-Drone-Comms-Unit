@@ -68,3 +68,13 @@ def test_encode_roundtrip():
     env2 = codec.decode(frame2)
     assert env2.payload["detection"] == env.payload["detection"]
     assert env2.payload["position"]["lat"] == env.payload["position"]["lat"]
+
+
+def test_encode_validates_blocks_and_raises_on_invalid():
+    from meshsa import Envelope, MessageKind
+
+    # Missing/invalid position+detection -> MeshSAError (no silent 0,0 frame), matching
+    # TelemetryCodec.encode's validate-then-raise contract.
+    bad = Envelope(msg_id="m", ts=1.0, source_uid="s", kind=MessageKind.MARKER, payload={})
+    with pytest.raises(MeshSAError, match="invalid detection envelope"):
+        DetectionCodec().encode(bad)

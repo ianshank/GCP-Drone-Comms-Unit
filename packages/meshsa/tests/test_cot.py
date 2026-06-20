@@ -387,3 +387,20 @@ def test_invalid_detection_detail_raises():
     )
     with pytest.raises(MeshSAError, match="invalid detection detail"):
         CotCodec().decode(bad)
+
+
+def test_marker_uid_is_per_track_and_callsign_from_node():
+    # uid = source:track so each tracked object is one updatable ATAK marker (not
+    # all detections overwriting one uid); contact callsign comes from node.callsign.
+    env = _marker()
+    env.payload["node"]["callsign"] = "TGT-A"
+    xml = CotCodec().encode(env).decode()
+    assert 'uid="yolo-cam1:7"' in xml
+    assert '<contact callsign="TGT-A"' in xml
+
+
+def test_marker_uid_falls_back_without_track_id():
+    env = _marker()
+    env.payload["detection"].pop("track_id")
+    xml = CotCodec().encode(env).decode()
+    assert 'uid="yolo-cam1"' in xml

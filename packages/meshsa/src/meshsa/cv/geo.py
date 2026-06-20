@@ -76,13 +76,17 @@ def _angle_off_axis(frac: float, fov_deg: float) -> float:
 
 
 def relative_bearing(cx: float, cam: Camera, heading_deg: float | None = None) -> float:
-    """Bearing of pixel column ``cx``. Absolute (0..360) if ``heading_deg`` is given, else
-    a sensor-relative bearing where 0 is the optical axis (negative = left of centre)."""
+    """Bearing of pixel column ``cx``, normalised to ``[0, 360)``.
+
+    With ``heading_deg`` it is the absolute compass bearing; without it, a sensor-relative
+    bearing measured **clockwise from the optical axis** (0 = centre, ~90 = right edge for
+    a 180° FOV, left wraps toward 360). Always ``[0, 360)`` so it satisfies the
+    :class:`~meshsa.models.Detection` ``bearing_deg`` contract (no negative left-of-axis
+    values, which a signed convention would produce)."""
     frac = (2.0 * cx / cam.img_w) - 1.0  # -1 left .. +1 right
     yaw_off = _angle_off_axis(frac, cam.h_fov_deg)
-    if heading_deg is None:
-        return yaw_off
-    return (heading_deg + yaw_off) % 360.0
+    base = yaw_off if heading_deg is None else heading_deg + yaw_off
+    return base % 360.0
 
 
 def project_to_ground(pose: Pose, cam: Camera, cx: float, cy: float) -> GroundFix | None:
