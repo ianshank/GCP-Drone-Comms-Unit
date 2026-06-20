@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from jetson_yolo_gcs.core.config import MavlinkSettings
+from jetson_yolo_gcs.core.errors import MavlinkError
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge, compute_angles
 from tests.conftest import FakeClock
@@ -87,3 +88,14 @@ def test_close_is_idempotent_and_closes_connection() -> None:
     bridge.close()
     bridge.close()
     assert conn.closed is True
+
+
+def test_publish_raises_mavlink_error_when_no_connection() -> None:
+    # Factory yields no connection; publish must fail loud, not silently drop.
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True),
+        connection_factory=lambda: None,
+    )
+    det, result = _result_with((90, 90, 110, 110))
+    with pytest.raises(MavlinkError):
+        bridge.publish(det, result)

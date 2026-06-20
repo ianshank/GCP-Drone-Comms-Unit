@@ -35,22 +35,33 @@ def parse_tegrastats(line: str) -> dict[str, float]:
     return metrics
 
 
-def read_tegrastats(*, interval_ms: int = 1000) -> dict[str, float]:  # pragma: no cover - device
+#: Default bound (s) for device shell-outs so a wedged tool can never hang the caller.
+_SUBPROCESS_TIMEOUT_S = 10.0
+
+
+def read_tegrastats(
+    *, interval_ms: int = 1000, timeout_s: float = _SUBPROCESS_TIMEOUT_S
+) -> dict[str, float]:  # pragma: no cover - device
     """Sample one ``tegrastats`` line and parse it (requires a Jetson)."""
     proc = subprocess.run(
         ["tegrastats", "--interval", str(interval_ms), "--count", "1"],
         capture_output=True,
         text=True,
         check=True,
+        timeout=timeout_s,
     )
     return parse_tegrastats(proc.stdout.strip())
 
 
-def set_power_mode(mode: int) -> None:  # pragma: no cover - device
+def set_power_mode(
+    mode: int, *, timeout_s: float = _SUBPROCESS_TIMEOUT_S
+) -> None:  # pragma: no cover - device
     """Set the Jetson power model via ``nvpmodel`` (requires root on a Jetson)."""
-    subprocess.run(["nvpmodel", "-m", str(mode)], check=True)
+    subprocess.run(["nvpmodel", "-m", str(mode)], check=True, timeout=timeout_s)
 
 
-def enable_jetson_clocks() -> None:  # pragma: no cover - device
+def enable_jetson_clocks(
+    *, timeout_s: float = _SUBPROCESS_TIMEOUT_S
+) -> None:  # pragma: no cover - device
     """Pin clocks to maximum via ``jetson_clocks`` (requires root on a Jetson)."""
-    subprocess.run(["jetson_clocks"], check=True)
+    subprocess.run(["jetson_clocks"], check=True, timeout=timeout_s)

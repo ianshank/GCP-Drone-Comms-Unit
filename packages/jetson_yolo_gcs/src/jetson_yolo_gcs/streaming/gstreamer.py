@@ -14,6 +14,11 @@ from typing import Any, Protocol, runtime_checkable
 
 from ..core.config import StreamEncoder, StreamSettings
 
+#: Fixed RTP/H.264 payload constants (protocol-defined, not operator-tunable):
+#: 96 is the standard dynamic payload type; config-interval=1 re-sends SPS/PPS each IDR.
+_RTP_PAYLOAD_TYPE = 96
+_RTP_CONFIG_INTERVAL = 1
+
 #: Encoder -> the encode + parse element fragment inserted into the pipeline.
 #: ``{bitrate_kbps}`` is substituted from settings.
 _ENCODER_PIPELINES: dict[StreamEncoder, str] = {
@@ -54,7 +59,7 @@ def build_stream_pipeline(settings: StreamSettings) -> str:
     return (
         "appsrc ! videoconvert ! "
         f"{encoder_fragment} ! "
-        "rtph264pay config-interval=1 pt=96 ! "
+        f"rtph264pay config-interval={_RTP_CONFIG_INTERVAL} pt={_RTP_PAYLOAD_TYPE} ! "
         f"udpsink host={settings.host} port={settings.port}"
     )
 

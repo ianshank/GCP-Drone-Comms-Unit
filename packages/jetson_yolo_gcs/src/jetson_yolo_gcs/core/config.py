@@ -57,6 +57,8 @@ class CameraSettings(BaseSettings):
     width: int = Field(default=1280, gt=0)
     height: int = Field(default=720, gt=0)
     fps: int = Field(default=30, gt=0)
+    #: RTSP jitter-buffer latency (ms); 0 = lowest latency. Only used for CameraType.RTSP.
+    rtsp_latency_ms: int = Field(default=0, ge=0)
 
 
 class StreamSettings(BaseSettings):
@@ -91,6 +93,16 @@ class MavlinkSettings(BaseSettings):
         return names or None
 
 
+class PipelineSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="PIPELINE_", env_file=_ENV_FILE, extra="ignore")
+
+    #: Idle back-off between empty camera reads (s); non-zero to avoid a 100% CPU spin.
+    idle_poll_s: float = Field(default=0.01, ge=0.0)
+    #: Stop after this many *consecutive* empty reads; ``None``/unset = run until shutdown
+    #: (tolerate transient camera timeouts indefinitely, the live default).
+    max_consecutive_empty: int | None = Field(default=None, ge=1)
+
+
 class Settings(BaseSettings):
     """Top-level settings composing every domain (each reads its own env prefix)."""
 
@@ -102,6 +114,7 @@ class Settings(BaseSettings):
     camera: CameraSettings = Field(default_factory=CameraSettings)
     stream: StreamSettings = Field(default_factory=StreamSettings)
     mavlink: MavlinkSettings = Field(default_factory=MavlinkSettings)
+    pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 
 
 def get_settings() -> Settings:

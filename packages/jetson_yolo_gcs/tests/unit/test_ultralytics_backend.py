@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from jetson_yolo_gcs.core.config import YoloSettings
+from jetson_yolo_gcs.core.errors import DetectionError
 from jetson_yolo_gcs.detection.factory import detector_registry
 from jetson_yolo_gcs.detection.ultralytics_backend import UltralyticsDetector
 
@@ -66,3 +69,27 @@ def test_close_releases_model() -> None:
 def test_registry_factory_accepts_injected_model() -> None:
     det = detector_registry.create("ultralytics", settings=YoloSettings(), model=_FakeModel())
     assert isinstance(det, UltralyticsDetector)
+
+
+def test_empty_results_raise_detection_error() -> None:
+    class _EmptyModel:
+        def __call__(self, frame: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+    det = UltralyticsDetector(YoloSettings(), model=_EmptyModel())
+    with pytest.raises(DetectionError):
+        det.detect(object())
+
+
+def test_malformed_results_raise_detection_error() -> None:
+    class _BadResult:
+        # Missing .boxes/.names/.orig_shape -> AttributeError, wrapped as DetectionError.
+        names: dict[int, str] = {}
+
+    class _BadModel:
+        def __call__(self, frame: Any, **kwargs: Any) -> list[Any]:
+            return [_BadResult()]
+
+    det = UltralyticsDetector(YoloSettings(), model=_BadModel())
+    with pytest.raises(DetectionError):
+        det.detect(object())

@@ -9,17 +9,34 @@ device/encoder construction is the only ``# pragma: no cover`` part.
 
 from __future__ import annotations
 
+import threading
+import time
+from collections.abc import Callable
+
 import structlog
 
 from .core.clock import Clock, MonotonicClock
 from .core.config import Settings
+from .core.errors import DetectionError
 from .detection.base import Detection, DetectionResult, DetectorBase
 from .mavlink.bridge import LandingTargetBridge
 from .streaming.camera import CameraSource
 from .streaming.gstreamer import StreamWriter
 from .utils.fps import FpsCounter
 
+#: Injectable idle back-off (defaults to ``time.sleep``); tests substitute a fake.
+SleepCallable = Callable[[float], None]
+
+#: Drop counters log on the first occurrence and every Nth thereafter, so a persistent
+#: fault never floods the log at frame rate (mirrors meshsa's drop-and-count pattern).
+_DROP_LOG_EVERY = 100
+
 _log = structlog.get_logger("jetson_yolo_gcs.pipeline")
+
+
+def _should_log_drop(count: int) -> bool:
+    """True on the 1st drop and every :data:`_DROP_LOG_EVERY` drops thereafter."""
+    return count == 1 or count % _DROP_LOG_EVERY == 0
 
 
 class Pipeline:
@@ -43,24 +60,56 @@ class Pipeline:
         self._target_classes = target_classes
         self._clock: Clock = clock or MonotonicClock()
         self._fps = fps or FpsCounter(clock=self._clock)
+        self._stop = threading.Event()
+
+        #: Frames dropped because detection failed recoverably (malformed output).
+        self.dropped_detections = 0
+        #: Frames whose egress write failed (best-effort stream; never fatal).
+        self.dropped_stream = 0
 
     @property
     def fps(self) -> float:
         return self._fps.fps
 
+    def request_stop(self) -> None:
+        """Ask :meth:`run` to exit after the current iteration (signal-safe)."""
+        self._stop.set()
+
     def step(self) -> bool:
-        """Process one frame. Returns ``False`` when the camera yields no frame."""
+        """Process one frame. Returns ``True`` iff a frame was read.
+
+        Error handling is **path-specific**: a recoverable :class:`DetectionError` drops
+        the frame and continues; a stream-egress failure is best-effort (dropped); but a
+        ``bridge.publish`` failure is **not** swallowed — it propagates so a broken
+        LANDING_TARGET (safety) feed fails loudly rather than looking healthy. Unexpected
+        detector errors (e.g. CUDA OOM, bugs) also propagate.
+        """
         frame = self._camera.read_frame()
         if frame is None:
             return False
-        result = self._detector.detect(frame.data)
+        self._fps.tick()
+
+        try:
+            result = self._detector.detect(frame.data)
+        except DetectionError:
+            self.dropped_detections += 1
+            if _should_log_drop(self.dropped_detections):
+                _log.warning("detection failed; dropping frame", dropped=self.dropped_detections)
+            return True
+
         if self._stream is not None:
-            self._stream.write(frame.data)
+            try:
+                self._stream.write(frame.data)
+            except Exception:  # noqa: BLE001 - egress is best-effort; never kill the loop
+                self.dropped_stream += 1
+                if _should_log_drop(self.dropped_stream):
+                    _log.warning("stream write failed; dropping", dropped=self.dropped_stream)
+
         if self._bridge is not None:
             target = self._select_target(result)
             if target is not None:
+                # Deliberately unguarded: a failed safety-path publish must surface.
                 self._bridge.publish(target, result)
-        self._fps.tick()
         return True
 
     def _select_target(self, result: DetectionResult) -> Detection | None:
@@ -69,17 +118,37 @@ class Pipeline:
         candidates = tuple(d for d in result.detections if d.class_name in self._target_classes)
         return max(candidates, key=lambda d: d.confidence, default=None)
 
-    def run(self, *, max_iterations: int | None = None) -> int:
+    def run(
+        self,
+        *,
+        max_iterations: int | None = None,
+        max_consecutive_empty: int | None = None,
+        idle_poll_s: float = 0.01,
+        sleep: SleepCallable | None = None,
+    ) -> int:
         """Run the loop, returning the number of frames processed.
 
-        ``max_iterations`` bounds the loop (used by tests and bounded runs); ``None``
-        runs until the camera stops yielding frames.
+        ``max_iterations`` bounds total frames (tests / bounded runs). On an empty read
+        (a transient camera timeout per the ``CameraSource`` contract) the loop sleeps
+        ``idle_poll_s`` and retries; it stops only after ``max_consecutive_empty``
+        *consecutive* empties (``None`` ⇒ tolerate transient gaps indefinitely — the live
+        default). The loop also exits promptly when :meth:`request_stop` is called.
+        ``sleep`` is injectable so tests neither wait nor busy-spin.
         """
+        do_sleep: SleepCallable = sleep or time.sleep
         processed = 0
+        empties = 0
         while max_iterations is None or processed < max_iterations:
-            if not self.step():
+            if self._stop.is_set():
                 break
-            processed += 1
+            if self.step():
+                processed += 1
+                empties = 0
+                continue
+            empties += 1
+            if max_consecutive_empty is not None and empties >= max_consecutive_empty:
+                break
+            do_sleep(idle_poll_s)
         return processed
 
     def close(self) -> None:

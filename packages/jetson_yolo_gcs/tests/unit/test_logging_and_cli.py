@@ -28,6 +28,9 @@ def test_health_report_resolves_plan() -> None:
     assert "v4l2src" in report["camera"]["pipeline"]
     assert "x264enc" in report["stream"]["pipeline"]
     assert report["mavlink"]["landing_target_enabled"] is False
+    # Loop policy is surfaced for pre-flight validation.
+    assert report["pipeline"]["idle_poll_s"] == 0.01
+    assert report["pipeline"]["max_consecutive_empty"] is None
 
 
 def test_main_health_check_prints_json(capsys: pytest.CaptureFixture[str]) -> None:

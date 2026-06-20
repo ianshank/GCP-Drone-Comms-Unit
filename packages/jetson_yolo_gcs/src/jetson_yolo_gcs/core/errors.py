@@ -26,3 +26,16 @@ class UnknownBackendError(JetsonYoloError):
 
 class ConfigError(JetsonYoloError):
     """A configuration value is missing or invalid."""
+
+
+class DetectionError(JetsonYoloError):
+    """A detector failed to produce a usable result for a frame.
+
+    Raised for *recoverable* per-frame failures (e.g. malformed model output). The
+    pipeline catches this specifically, drops the frame, and continues — unexpected
+    errors (CUDA OOM, programming bugs) are deliberately *not* wrapped so they surface.
+    """
+
+
+class MavlinkError(JetsonYoloError):
+    """A MAVLink operation failed (e.g. no connection available to publish on)."""

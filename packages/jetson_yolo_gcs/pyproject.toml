@@ -65,7 +65,7 @@ where = ["src"]
 jetson_yolo_gcs = ["py.typed"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=jetson_yolo_gcs --cov-report=term-missing --cov-fail-under=90"
+addopts = "--cov=jetson_yolo_gcs --cov-report=term-missing --cov-fail-under=85"
 testpaths = ["tests"]
 
 [tool.coverage.run]

@@ -21,6 +21,7 @@ import structlog
 
 from ..core.clock import Clock, SystemClock
 from ..core.config import MavlinkSettings
+from ..core.errors import MavlinkError
 from ..detection.base import Detection, DetectionResult
 
 ConnectionFactory = Callable[[], Any]
@@ -96,7 +97,10 @@ class LandingTargetBridge:
             abs(detection.bbox[3] - detection.bbox[1]) / result.height if result.height else 0.0
         )
         time_usec = int(self._clock.now() * 1_000_000)
-        assert self._conn is not None  # start() guarantees a live connection
+        if self._conn is None:
+            # start() should have opened a connection; a None here means the factory
+            # produced nothing. Fail loud rather than silently dropping a safety message.
+            raise MavlinkError("no MAVLink connection available to publish LANDING_TARGET")
         self._conn.mav.landing_target_send(
             time_usec,
             0,  # target_num

@@ -63,3 +63,23 @@ def test_mavlink_source_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     s = get_settings()
     assert s.mavlink.source_system == 42
     assert s.mavlink.source_component == 7
+
+
+def test_pipeline_defaults_run_forever() -> None:
+    s = Settings()
+    assert s.pipeline.idle_poll_s == 0.01
+    assert s.pipeline.max_consecutive_empty is None  # tolerate transient empties
+
+
+def test_pipeline_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_IDLE_POLL_S", "0.5")
+    monkeypatch.setenv("PIPELINE_MAX_CONSECUTIVE_EMPTY", "3")
+    s = get_settings()
+    assert s.pipeline.idle_poll_s == 0.5
+    assert s.pipeline.max_consecutive_empty == 3
+
+
+def test_rtsp_latency_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Settings().camera.rtsp_latency_ms == 0
+    monkeypatch.setenv("CAMERA_RTSP_LATENCY_MS", "200")
+    assert get_settings().camera.rtsp_latency_ms == 200

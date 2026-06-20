@@ -26,6 +26,14 @@ def test_csi_capture_pipeline() -> None:
 def test_rtsp_capture_pipeline() -> None:
     p = build_capture_pipeline(CameraSettings(type=CameraType.RTSP, source="rtsp://cam/stream"))
     assert "rtspsrc location=rtsp://cam/stream" in p
+    assert "latency=0" in p  # default
+
+
+def test_rtsp_latency_is_configurable() -> None:
+    p = build_capture_pipeline(
+        CameraSettings(type=CameraType.RTSP, source="rtsp://cam/stream", rtsp_latency_ms=200)
+    )
+    assert "latency=200" in p
 
 
 def test_x264_stream_pipeline_uses_kbps() -> None:

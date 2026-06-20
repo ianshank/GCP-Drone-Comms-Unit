@@ -70,7 +70,7 @@ def build_capture_pipeline(settings: CameraSettings) -> str:
         )
     # RTSP
     return (
-        f"rtspsrc location={settings.source} latency=0 ! "
+        f"rtspsrc location={settings.source} latency={settings.rtsp_latency_ms} ! "
         "rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
         "video/x-raw,format=BGR ! appsink drop=true max-buffers=1"
     )
