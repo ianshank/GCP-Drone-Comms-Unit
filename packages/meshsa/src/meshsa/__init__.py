@@ -4,6 +4,7 @@ from .codec import JsonCodec
 from .compact import CompactCodec
 from .config import HealthConfig, MeshConfig, NodeConfig, RouterConfig, TransportConfig
 from .cot import CotCodec
+from .detection_codec import DetectionCodec
 from .errors import (
     DuplicateRegistrationError,
     IncompatibleSchemaError,
@@ -15,6 +16,7 @@ from .metrics import RouterMetrics, render_prometheus
 from .models import (
     Attitude,
     ChatPayload,
+    Detection,
     Envelope,
     MessageKind,
     NodeInfo,
@@ -31,6 +33,7 @@ from .router import Router
 from .telemetry import TelemetryCodec
 from .transports import (
     CrsfSourceTransport,
+    DetectionIngestTransport,
     LoopbackBus,
     LoopbackTransport,
     MavlinkSourceTransport,
@@ -54,6 +57,7 @@ __all__ = [
     "Position",
     "Attitude",
     "Telemetry",
+    "Detection",
     "NodeInfo",
     "NodeTier",
     "MessageKind",
@@ -73,6 +77,7 @@ __all__ = [
     "CotCodec",
     "CompactCodec",
     "TelemetryCodec",
+    "DetectionCodec",
     "Router",
     "RouterMetrics",
     "render_prometheus",
@@ -84,6 +89,7 @@ __all__ = [
     "LoopbackTransport",
     "NullTransport",
     "CrsfSourceTransport",
+    "DetectionIngestTransport",
     "MavlinkSourceTransport",
     "MspSourceTransport",
     "MeshtasticTransport",

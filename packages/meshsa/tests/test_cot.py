@@ -331,3 +331,59 @@ def test_cot_sentinel_matches_position_default():
     )
     xml = CotCodec().encode(chat).decode()
     assert f'ce="{UNKNOWN_ERROR_M}"' in xml
+
+
+def _marker(mid="d1", ts=1_700_000_000.0):
+    return Envelope(
+        msg_id=mid,
+        ts=ts,
+        source_uid="yolo-cam1",
+        kind=MessageKind.MARKER,
+        payload={
+            "node": {"uid": "yolo-cam1", "callsign": "person"},
+            "position": {"lat": 37.0, "lon": -122.0, "ce": 25.0},
+            "detection": {"label": "person", "confidence": 0.91, "track_id": 7},
+        },
+    )
+
+
+def test_marker_encodes_as_marker_type_not_friendly_pli():
+    xml = CotCodec().encode(_marker()).decode()
+    assert 'type="a-u-G"' in xml  # marker type, NOT the friendly pli_type a-f-G-U-C
+    assert 'type="a-f-G-U-C"' not in xml
+    assert '<contact callsign="person"' in xml  # labelled on the map
+    assert "person 91%" in xml  # remarks
+    assert '_meshsa_det label="person"' in xml and 'confidence="0.91"' in xml
+
+
+def test_marker_roundtrips_to_marker_kind_with_detection():
+    env = _marker()
+    back = CotCodec().decode(CotCodec().encode(env))
+    assert back.kind is MessageKind.MARKER  # not misclassified as PLI despite a-* type
+    assert back.payload["detection"]["label"] == "person"
+    assert back.payload["detection"]["track_id"] == 7
+    assert back.payload["position"]["lat"] == 37.0
+
+
+def test_custom_marker_type_is_honored_both_ways():
+    codec = CotCodec(marker_type="a-h-G")  # hostile ground
+    xml = codec.encode(_marker()).decode()
+    assert 'type="a-h-G"' in xml
+    assert codec.decode(xml.encode()).kind is MessageKind.MARKER
+
+
+def test_marker_with_bearing_emits_sensor_relative_remark():
+    env = _marker()
+    env.payload["detection"]["bearing_deg"] = 137.0
+    xml = CotCodec().encode(env).decode()
+    assert "bearing 137" in xml
+
+
+def test_invalid_detection_detail_raises():
+    bad = (
+        b'<event version="2.0" uid="x" type="a-u-G" time="2023-11-14T22:13:20.000Z">'
+        b'<point lat="1" lon="2"/><detail>'
+        b'<_meshsa_det label="x" confidence="9"/></detail></event>'  # confidence > 1
+    )
+    with pytest.raises(MeshSAError, match="invalid detection detail"):
+        CotCodec().decode(bad)

@@ -16,7 +16,7 @@ import structlog
 from pydantic import ValidationError
 
 from .errors import MeshSAError
-from .models import UNKNOWN_ERROR_M, Envelope, MessageKind, Position, Telemetry
+from .models import UNKNOWN_ERROR_M, Detection, Envelope, MessageKind, Position, Telemetry
 from .registry import codec_registry
 from .version import SCHEMA_VERSION
 
@@ -44,10 +44,12 @@ class CotCodec:
         how: str = "m-g",
         pli_type: str = "a-f-G-U-C",
         chat_type: str = "b-t-f",
+        marker_type: str = "a-u-G",
         cot_version: str = "2.0",
         track_element: str = "track",
         status_element: str = "status",
         attitude_element: str = "attitude",
+        detection_element: str = "_meshsa_det",
         battery_attr: str = "battery",
         vendor_element: str = "_meshsa",
         emit_detail: bool = True,
@@ -57,6 +59,10 @@ class CotCodec:
         self.how = how
         self.pli_type = pli_type
         self.chat_type = chat_type
+        # MARKER (object-detection) CoT type. Default a-u-G = unknown ground (affiliation
+        # unknown), so detections never render as friendly tracks like PLIs do.
+        self.marker_type = marker_type
+        self.detection_element = detection_element
         self.cot_version = cot_version
         # Richer-track element/attr names are config (no magic strings); a peer can
         # rename them. ``emit_detail`` gates the additive children entirely.
@@ -71,6 +77,8 @@ class CotCodec:
     def encode(self, envelope: Envelope) -> bytes:
         if envelope.kind == MessageKind.CHAT:
             return self._encode_chat(envelope)
+        if envelope.kind == MessageKind.MARKER:
+            return self._encode_marker(envelope)
         return self._encode_pli(envelope)
 
     def _event(self, uid: str, etype: str, ts: float) -> ET.Element:
@@ -104,6 +112,46 @@ class CotCodec:
         ET.SubElement(detail, "__group", name=str(node.get("tier", "")), role="Team Member")
         if self.emit_detail:
             self._emit_richer_detail(detail, pos, env.payload.get("telemetry") or {})
+        return ET.tostring(ev)
+
+    def _encode_marker(self, env: Envelope) -> bytes:
+        """Encode an object-detection MARKER as a CoT point of the marker type.
+
+        Distinct from ``_encode_pli`` (which stamps the friendly ``pli_type``): a
+        detection gets ``marker_type`` so ATAK does not render it as a friendly track.
+        The class label + confidence go into both ``<contact callsign>`` (so the marker
+        is labelled on the map) and a ``<remarks>`` line, plus a vendor detection element
+        for lossless round-trip. ``ce``/``le`` carry the (often crude) position error.
+        """
+        pos = env.payload.get("position", {})
+        det = env.payload.get("detection", {})
+        label = str(det.get("label", "detection"))
+        ev = self._event(env.source_uid, self.marker_type, env.ts)
+        ET.SubElement(
+            ev,
+            "point",
+            lat=str(pos.get("lat", 0.0)),
+            lon=str(pos.get("lon", 0.0)),
+            hae=str(pos.get("hae", 0.0)),
+            ce=str(pos.get("ce", UNKNOWN_ERROR_M)),
+            le=str(pos.get("le", UNKNOWN_ERROR_M)),
+        )
+        detail = ET.SubElement(ev, "detail")
+        ET.SubElement(detail, "contact", callsign=label)
+        # Vendor element preserves the structured detection for round-trip/decode.
+        det_attrs = {"label": label}
+        conf = det.get("confidence")
+        if conf is not None:
+            det_attrs["confidence"] = str(conf)
+        if det.get("track_id") is not None:
+            det_attrs["track_id"] = str(det["track_id"])
+        if det.get("bearing_deg") is not None:
+            det_attrs["bearing_deg"] = str(det["bearing_deg"])
+        ET.SubElement(detail, self.detection_element, det_attrs)
+        remarks = label if conf is None else f"{label} {float(conf) * 100:.0f}%"
+        if det.get("bearing_deg") is not None:
+            remarks += f" bearing {float(det['bearing_deg']):.0f}°"
+        ET.SubElement(detail, "remarks").text = remarks
         return ET.tostring(ev)
 
     def _emit_richer_detail(
@@ -219,20 +267,25 @@ class CotCodec:
                 )
         except ValidationError as exc:
             raise MeshSAError(f"invalid CoT track values: {exc}") from exc
-        # Symmetric with encode (which stamps ``self.pli_type``): a configured
-        # PLI type is always classified as PLI even if it doesn't start with
-        # ``a-``; the ``a-`` prefix stays as a backward-compatible fallback.
-        kind = (
-            MessageKind.PLI
-            if etype == self.pli_type or etype.startswith("a-")
-            else MessageKind.MARKER
-        )
+        # Symmetric with encode. The configured marker_type classifies as MARKER even
+        # though it may start with ``a-``; then the configured PLI type (or the ``a-``
+        # fallback) is PLI; anything else is a MARKER.
+        if etype == self.marker_type:
+            kind = MessageKind.MARKER
+        elif etype == self.pli_type or etype.startswith("a-"):
+            kind = MessageKind.PLI
+        else:
+            kind = MessageKind.MARKER
         payload: dict[str, Any] = {
             "node": {"uid": uid, "callsign": callsign},
             "position": pos,
         }
         if payload_telemetry:
             payload["telemetry"] = payload_telemetry
+        if kind == MessageKind.MARKER and detail is not None:
+            detection = self._decode_detection(detail)
+            if detection is not None:
+                payload["detection"] = detection
         return Envelope(
             schema_version=SCHEMA_VERSION,
             msg_id=f"{uid}:{ev.attrib.get('time', '')}",
@@ -241,6 +294,27 @@ class CotCodec:
             kind=kind,
             payload=payload,
         )
+
+    def _decode_detection(self, detail: ET.Element) -> dict[str, Any] | None:
+        """Parse the vendor detection element back into a validated detection dict.
+
+        Returns None when absent. Numeric attrs come from untrusted peers, so the
+        parse is validated via :class:`Detection` and surfaced as MeshSAError on bad
+        values (consistent with the richer-detail decode)."""
+        el = detail.find(self.detection_element)
+        if el is None:
+            return None
+        raw: dict[str, Any] = {"label": el.attrib.get("label", "detection")}
+        try:
+            if "confidence" in el.attrib:
+                raw["confidence"] = float(el.attrib["confidence"])
+            if "track_id" in el.attrib:
+                raw["track_id"] = int(el.attrib["track_id"])
+            if "bearing_deg" in el.attrib:
+                raw["bearing_deg"] = float(el.attrib["bearing_deg"])
+            return Detection.model_validate(raw).model_dump(exclude_none=True)
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise MeshSAError(f"invalid detection detail in CoT: {exc}") from exc
 
     def _decode_richer_detail(
         self,

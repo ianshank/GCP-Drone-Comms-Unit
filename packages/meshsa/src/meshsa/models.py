@@ -120,6 +120,34 @@ class Telemetry(BaseModel):
         return v
 
 
+class Detection(BaseModel):
+    """An object-detection result carried by a MARKER envelope.
+
+    ``label``/``confidence`` come from the detector (e.g. YOLO11); ``track_id`` is the
+    tracker's stable id (so one object is one updated CoT marker, not per-frame spam);
+    ``bearing_deg`` is the optional sensor-relative bearing used when no geodetic fix is
+    available (e.g. a camera with no GPS/attitude — see meshsa.cv.geo)."""
+
+    label: str
+    confidence: float
+    track_id: int | None = None
+    bearing_deg: float | None = None
+
+    @field_validator("confidence")
+    @classmethod
+    def _confidence_range(cls, v: float) -> float:
+        if not math.isfinite(v) or not 0.0 <= v <= 1.0:
+            raise ValueError("confidence out of range [0, 1]")
+        return v
+
+    @field_validator("bearing_deg")
+    @classmethod
+    def _bearing_range(cls, v: float | None) -> float | None:
+        if v is not None and (not math.isfinite(v) or not 0.0 <= v < 360.0):
+            raise ValueError("bearing_deg out of range [0, 360)")
+        return v
+
+
 class NodeInfo(BaseModel):
     uid: str
     callsign: str
