@@ -54,7 +54,8 @@ class Node:
 
     async def publish_position(self, position: Position) -> Envelope:
         env = self._envelope(
-            MessageKind.PLI, PliPayload(node=self.info, position=position).model_dump()
+            MessageKind.PLI,
+            PliPayload(node=self.info, position=position).model_dump(exclude_none=True),
         )
         await self.router.publish(env)
         return env
@@ -73,14 +74,20 @@ def build_node(
     codec: Codec | None = None,
     registry: Registry[Transport] | None = None,
     transport_kwargs: dict[str, dict[str, object]] | None = None,
+    codec_instances: dict[str, Codec] | None = None,
 ) -> Node:
     """Assemble a Node from config. Unknown transport types are skipped (not
-    fatal), so a node tolerates configs written for newer/older builds."""
+    fatal), so a node tolerates configs written for newer/older builds.
+
+    ``codec_instances`` maps a transport name to a pre-configured ``Codec``
+    instance, used in preference to registry-by-name creation for that transport
+    — so a caller can inject a custom-configured codec without registering it.
+    """
     reg = registry if registry is not None else transport_registry
     clock = clock if clock is not None else SystemClock()
     id_factory = id_factory if id_factory is not None else UuidFactory()
     codec = codec if codec is not None else JsonCodec()
-
+    instances = codec_instances or {}
     transports: list[Transport] = []
     codecs: dict[str, Codec] = {}
     for tc in config.transports:
@@ -91,11 +98,17 @@ def build_node(
             continue
         kwargs = dict(tc.options)
         kwargs["name"] = tc.name
+        # Apply node-level defaults that the transport can override per-config.
+        # setdefault so an explicit per-transport option (or a test override
+        # below) always wins. Non-consumers ignore these via **options/**_.
         kwargs.setdefault("queue_maxsize", config.router.queue_maxsize)
+        kwargs.setdefault("mesh", config.mesh.model_dump())
         if transport_kwargs and tc.name in transport_kwargs:
             kwargs.update(transport_kwargs[tc.name])
         transports.append(reg.create(tc.type, **kwargs))
-        if tc.codec is not None:
+        if tc.name in instances:
+            codecs[tc.name] = instances[tc.name]
+        elif tc.codec is not None:
             codecs[tc.name] = codec_registry.create(tc.codec, **tc.codec_options)
 
     router = Router(

@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from meshsa import NodeConfig, NodeTier
 
 
@@ -37,6 +39,17 @@ def test_from_env_scalar_and_mesh_override(monkeypatch):
     assert c.uid == "n1" and c.tier == NodeTier.BASE
     assert c.pli_interval_s == 5.0
     assert c.mesh.channel == "ops" and c.mesh.freq_khz == 906500
+
+
+def test_from_env_bad_numeric_names_the_offending_variable():
+    with pytest.raises(ValueError, match="MESHSA_PLI_INTERVAL_S: expected a number"):
+        NodeConfig.from_env(
+            {"MESHSA_UID": "n", "MESHSA_CALLSIGN": "F", "MESHSA_PLI_INTERVAL_S": "soon"}
+        )
+    with pytest.raises(ValueError, match="MESHSA_MESH_FREQ_KHZ: expected an integer"):
+        NodeConfig.from_env(
+            {"MESHSA_UID": "n", "MESHSA_CALLSIGN": "F", "MESHSA_MESH_FREQ_KHZ": "lots"}
+        )
 
 
 def test_from_env_json_blob_then_scalar_wins():

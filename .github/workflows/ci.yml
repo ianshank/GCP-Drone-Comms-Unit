@@ -31,14 +31,16 @@ jobs:
           pip install -e "packages/meshsa[dev]"
 
       - name: Lint
-        run: ruff check packages/meshsa
+        run: ruff check packages/meshsa flightctl
 
       - name: Format check
-        run: ruff format --check packages/meshsa
+        run: ruff format --check packages/meshsa flightctl
 
       - name: Type check
         working-directory: packages/meshsa
         run: mypy src
+      - name: Type check flightctl glue
+        run: mypy --config-file mypy.ini flightctl/run_commander.py flightctl/run_gateway.py
 
       - name: Test
         working-directory: packages/meshsa
@@ -49,3 +51,60 @@ jobs:
         run: |
           pip install build
           python -m build
+
+  perception:
+    name: perception (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "packages/jetson_yolo_gcs[dev]"
+
+      - name: Lint
+        run: ruff check packages/jetson_yolo_gcs
+
+      - name: Format check
+        run: ruff format --check packages/jetson_yolo_gcs
+
+      - name: Type check
+        working-directory: packages/jetson_yolo_gcs
+        run: mypy src
+
+      - name: Test
+        working-directory: packages/jetson_yolo_gcs
+        run: pytest
+
+      - name: Build sdist + wheel
+        working-directory: packages/jetson_yolo_gcs
+        run: |
+          pip install build
+          python -m build
+
+  shell:
+    name: shell lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check (bash -n)
+        run: |
+          files=$(git ls-files '*.sh')
+          for f in $files; do bash -n "$f"; done
+
+      - name: ShellCheck
+        run: |
+          files=$(git ls-files '*.sh')
+          shellcheck -x --severity=warning $files

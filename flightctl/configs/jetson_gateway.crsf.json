@@ -1,0 +1,28 @@
+{
+  "uid": "jetson-gw-1",
+  "callsign": "GW1",
+  "tier": "base",
+  "pli_interval_s": 30.0,
+  "default_stale_s": 120.0,
+  "transports": [
+    {
+      "name": "rc",
+      "type": "crsf_source",
+      "codec": "telemetry",
+      "options": {
+        "crsf_device": "/dev/ttyUSB0",
+        "crsf_baud": 400000,
+        "source_uid": "uav-1",
+        "callsign": "UAV1",
+        "poll_interval_s": 1.0
+      }
+    },
+    {
+      "name": "tak",
+      "type": "tak_tcp",
+      "codec": "cot",
+      "options": { "host": "127.0.0.1", "port": 8087 },
+      "codec_options": { "pli_type": "a-f-A-M-F-Q", "stale_s": 15 }
+    }
+  ]
+}

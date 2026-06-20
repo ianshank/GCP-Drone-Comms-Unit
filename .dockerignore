@@ -1,33 +1,58 @@
-# Python
+# Keep the Docker build context small and reproducible.
+# VCS / CI
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Python caches / build artifacts
 __pycache__/
 *.py[cod]
 *.egg-info/
 .eggs/
 build/
 dist/
-.venv/
-venv/
+*.whl
+*.tar.gz
 
-# Test / coverage / type / lint caches
+# Test / type / lint caches + coverage
 .pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
 .mypy_cache/
 .ruff_cache/
 .hypothesis/
-*.log
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
-# IDE / OS
+# Virtualenvs
+.venv/
+venv/
+
+# Editor / OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
-# Local env files
+# Local env files (examples are kept)
 *.env
 !*.env.example
 
-# Build outputs
-*.whl
-*.tar.gz
+# Heavy / irrelevant-to-runtime trees
+archive/
+docs/
+hardware/
+flightctl/
+ops/
+*.stl
+*.png
+*.zip
+
+# Runtime / FPV capture artifacts
+*.log
+flight-logs/
+*.parquet
+*.mp4
+*.h264
+*.mkv

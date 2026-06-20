@@ -1,0 +1,1 @@
+{"schema_version":1,"msg_id":"snap-1","ts":1700000000.0,"source_uid":"user-1","kind":"pli","payload":{"node":{"uid":"user-1","callsign":"FOX1","tier":"user"},"position":{"lat":37.5,"lon":-122.3,"hae":12.0,"ce":9999999.0,"le":9999999.0}}}

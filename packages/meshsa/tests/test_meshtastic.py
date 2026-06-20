@@ -174,6 +174,14 @@ def test_registry_factory_builds_with_injection():
     assert isinstance(t, MeshtasticTransport) and t.name == "lora"
 
 
+def test_construct_without_pubsub_defers_resolution():
+    # Constructing the transport must not import/resolve pypubsub (so the base
+    # [dev] env without pypubsub can build a node); subscribe/unsubscribe stay
+    # unresolved until start(). Guards against the eager-import regression.
+    t = MeshtasticTransport(name="lora", interface_factory=lambda: FakeIface())
+    assert t._subscribe is None and t._unsubscribe is None
+
+
 # ---- reconnect / backoff ----
 async def test_reconnects_after_connection_lost():
     i1, i2 = FakeIface(), FakeIface()
@@ -183,6 +191,7 @@ async def test_reconnects_after_connection_lost():
     pub.emit("meshtastic.connection.lost")  # device drop
     await _wait(lambda: fac.calls >= 2)  # supervisor closes i1, rebuilds -> i2
     assert i1.closed and fac.calls == 2
+    assert t.reconnects == 1  # one supervisor-driven reconnection
     await t.stop()
 
 
@@ -245,3 +254,115 @@ async def test_supervisor_exits_on_stop_flag():
     await _wait(lambda: t._task.done())
     assert t._task.done()
     await t.stop()
+
+
+# ---- mesh device provisioning (Gap A) ----
+async def test_provisioner_called_with_mesh_on_start():
+    iface, pub = FakeIface(), FakePub()
+    seen = []
+    t = _make(
+        iface,
+        pub,
+        sleep=FakeSleep(),
+        mesh={"region": "EU", "channel": "ops", "psk": None, "freq_khz": 906500},
+        provision=lambda dev, mesh: seen.append((dev, mesh)),
+    )
+    await t.start()
+    assert len(seen) == 1
+    dev, mesh = seen[0]
+    assert dev is iface
+    assert mesh["region"] == "EU" and mesh["freq_khz"] == 906500
+    await t.stop()
+
+
+async def test_provisioner_not_called_without_mesh():
+    iface, pub = FakeIface(), FakePub()
+    seen = []
+    t = _make(iface, pub, sleep=FakeSleep(), provision=lambda dev, mesh: seen.append(dev))
+    await t.start()
+    assert seen == []  # no mesh configured -> provisioning skipped
+    await t.stop()
+
+
+async def test_provisioner_reapplied_after_reconnect():
+    # A rebuilt interface must be re-provisioned, not left on its boot config.
+    i1, i2 = FakeIface(), FakeIface()
+    fac, pub = ScriptedFactory([i1, i2]), FakePub()
+    seen = []
+    t = _make(
+        fac,
+        pub,
+        sleep=FakeSleep(),
+        mesh={"region": "EU"},
+        provision=lambda dev, mesh: seen.append(dev),
+    )
+    await t.start()  # provisions i1
+    pub.emit("meshtastic.connection.lost")  # drop -> supervisor rebuilds -> i2
+    await _wait(lambda: fac.calls >= 2)
+    await _wait(lambda: seen == [i1, i2])
+    assert seen == [i1, i2]
+    await t.stop()
+
+
+async def test_receive_full_inbox_counts_drop():
+    # The receive path must funnel through the shared drop-counter, not raise
+    # QueueFull in the loop callback.
+    iface, pub = FakeIface(), FakePub()
+    t = _make(iface, pub, sleep=FakeSleep(), queue_maxsize=1)
+    await t.start()
+    for payload in (b"a", b"b"):  # 2nd overflows the 1-slot inbox
+        pub.emit(
+            "meshtastic.receive",
+            packet={"decoded": {"portnum": 256, "payload": payload}},
+            interface=iface,
+        )
+    await _wait(lambda: t.dropped_inbox_full >= 1)
+    assert t.dropped_inbox_full == 1
+    await t.stop()
+
+
+# ---- default provisioner control flow (fakes for the device API) ----
+class _FakeNode:
+    def __init__(self):
+        self.localConfig = type("_C", (), {"lora": type("_L", (), {"region": None})()})()
+        self.written = []
+
+    def writeConfig(self, name):
+        self.written.append(name)
+
+
+def test_default_provisioner_applies_region_and_logs_extras():
+    from meshsa.transports.meshtastic_radio import _default_provisioner
+
+    iface = type("_I", (), {"localNode": _FakeNode()})()
+    _default_provisioner(iface, {"region": "EU", "channel": "ops", "psk": None, "freq_khz": 906500})
+    assert iface.localNode.localConfig.lora.region == "EU"
+    assert iface.localNode.written == ["lora"]
+
+
+def test_default_provisioner_no_localnode_is_safe():
+    from meshsa.transports.meshtastic_radio import _default_provisioner
+
+    _default_provisioner(type("_I", (), {"localNode": None})(), {"region": "EU"})  # no raise
+
+
+def test_default_provisioner_no_region_skips_write():
+    from meshsa.transports.meshtastic_radio import _default_provisioner
+
+    iface = type("_I", (), {"localNode": _FakeNode()})()
+    _default_provisioner(iface, {"region": None, "channel": None, "psk": None, "freq_khz": None})
+    assert iface.localNode.written == []
+
+
+def test_construct_does_not_resolve_pubsub(monkeypatch):
+    # pypubsub is resolved lazily in start(), not __init__, so a transport can be
+    # built (e.g. for config validation in build_node) without the optional dep.
+    import meshsa.transports.meshtastic_radio as mr
+
+    def _boom():  # pragma: no cover - must never be called at construction
+        raise AssertionError("pypubsub resolved at construction")
+
+    monkeypatch.setattr(mr, "_default_pubsub", _boom)
+    transport = mr.MeshtasticTransport(name="lora")
+    assert transport.name == "lora"
+    assert transport._subscribe is None and transport._unsubscribe is None

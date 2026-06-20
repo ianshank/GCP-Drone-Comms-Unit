@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import Callable, Mapping
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from ._parsing import parse_float, parse_int
 from .models import NodeTier
 
 
@@ -45,6 +46,16 @@ class NemotronConfig(BaseModel):
     timeout_s: float = 30.0
     max_retries: int = 3
 
+class HealthConfig(BaseModel):
+    """Opt-in /healthz listener (served by ``meshsa.health``)."""
+
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8088
+    metrics_enabled: bool = False
+    metrics_path: str = "/metrics"
+    metrics_format: Literal["prometheus", "json"] = "prometheus"
+
 
 class NodeConfig(BaseModel):
     uid: str
@@ -54,6 +65,7 @@ class NodeConfig(BaseModel):
     default_stale_s: float = 120.0
     mesh: MeshConfig = Field(default_factory=MeshConfig)
     router: RouterConfig = Field(default_factory=RouterConfig)
+    health: HealthConfig = Field(default_factory=HealthConfig)
     transports: list[TransportConfig] = Field(default_factory=list)
     inference: NemotronConfig = Field(default_factory=NemotronConfig)
 
@@ -77,16 +89,21 @@ class NodeConfig(BaseModel):
         blob = env.get(f"{prefix}CONFIG_JSON")
         if blob:
             data.update(json.loads(blob))
-        scalar_map = {
-            f"{prefix}UID": ("uid", str),
-            f"{prefix}CALLSIGN": ("callsign", str),
-            f"{prefix}TIER": ("tier", str),
-            f"{prefix}PLI_INTERVAL_S": ("pli_interval_s", float),
-            f"{prefix}DEFAULT_STALE_S": ("default_stale_s", float),
+
+        # caster takes (field_name, raw_value) so numeric parse errors name the field.
+        def _str(_name: str, value: str) -> str:
+            return value
+
+        scalar_map: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+            f"{prefix}UID": ("uid", _str),
+            f"{prefix}CALLSIGN": ("callsign", _str),
+            f"{prefix}TIER": ("tier", _str),
+            f"{prefix}PLI_INTERVAL_S": ("pli_interval_s", parse_float),
+            f"{prefix}DEFAULT_STALE_S": ("default_stale_s", parse_float),
         }
         for env_key, (field, caster) in scalar_map.items():
             if env_key in env:
-                data[field] = caster(env[env_key])
+                data[field] = caster(env_key, env[env_key])
         mesh: dict[str, Any] = dict(data.get("mesh", {}))
         for env_key, field in {
             f"{prefix}MESH_CHANNEL": "channel",
@@ -96,7 +113,8 @@ class NodeConfig(BaseModel):
             if env_key in env:
                 mesh[field] = env[env_key]
         if f"{prefix}MESH_FREQ_KHZ" in env:
-            mesh["freq_khz"] = int(env[f"{prefix}MESH_FREQ_KHZ"])
+            key = f"{prefix}MESH_FREQ_KHZ"
+            mesh["freq_khz"] = parse_int(key, env[key])
         if mesh:
             data["mesh"] = mesh
         return cls.model_validate(data)

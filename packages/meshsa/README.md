@@ -39,7 +39,9 @@ meshsa/
   router.py       publish / pump / dedupe / bridge / subscribe
   node.py         build_node(config) -> Node
   transports/     loopback, null, meshtastic_radio (real API),
-                  tak (TCP -> FreeTAKServer, UDP multicast -> ATAK), base
+                  tak (TCP -> FreeTAKServer, UDP multicast -> ATAK), base;
+                  mavlink_source / msp_source / crsf_source (receive-only
+                  flight-source transports -> drone/FPV ATAK air tracks)
   cot.py          Cursor-on-Target codec (ATAK / WinTAK / iTAK / FreeTAKServer)
   compact.py      compact binary codec sized for LoRa (~40 B PLI vs ~220 B JSON)
 ```

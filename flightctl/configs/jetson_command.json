@@ -1,0 +1,13 @@
+{
+  "host": "127.0.0.1",
+  "port": 8095,
+  "mavlink_endpoint": "tcp:127.0.0.1:5762",
+  "target_system": 1,
+  "target_component": 1,
+  "allowed": ["set_mode", "rtl"],
+  "allow_force_disarm": false,
+  "ack_timeout_s": 2.0,
+  "max_attempts": 3,
+  "arm_report_max_age_s": 2.0,
+  "audit_path": "/mnt/ssd/flightctl/logs/command_audit.jsonl"
+}

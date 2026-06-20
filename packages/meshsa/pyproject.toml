@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshsa"
-version = "0.1.0"
+version = "0.3.0"
 description = "Modular framework for a distributable mesh situational-awareness network"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "jetson-flight-control contributors" }]
+authors = [{ name = "GCP-Drone-Comms-Unit contributors" }]
 keywords = ["mesh", "situational-awareness", "meshtastic", "tak", "atak", "lora"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -34,38 +34,66 @@ meshtastic = [
     "pypubsub>=4.0",
 ]
 tak = []
-inference = [
+mavlink = [
+    "pymavlink>=2.4",
+]
+msp = [
+    "yamspy>=0.3",
+]
+health = [
+    "aiohttp>=3.9",
+]
+fpv = [
+    "pyserial>=3.5",
+    "pyarrow>=15",
+]
+camera = [
+    "opencv-python-headless>=4.8",
+]
+llm = [
+    "anthropic>=0.40",
     "aiohttp>=3.9",
 ]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
     "pytest-asyncio>=0.23",
+    "hypothesis>=6",
     "ruff>=0.6",
     "mypy>=1.10",
     "pre-commit>=3.7",
     "build>=1.2",
     "twine>=5",
-    "pytest-aiohttp>=1.0",
-    "aioresponses>=0.7",
-    "hypothesis>=6.0",
 ]
 
 [project.scripts]
-meshsa-base = "meshsa.examples.base_node:main"
+meshsa-base = "meshsa.cli:main"
+fpv-telemetry-monitor = "meshsa.fpv.tools.monitor:main"
+fpv-log-replay = "meshsa.fpv.tools.replay:main"
+fpv-log-convert = "meshsa.fpv.tools.convert:main"
+meshsa-llm = "meshsa.llm.server:main"
 
 [project.urls]
-Homepage = "https://github.com/your-org/jetson-flight-control"
-Source = "https://github.com/your-org/jetson-flight-control"
-Issues = "https://github.com/your-org/jetson-flight-control/issues"
+Homepage = "https://github.com/ianshank/GCP-Drone-Comms-Unit"
+Source = "https://github.com/ianshank/GCP-Drone-Comms-Unit"
+Issues = "https://github.com/ianshank/GCP-Drone-Comms-Unit/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+meshsa = ["py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=90"
 testpaths = ["tests"]
+# Make flightctl/ (the live service glue, outside the package) importable for its
+# glue tests without per-file sys.path mutation. Relative to this rootdir.
+pythonpath = ["../../flightctl"]
+markers = [
+    "slow: long-running soak/fuzz tests; exercised by the nightly workflow",
+]
 
 [tool.coverage.run]
 source = ["meshsa"]
@@ -81,7 +109,6 @@ extend-exclude = [".venv", "build", "dist"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = [
     "E501",   # line length handled by formatter
-    "SIM105", # try/except/pass -> contextlib.suppress; tracked in AUDIT_REPORT backlog
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -99,7 +126,18 @@ warn_return_any = true
 disallow_untyped_decorators = true
 
 [[tool.mypy.overrides]]
-module = ["meshtastic.*", "pubsub.*", "pypubsub.*"]
+module = [
+    "meshtastic.*",
+    "pubsub.*",
+    "pypubsub.*",
+    "aiohttp.*",
+    "pymavlink.*",
+    "yamspy.*",
+    "serial.*",
+    "pyarrow.*",
+    "cv2.*",
+    "anthropic.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

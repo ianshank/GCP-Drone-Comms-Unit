@@ -1,0 +1,31 @@
+# /etc/systemd/system/freetakserver.service — FreeTAKServer in a Python 3.11 SSD venv.
+#
+# Manually verified on-device (JetPack 6.2, aarch64): a MAVLink fix reached an
+# ATAK-style viewer through this server on :8087. (The automated test suite asserts
+# the bridge via loopback, not against a live FTS — this is an ops/runbook note.)
+#   Setup the venv + the dependency pins FTS needs to boot (see the script for why):
+#     bash flightctl/scripts/setup_fts.sh
+#   FTS hardcodes a persistence dir at /opt/fts and creates it at import, so a one-time
+#   sudo step is required (point it at the SSD to keep eMMC free):
+#     sudo mkdir -p /mnt/ssd/data/fts && sudo ln -sfn /mnt/ssd/data/fts /opt/fts
+#     sudo chown -h flightctl:flightctl /opt/fts /mnt/ssd/data/fts
+#   Entrypoint (no console script is installed; run the module). FTS_FIRST_START=false
+#   in fts.env boots headless (the wizard hangs under systemd).
+[Unit]
+Description=FreeTAKServer (CoT server for ATAK)
+After=network-online.target mnt-ssd.mount
+Wants=network-online.target
+RequiresMountsFor=/mnt/ssd
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/flightctl/fts.env
+WorkingDirectory=/mnt/ssd/data/fts
+ExecStart=/mnt/ssd/venvs/fts/bin/python -m FreeTAKServer.controllers.services.FTS
+Restart=on-failure
+RestartSec=5
+User=flightctl
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

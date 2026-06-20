@@ -32,5 +32,5 @@ mitigation within 30 days, depending on severity.
 
 ## Supported versions
 
-The project is at `0.1.0` and is pre-1.0. Only the latest commit on `main` is
+The project is at `0.2.0` and is pre-1.0. Only the latest commit on `main` is
 currently supported for security fixes.

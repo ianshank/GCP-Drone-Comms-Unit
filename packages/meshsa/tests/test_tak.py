@@ -16,7 +16,49 @@ from meshsa import (
     build_node,
     transport_registry,
 )
-from meshsa.transports.tak import CotFramer
+from meshsa.transports.tak import CotFramer, _build_ssl_context
+
+
+# ============================ TLS context ============================
+def test_build_ssl_context_clear_error_on_missing_cert_files(tmp_path):
+    missing = str(tmp_path / "nope.pem")
+    with pytest.raises(FileNotFoundError, match="tls_ca_cert not found"):
+        _build_ssl_context(ca_cert=missing, client_cert=None, client_key=None, verify=True)
+    real = tmp_path / "ca.pem"
+    real.write_text("x", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="tls_client_cert not found"):
+        _build_ssl_context(ca_cert=None, client_cert=missing, client_key=str(real), verify=True)
+
+
+def test_build_ssl_context_no_certs_is_fine():
+    # No cert paths configured -> no file checks, default verifying context.
+    ctx = _build_ssl_context(ca_cert=None, client_cert=None, client_key=None, verify=True)
+    assert ctx.verify_mode.name == "CERT_REQUIRED"
+
+
+def test_build_ssl_context_requires_cert_when_key_set(tmp_path):
+    key = tmp_path / "client.key"
+    key.write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError, match="tls_client_cert is required when tls_client_key"):
+        _build_ssl_context(ca_cert=None, client_cert=None, client_key=str(key), verify=True)
+
+
+def test_require_file_distinguishes_unreadable_from_missing(tmp_path):
+    import os as _os
+
+    from meshsa.transports.tak import _require_file
+
+    if hasattr(_os, "geteuid") and _os.geteuid() == 0:
+        pytest.skip("root bypasses file permission checks")
+    f = tmp_path / "ca.pem"
+    f.write_text("x", encoding="utf-8")
+    _os.chmod(f, 0o000)
+    try:
+        # exists but unreadable -> PermissionError, not a misleading FileNotFoundError
+        with pytest.raises(PermissionError, match="not readable"):
+            _require_file("tls_ca_cert", str(f))
+    finally:
+        _os.chmod(f, 0o644)  # restore so tmp cleanup can remove it
 
 
 # ============================ framer ============================
@@ -149,6 +191,16 @@ class FakeSleep:
         self.calls.append(secs)
 
 
+class _FixedClock:
+    """now() never advances on its own — pacing math is fully controlled here."""
+
+    def __init__(self, t: float = 0.0):
+        self.t = t
+
+    def now(self) -> float:
+        return self.t
+
+
 def _conn(reader, writer):
     async def connect():
         return reader, writer
@@ -177,6 +229,26 @@ async def _wait(cond, tries=300):
 
 
 # ============================ TCP transport ============================
+async def test_pacing_delays_sends_after_the_burst():
+    reader, writer = QueueReader(), FakeWriter()
+    clock = _FixedClock()
+    sleep = FakeSleep()
+    t = TakTcpTransport(
+        connector=lambda: _conn(reader, writer),
+        pacing=True,
+        pacing_rate_hz=10.0,
+        pacing_burst=1,
+        clock=clock,
+        sleep=sleep,
+    )
+    await t.start()
+    await t.send(b"<a/></event>")  # initial burst token -> no pacing wait
+    await t.send(b"<b/></event>")  # bucket empty -> paced one interval (0.1 s)
+    await t.stop()
+    assert sleep.calls == [pytest.approx(0.1)]
+    assert writer.buf == b"<a/></event><b/></event>"
+
+
 async def test_tcp_send_writes_with_delimiter():
     reader, writer = QueueReader(), FakeWriter()
     t = TakTcpTransport(connector=lambda: _conn(reader, writer), delimiter=b"\n", sleep=FakeSleep())
@@ -229,6 +301,7 @@ async def test_tcp_reconnects_after_eof():
     got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
     assert got.startswith(b"<event")
     assert conn.calls == 2
+    assert t.reconnects == 1  # one supervisor-driven reconnection
     await t.stop()
 
 
@@ -337,6 +410,101 @@ async def test_multicast_stop_without_start_safe():
     await t.stop()
 
 
+class RaiseOnceDgram(FakeDgram):
+    """A FakeDgram whose first recv() raises, to exercise the recovery path."""
+
+    def __init__(self):
+        super().__init__()
+        self._raised = False
+
+    async def recv(self):
+        if not self._raised:
+            self._raised = True
+            raise OSError("multicast recv boom")
+        return await super().recv()
+
+
+async def test_multicast_recovers_after_recv_error():
+    # First socket errors on recv; the loop must close it, back off, rebuild via
+    # the factory, and keep ingesting on the healthy second socket.
+    bad, good = RaiseOnceDgram(), FakeDgram()
+    ios = [bad, good]
+    sleep = FakeSleep()
+    t = TakMulticastTransport(io_factory=lambda: ios.pop(0), sleep=sleep)
+    await t.start()
+    await _wait(lambda: bad.closed and t.reconnects == 1)  # errored socket closed + rebuilt
+    good.push(_cot_pli())
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    assert sleep.calls  # backoff slept before rebuilding
+    await t.stop()
+    assert good.closed
+
+
+class RaiseAlwaysDgram(FakeDgram):
+    """recv() always raises — used to drive the persistent-failure path."""
+
+    async def recv(self):
+        raise OSError("multicast down")
+
+
+async def test_multicast_recv_loop_exits_on_stop_flag_during_backoff():
+    box = {}
+
+    async def flip(_secs):
+        box["t"]._stopping = True  # stop arrives while backing off -> loop breaks
+
+    t = TakMulticastTransport(io_factory=lambda: RaiseAlwaysDgram(), sleep=flip)
+    box["t"] = t
+    await t.start()
+    await _wait(lambda: t._task.done())  # recv error -> backoff -> stop flag -> exit
+    assert t.reconnects == 0  # never rebuilt; broke out after the stop flag
+    await t.stop()
+
+
+class CloseFailDgram(RaiseOnceDgram):
+    """First recv() raises and close() also raises, to exercise close best-effort."""
+
+    def close(self):
+        raise OSError("close boom")
+
+
+async def test_multicast_close_error_swallowed_during_recovery():
+    ios = [CloseFailDgram(), FakeDgram()]
+    t = TakMulticastTransport(io_factory=lambda: ios.pop(0), sleep=FakeSleep())
+    await t.start()
+    await _wait(lambda: t.reconnects == 1)  # close raised but was swallowed; rebuilt anyway
+    await t.stop()
+
+
+async def test_multicast_survives_factory_raising_during_rebuild():
+    # The interface is still hard-down when the loop tries to rebuild: the first
+    # socket errors on recv, and the *next* factory call raises (bind /
+    # IP_ADD_MEMBERSHIP failing). An unguarded rebuild would kill the recv task
+    # forever; instead the loop must back off and retry the factory, then ingest
+    # once a healthy socket is finally returned.
+    good = FakeDgram()
+    attempts = {"n": 0}
+
+    def factory():
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            return RaiseOnceDgram()  # first socket: recv() raises once
+        if attempts["n"] == 2:
+            raise OSError("iface still down")  # rebuild attempt fails in the factory
+        return good  # third attempt succeeds
+
+    sleep = FakeSleep()
+    t = TakMulticastTransport(io_factory=factory, sleep=sleep)
+    await t.start()
+    await _wait(lambda: t.reconnects == 1)  # survived the failed rebuild and eventually rebuilt
+    assert attempts["n"] == 3  # factory was retried after it raised
+    good.push(_cot_pli())
+    got = await asyncio.wait_for(t.stream().__anext__(), timeout=1.0)
+    assert got.startswith(b"<event")
+    await t.stop()
+
+
 # ============================ registry ============================
 def test_tak_registered():
     assert transport_registry.has("tak_tcp")
@@ -393,3 +561,20 @@ async def test_e2e_json_mesh_cot_tak_bridge(clock, ids):
 
     reader.push(b"")
     await node.stop()
+
+
+async def test_multicast_joins_on_start_and_leaves_on_stop():
+    # Transport-level group join/leave: io built on start, closed on stop.
+    io = FakeDgram()
+    made = {"n": 0}
+
+    def factory():
+        made["n"] += 1
+        return io
+
+    t = TakMulticastTransport(io_factory=factory)
+    assert made["n"] == 0  # no group join before start
+    await t.start()
+    assert made["n"] == 1 and not io.closed  # joined exactly once
+    await t.stop()
+    assert io.closed  # left the group

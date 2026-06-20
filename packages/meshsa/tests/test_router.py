@@ -91,3 +91,13 @@ async def test_router_drops_undecodable_frame():
     await asyncio.sleep(0.05)
     await r.stop()
     assert seen == []
+
+
+async def test_dedupe_cache_bounded_at_scale():
+    # Eviction must hold the cache at dedupe_cache_size even under heavy churn.
+    r = Router([], JsonCodec(), config=RouterConfig(dedupe_cache_size=10))
+    for i in range(100):
+        assert r._mark_seen(f"id-{i}") is True
+    assert len(r._seen) == 10  # bounded
+    assert r._mark_seen("id-99") is False  # most-recent still known
+    assert r._mark_seen("id-0") is True  # oldest long since evicted -> new again

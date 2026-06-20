@@ -20,12 +20,13 @@ from __future__ import annotations
 
 import json
 import struct
+from collections.abc import Iterable
 from typing import Any
 
 from .errors import IncompatibleSchemaError, MeshSAError
 from .models import Envelope, MessageKind, NodeTier
 from .registry import codec_registry
-from .version import is_compatible
+from .version import SUPPORTED_SCHEMAS
 
 _KINDS = [k.value for k in MessageKind]  # index == wire kind byte
 _TIERS = [t.value for t in NodeTier]
@@ -57,6 +58,12 @@ def _clamp_u16(v: float) -> int:
 
 class CompactCodec:
     name = "compact"
+    #: Wire schemas this codec instance accepts on decode.
+    supported_schemas: frozenset[int] = SUPPORTED_SCHEMAS
+
+    def __init__(self, *, supported_schemas: Iterable[int] | None = None, **_: Any) -> None:
+        if supported_schemas is not None:
+            self.supported_schemas = frozenset(supported_schemas)
 
     def encode(self, envelope: Envelope) -> bytes:
         kind_idx = _KINDS.index(envelope.kind.value)  # MessageKind guarantees membership
@@ -97,7 +104,7 @@ class CompactCodec:
         payload: dict[str, Any]
         try:
             schema = data[0]
-            if not is_compatible(schema):
+            if schema not in self.supported_schemas:
                 raise IncompatibleSchemaError(f"schema {schema} not supported")
             kind = MessageKind(_KINDS[data[1]])
             ts = struct.unpack_from(">I", data, 2)[0]
@@ -135,7 +142,7 @@ class CompactCodec:
         except IncompatibleSchemaError:
             raise
         except Exception as exc:
-            raise MeshSAError(f"undecodable compact frame: {exc}") from exc
+            raise MeshSAError(f"undecodable compact frame (len={len(data)}): {exc}") from exc
         return Envelope(
             schema_version=schema,
             msg_id=msg_id,

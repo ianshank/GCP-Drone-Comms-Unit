@@ -130,35 +130,58 @@ base-node environment helper non-optional for argparse defaults.
 
 ## 8. Prioritized backlog
 
+All items below were addressed in the enterprise-remediation branch
+`feat/enterprise-remediation` (see `CHANGELOG.md`); PR references are the
+conventional-commit units.
+
 ### P0 (do before 0.2.0)
 
-1. Confirm or replace the `LICENSE` placeholder with the chosen license.
+1. ✅ Confirm the `LICENSE` — confirmed **Apache-2.0**, placeholder wording removed (PR2).
 
 ### P1 (next iteration)
 
-1. Add the `SIM105` cleanups (`contextlib.suppress`) and re-enable the rule.
-2. Add `supported_schemas: frozenset[int]` to each codec; let codecs coexist.
-3. Add Hypothesis-based property tests for codec roundtrips.
-4. Expose dropped-frame and reconnect counters; add a `/healthz` endpoint.
-5. Move the runnable CLI out of `examples/` into a `meshsa.cli` module so the
-   examples folder stays demonstrative-only.
+1. ✅ `SIM105` cleanups (`contextlib.suppress`) + rule re-enabled (PR2).
+2. ✅ Per-codec `supported_schemas: frozenset[int]` (JSON/Compact gate; CoT
+   schema-agnostic) (PR3).
+3. ✅ Hypothesis property tests for codec round-trips (PR6).
+4. ✅ `RouterMetrics` (rx/tx/forwarded/dropped/schema-mismatch) + per-transport
+   reconnect counters + opt-in `/healthz` (PR4).
+5. ✅ CLI moved to `meshsa.cli`; `examples/` is now a thin re-export (PR5).
 
 ### P2 (nice to have)
 
-1. Entry-point plugin group `meshsa.transports` for out-of-tree drivers.
-2. Snapshot tests for serialized envelopes (`tests/snapshots/`).
-3. Build and publish the Docker image from CI on tag.
-4. Add a soak / fuzz job (nightly) on actual hardware in the lab.
+1. ✅ Entry-point plugin groups `meshsa.transports` / `meshsa.codecs` (PR7).
+2. ✅ Serialized-envelope snapshot tests (`tests/snapshots/`) (PR6).
+3. ✅ Opt-in Docker image publish to GHCR on tag (PR9).
+4. ✅ Nightly workflow (full-extras gate + `@pytest.mark.slow` hook); on-hardware
+   soak remains a lab task (no hardware in CI) (PR9).
 
-## 9. Verification record
+## 9. Dead-config / packaging gaps found during remediation (beyond the original audit)
+
+1. ✅ `RouterConfig.queue_maxsize` was inert — now wired to transport inboxes (PR1).
+2. ✅ `MeshConfig` (region/channel/psk/freq_khz) never reached the radio — now
+   threaded to the Meshtastic transport and applied at connect/reconnect via an
+   injectable provisioner seam (PR1).
+3. ✅ Missing PEP 561 `py.typed` despite strict typing — added + shipped in the wheel (PR2).
+4. ✅ Transport inbox could block under backpressure — now bounded drop-newest
+   with a `dropped_inbox_full` counter on all inbound paths (PR1).
+5. ✅ `_default_pubsub` typing failed strict mypy with `[meshtastic]` installed —
+   fixed; a nightly job now type-checks against the full dependency graph (PR1, PR9).
+
+## 10. Verification record
+
+Original audit (2026-06-02):
 
 ```text
-$ pytest                                                # 101 passed in 0.98s; 100% line, 100% branch
-$ ruff check packages/meshsa                            # All checks passed!
-$ ruff format --check packages/meshsa                   # 31 files already formatted
-$ cd packages/meshsa && mypy src                        # Success: no issues found
-$ python -m build                                       # meshsa-0.1.0.tar.gz, meshsa-0.1.0-py3-none-any.whl
-$ meshsa-base --help                                    # console script works
-$ grep -r "meshsa_framework|pi5_node_kit|meshsa_base_service|jetson_gcs_stls|usernode_stls"
-                                                        # zero hits
+$ pytest                                                # 101 passed; 100% line, 100% branch
+```
+
+Post-remediation (2026-06-03, branch `feat/enterprise-remediation`):
+
+```text
+$ cd packages/meshsa && pytest      # 137 passed; 100% line (983 stmts), 100% branch (176)
+$ mypy src                          # Success: no issues found in 23 source files (with [meshtastic] installed)
+$ ruff check . && ruff format --check .   # All checks passed!
+$ python -m build                   # sdist + wheel; py.typed present in the wheel
+$ meshsa-base --help                # console script works (-> meshsa.cli:main)
 ```

@@ -1,4 +1,4 @@
-# Contributing to jetson-flight-control
+# Contributing to GCP-Drone-Comms-Unit
 
 Thanks for your interest in contributing.
 

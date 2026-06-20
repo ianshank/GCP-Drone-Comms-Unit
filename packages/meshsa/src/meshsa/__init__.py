@@ -2,7 +2,7 @@
 
 from .codec import JsonCodec
 from .compact import CompactCodec
-from .config import MeshConfig, NemotronConfig, NodeConfig, RouterConfig, TransportConfig
+from .config import HealthConfig, MeshConfig, NemotronConfig, NodeConfig, RouterConfig, TransportConfig
 from .cot import CotCodec
 from .errors import (
     DuplicateRegistrationError,
@@ -10,16 +10,33 @@ from .errors import (
     MeshSAError,
     UnknownComponentError,
 )
+from .health import health_snapshot
 from .inference import InferenceResult, InferenceService, NemotronClient
-from .models import ChatPayload, Envelope, MessageKind, NodeInfo, NodeTier, PliPayload, Position
+from .metrics import RouterMetrics, render_prometheus
+from .models import (
+    Attitude,
+    ChatPayload,
+    Envelope,
+    MessageKind,
+    NodeInfo,
+    NodeTier,
+    PliPayload,
+    Position,
+    Telemetry,
+)
 from .node import Node, build_node
+from .plugins import load_plugins
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
 from .registry import Registry, codec_registry, transport_registry
 from .router import Router
+from .telemetry import TelemetryCodec
 from .transports import (
+    CrsfSourceTransport,
     LoopbackBus,
     LoopbackTransport,
+    MavlinkSourceTransport,
     MeshtasticTransport,
+    MspSourceTransport,
     NullTransport,
     TakMulticastTransport,
     TakTcpTransport,
@@ -33,9 +50,12 @@ __all__ = [
     "NodeConfig",
     "MeshConfig",
     "RouterConfig",
+    "HealthConfig",
     "TransportConfig",
     "NemotronConfig",
     "Position",
+    "Attitude",
+    "Telemetry",
     "NodeInfo",
     "NodeTier",
     "MessageKind",
@@ -54,12 +74,20 @@ __all__ = [
     "JsonCodec",
     "CotCodec",
     "CompactCodec",
+    "TelemetryCodec",
     "Router",
+    "RouterMetrics",
+    "render_prometheus",
+    "health_snapshot",
     "Node",
     "build_node",
+    "load_plugins",
     "LoopbackBus",
     "LoopbackTransport",
     "NullTransport",
+    "CrsfSourceTransport",
+    "MavlinkSourceTransport",
+    "MspSourceTransport",
     "MeshtasticTransport",
     "TakTcpTransport",
     "TakMulticastTransport",
