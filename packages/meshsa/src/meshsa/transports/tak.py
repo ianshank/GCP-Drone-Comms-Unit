@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import ssl
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, Protocol
 
 import structlog
@@ -94,6 +96,19 @@ def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, 
     return host, resolved, use_tls
 
 
+def _require_file(label: str, path: str | None) -> None:
+    """Fail clearly if a configured cert path is unusable, distinguishing the reason."""
+    if path is None:
+        return
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"{label} not found: {path}")
+    if not p.is_file():
+        raise FileNotFoundError(f"{label} is not a regular file: {path}")
+    if not os.access(path, os.R_OK):  # exists but unreadable (e.g. wrong permissions)
+        raise PermissionError(f"{label} is not readable: {path}")
+
+
 def _build_ssl_context(
     *, ca_cert: str | None, client_cert: str | None, client_key: str | None, verify: bool
 ) -> ssl.SSLContext:
@@ -105,6 +120,16 @@ def _build_ssl_context(
     """
     if client_cert is not None and client_key is None:
         raise ValueError("tls_client_key is required when tls_client_cert is set")
+    if client_key is not None and client_cert is None:
+        # Symmetric guard: a key without a cert is a partial mutual-TLS config — the
+        # key would be pre-checked but silently unused (load_cert_chain is cert-gated).
+        raise ValueError("tls_client_cert is required when tls_client_key is set")
+    # Pre-flight the cert files so a missing/typo'd path fails with a clear message
+    # here, not as an obscure ssl/OSError deep inside create_default_context /
+    # load_cert_chain at connect time (the "works in the lab, fails on the vehicle").
+    _require_file("tls_ca_cert", ca_cert)
+    _require_file("tls_client_cert", client_cert)
+    _require_file("tls_client_key", client_key)
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_cert)
     if not verify:
         # Encryption without authentication is MITM-able; leave a forensic trail.

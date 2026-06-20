@@ -176,7 +176,7 @@ class CotCodec:
             etype = ev.attrib.get("type", "")
             ts = _parse_ts(ev.attrib.get("time", _iso(0)))
         except Exception as exc:
-            raise MeshSAError(f"undecodable CoT: {exc}") from exc
+            raise MeshSAError(f"undecodable CoT ({len(data)} bytes): {exc}") from exc
 
         detail = ev.find("detail")
         if etype.startswith("b-t-f") or etype.startswith("b.t.f"):

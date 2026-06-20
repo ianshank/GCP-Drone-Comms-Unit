@@ -142,7 +142,7 @@ class CompactCodec:
         except IncompatibleSchemaError:
             raise
         except Exception as exc:
-            raise MeshSAError(f"undecodable compact frame: {exc}") from exc
+            raise MeshSAError(f"undecodable compact frame (len={len(data)}): {exc}") from exc
         return Envelope(
             schema_version=schema,
             msg_id=msg_id,

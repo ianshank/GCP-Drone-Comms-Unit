@@ -16,7 +16,49 @@ from meshsa import (
     build_node,
     transport_registry,
 )
-from meshsa.transports.tak import CotFramer
+from meshsa.transports.tak import CotFramer, _build_ssl_context
+
+
+# ============================ TLS context ============================
+def test_build_ssl_context_clear_error_on_missing_cert_files(tmp_path):
+    missing = str(tmp_path / "nope.pem")
+    with pytest.raises(FileNotFoundError, match="tls_ca_cert not found"):
+        _build_ssl_context(ca_cert=missing, client_cert=None, client_key=None, verify=True)
+    real = tmp_path / "ca.pem"
+    real.write_text("x", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="tls_client_cert not found"):
+        _build_ssl_context(ca_cert=None, client_cert=missing, client_key=str(real), verify=True)
+
+
+def test_build_ssl_context_no_certs_is_fine():
+    # No cert paths configured -> no file checks, default verifying context.
+    ctx = _build_ssl_context(ca_cert=None, client_cert=None, client_key=None, verify=True)
+    assert ctx.verify_mode.name == "CERT_REQUIRED"
+
+
+def test_build_ssl_context_requires_cert_when_key_set(tmp_path):
+    key = tmp_path / "client.key"
+    key.write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError, match="tls_client_cert is required when tls_client_key"):
+        _build_ssl_context(ca_cert=None, client_cert=None, client_key=str(key), verify=True)
+
+
+def test_require_file_distinguishes_unreadable_from_missing(tmp_path):
+    import os as _os
+
+    from meshsa.transports.tak import _require_file
+
+    if hasattr(_os, "geteuid") and _os.geteuid() == 0:
+        pytest.skip("root bypasses file permission checks")
+    f = tmp_path / "ca.pem"
+    f.write_text("x", encoding="utf-8")
+    _os.chmod(f, 0o000)
+    try:
+        # exists but unreadable -> PermissionError, not a misleading FileNotFoundError
+        with pytest.raises(PermissionError, match="not readable"):
+            _require_file("tls_ca_cert", str(f))
+    finally:
+        _os.chmod(f, 0o644)  # restore so tmp cleanup can remove it
 
 
 # ============================ framer ============================

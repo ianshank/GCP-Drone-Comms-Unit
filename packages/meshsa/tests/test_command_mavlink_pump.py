@@ -99,6 +99,28 @@ def test_command_ack_is_queued_and_served_by_recv_ack():
     assert pump.recv_ack(timeout=0.1) == Ack(command=400, result=0, source_system=3)
 
 
+def test_drain_discards_queued_acks_and_reports_count():
+    pump = _pump(ScriptedConn())
+    pump._dispatch(FakeMsg("COMMAND_ACK", command=1, result=0))
+    pump._dispatch(FakeMsg("COMMAND_ACK", command=2, result=0))
+    assert pump.drain() == 2  # both stale ACKs discarded
+    assert pump.recv_ack(timeout=0.0) is None  # queue now empty
+    assert pump.drain() == 0  # idempotent on an empty queue
+
+
+def test_malformed_command_ack_is_logged_not_queued():
+    pump = _pump(ScriptedConn())
+
+    class BadAck:
+        def get_type(self):
+            return "COMMAND_ACK"
+
+        command = None  # int(None) -> TypeError inside _dispatch
+
+    assert pump._dispatch(BadAck()) is False  # swallowed (logged), not raised
+    assert pump.recv_ack(timeout=0.0) is None  # nothing queued
+
+
 def test_recv_ack_times_out_to_none_when_empty():
     pump = _pump(ScriptedConn())
     assert pump.recv_ack(timeout=0.0) is None

@@ -84,6 +84,26 @@ class MavlinkCommandPump:
         except queue.Empty:
             return None
 
+    def drain(self) -> int:
+        """Discard any queued ACKs (called before a new command), returning the count.
+
+        ACKs that arrive between commands (e.g. from another component on the shared
+        bus, or a late resend) are noise for the *next* command's correlator. Draining
+        here keeps the queue bounded across commands **without ever dropping an ACK the
+        active command is waiting for** — unlike a drop-oldest cap, which could evict
+        the very ACK in flight and cause a false failure/retry on a safety command.
+        """
+        dropped = 0
+        while True:
+            try:
+                self._acks.get_nowait()
+            except queue.Empty:
+                break
+            dropped += 1
+        if dropped:
+            _log.debug("drained stale command ACKs before new command", count=dropped)
+        return dropped
+
     # --- reader thread ---------------------------------------------------------
 
     def _run(self) -> None:  # pragma: no cover - thread loop exercised via _drain_once
@@ -116,13 +136,19 @@ class MavlinkCommandPump:
                 return True
             return False
         if mtype == "COMMAND_ACK":
-            self._acks.put(
-                Ack(
+            try:
+                ack = Ack(
                     command=int(msg.command),
                     result=int(msg.result),
                     source_system=int(msg.get_srcSystem()),
                 )
-            )
+            except (TypeError, ValueError, AttributeError):
+                # _dispatch runs OUTSIDE _drain_once's recv_match guard, so without this
+                # an exception here would propagate up _run and crash the reader thread
+                # (killing all ACK/heartbeat delivery). Log and drop the bad frame instead.
+                _log.warning("dropping malformed COMMAND_ACK", exc_info=True)
+                return False
+            self._acks.put(ack)
             return True
         return False
 
