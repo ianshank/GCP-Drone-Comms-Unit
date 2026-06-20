@@ -73,13 +73,22 @@ class MavlinkSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MAVLINK_", env_file=_ENV_FILE, extra="ignore")
 
     endpoint: str = "udpout:127.0.0.1:14550"
-    target_system: int = Field(default=1, ge=0, le=255)
-    target_component: int = Field(default=1, ge=0, le=255)
+    #: This unit's own MAVLink IDs (companion computer), sent as the message source.
+    source_system: int = Field(default=1, ge=0, le=255)
+    source_component: int = Field(default=1, ge=0, le=255)
     #: Opt-in per the charter carve-out: LANDING_TARGET is advisory and OFF by default.
     enable_landing_target: bool = False
+    #: Comma-separated detection class names that trigger a LANDING_TARGET; empty = any.
+    target_classes: str = ""
     #: Camera field of view used to convert a bbox centre into MAVLink angular offsets.
     fov_x_rad: float = Field(default=1.204, gt=0.0)  # ~69 deg horizontal
     fov_y_rad: float = Field(default=0.733, gt=0.0)  # ~42 deg vertical
+
+    @property
+    def target_class_set(self) -> frozenset[str] | None:
+        """Parsed :attr:`target_classes` (``None`` => publish the best of any class)."""
+        names = frozenset(c.strip() for c in self.target_classes.split(",") if c.strip())
+        return names or None
 
 
 class Settings(BaseSettings):

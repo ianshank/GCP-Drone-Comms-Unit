@@ -46,3 +46,20 @@ def test_invalid_port_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STREAM_PORT", "70000")
     with pytest.raises(ValidationError):
         get_settings()
+
+
+def test_target_class_set_empty_is_none() -> None:
+    assert Settings().mavlink.target_class_set is None
+
+
+def test_target_class_set_parses_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAVLINK_TARGET_CLASSES", "person, car ,,boat")
+    assert get_settings().mavlink.target_class_set == frozenset({"person", "car", "boat"})
+
+
+def test_mavlink_source_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAVLINK_SOURCE_SYSTEM", "42")
+    monkeypatch.setenv("MAVLINK_SOURCE_COMPONENT", "7")
+    s = get_settings()
+    assert s.mavlink.source_system == 42
+    assert s.mavlink.source_component == 7

@@ -83,8 +83,8 @@ class Pipeline:
         return processed
 
     def close(self) -> None:
-        """Release camera, stream, and bridge resources (best-effort, idempotent)."""
-        for closer in (self._camera, self._stream, self._bridge):
+        """Release camera, detector, stream, and bridge resources (best-effort, idempotent)."""
+        for closer in (self._camera, self._detector, self._stream, self._bridge):
             if closer is None:
                 continue
             try:
@@ -104,10 +104,19 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
     stream: StreamWriter | None = None
     if settings.stream.enabled:
         stream = _default_stream_writer(
-            settings.stream, width=settings.camera.width, height=settings.camera.height
+            settings.stream,
+            width=settings.camera.width,
+            height=settings.camera.height,
+            fps=float(settings.camera.fps),
         )
     bridge: LandingTargetBridge | None = None
     if settings.mavlink.enable_landing_target:
         bridge = LandingTargetBridge(settings.mavlink)
         bridge.start()
-    return Pipeline(camera=camera, detector=detector, stream=stream, bridge=bridge)
+    return Pipeline(
+        camera=camera,
+        detector=detector,
+        stream=stream,
+        bridge=bridge,
+        target_classes=settings.mavlink.target_class_set,
+    )

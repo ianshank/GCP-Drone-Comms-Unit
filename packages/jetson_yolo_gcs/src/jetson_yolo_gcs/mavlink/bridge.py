@@ -49,7 +49,11 @@ def _default_connection_factory(settings: MavlinkSettings) -> ConnectionFactory:
     def factory() -> Any:
         from pymavlink import mavutil
 
-        return mavutil.mavlink_connection(settings.endpoint)
+        return mavutil.mavlink_connection(
+            settings.endpoint,
+            source_system=settings.source_system,
+            source_component=settings.source_component,
+        )
 
     return factory
 

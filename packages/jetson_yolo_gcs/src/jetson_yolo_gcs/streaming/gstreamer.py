@@ -22,7 +22,8 @@ _ENCODER_PIPELINES: dict[StreamEncoder, str] = {
         "video/x-h264,profile=baseline ! h264parse"
     ),
     StreamEncoder.NVV4L2: (
-        "nvvidconv ! nvv4l2h264enc bitrate={bitrate_bps} insert-sps-pps=true ! h264parse"
+        "nvvidconv ! video/x-raw(memory:NVMM),format=NV12 ! "
+        "nvv4l2h264enc bitrate={bitrate_bps} insert-sps-pps=true ! h264parse"
     ),
 }
 
@@ -59,7 +60,7 @@ def build_stream_pipeline(settings: StreamSettings) -> str:
 
 
 def _default_stream_writer(
-    settings: StreamSettings, *, width: int, height: int
+    settings: StreamSettings, *, width: int, height: int, fps: float = 30.0
 ) -> StreamWriter:  # pragma: no cover - real cv2 GStreamer egress
     """Build an OpenCV ``VideoWriter`` over the GStreamer egress pipeline."""
     import cv2
@@ -69,7 +70,7 @@ def _default_stream_writer(
         pipeline,
         cv2.CAP_GSTREAMER,
         0,
-        float(settings.bitrate_kbps and 30),
+        fps,
         (width, height),
     )
 
