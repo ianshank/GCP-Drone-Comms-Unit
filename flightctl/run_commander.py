@@ -35,10 +35,9 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-
 from meshsa.command import (
-    CommanderSettings,
     CommandError,
+    CommanderSettings,
     CommandSender,
     CommandService,
     ConfirmationGate,

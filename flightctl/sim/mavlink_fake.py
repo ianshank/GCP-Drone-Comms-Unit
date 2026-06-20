@@ -25,9 +25,7 @@ def main() -> None:
     ap.add_argument("--endpoint", default="udpout:127.0.0.1:14550")
     ap.add_argument("--hz", type=float, default=2.0, help="messages per second")
     ap.add_argument("--lat", type=float, default=37.7749, help="circle centre latitude")
-    ap.add_argument(
-        "--lon", type=float, default=-122.4194, help="circle centre longitude"
-    )
+    ap.add_argument("--lon", type=float, default=-122.4194, help="circle centre longitude")
     ap.add_argument("--radius-m", type=float, default=200.0)
     ap.add_argument("--alt-m", type=float, default=100.0)
     ap.add_argument("--system-id", type=int, default=1)
