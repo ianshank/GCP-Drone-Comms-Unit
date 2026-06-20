@@ -69,6 +69,7 @@ def test_pipeline_defaults_run_forever() -> None:
     s = Settings()
     assert s.pipeline.idle_poll_s == 0.01
     assert s.pipeline.max_consecutive_empty is None  # tolerate transient empties
+    assert s.pipeline.liveness_timeout_s == 2.0
 
 
 def test_pipeline_env_override(monkeypatch: pytest.MonkeyPatch) -> None:

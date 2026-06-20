@@ -31,6 +31,7 @@ def test_health_report_resolves_plan() -> None:
     # Loop policy is surfaced for pre-flight validation.
     assert report["pipeline"]["idle_poll_s"] == 0.01
     assert report["pipeline"]["max_consecutive_empty"] is None
+    assert report["pipeline"]["liveness_timeout_s"] == 2.0
 
 
 def test_main_health_check_prints_json(capsys: pytest.CaptureFixture[str]) -> None:

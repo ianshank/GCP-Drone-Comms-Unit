@@ -13,7 +13,8 @@ from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge
 from jetson_yolo_gcs.pipeline import Pipeline
 from jetson_yolo_gcs.streaming.camera import Frame
-from tests.conftest import FakeCamera, FakeDetector, FakeStreamWriter
+from jetson_yolo_gcs.utils.fps import FpsCounter
+from tests.conftest import FakeCamera, FakeClock, FakeDetector, FakeStreamWriter
 
 
 class _RecordingMav:
@@ -220,6 +221,43 @@ def test_close_releases_resources() -> None:
     pipeline.close()
     assert camera.closed is True
     assert stream.closed is True
+
+
+def test_snapshot_counts_and_reports_live() -> None:
+    conn = _RecordingConn()
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn),
+        clock=FakeClock(times=[100.0, 101.0]),  # last-frame=100, snapshot now=101
+        fps=FpsCounter(clock=FakeClock()),  # isolated so the pipeline clock only times frames
+    )
+    assert pipeline.step() is True
+    snap = pipeline.snapshot(max_age_s=2.0)
+    assert snap["landing_target_published"] == 1
+    assert snap["last_frame_age_s"] == 1.0
+    assert snap["live"] is True
+
+
+def test_snapshot_not_live_when_stale() -> None:
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        clock=FakeClock(times=[100.0, 105.0]),  # 5s since last frame
+        fps=FpsCounter(clock=FakeClock()),
+    )
+    pipeline.step()
+    snap = pipeline.snapshot(max_age_s=2.0)
+    assert snap["last_frame_age_s"] == 5.0
+    assert snap["live"] is False
+
+
+def test_snapshot_before_any_frame_is_not_live() -> None:
+    pipeline = Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()))
+    snap = pipeline.snapshot()
+    assert snap["live"] is False
+    assert snap["last_frame_age_s"] is None
+    assert snap["landing_target_published"] == 0
 
 
 def test_close_swallows_raising_closer() -> None:

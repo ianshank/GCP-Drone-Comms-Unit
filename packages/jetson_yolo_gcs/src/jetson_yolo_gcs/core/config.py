@@ -101,6 +101,9 @@ class PipelineSettings(BaseSettings):
     #: Stop after this many *consecutive* empty reads; ``None``/unset = run until shutdown
     #: (tolerate transient camera timeouts indefinitely, the live default).
     max_consecutive_empty: int | None = Field(default=None, ge=1)
+    #: A frame must be read within this many seconds for the pipeline to report "live"
+    #: (liveness != fps, which only ticks on successful frames).
+    liveness_timeout_s: float = Field(default=2.0, gt=0.0)
 
 
 class Settings(BaseSettings):

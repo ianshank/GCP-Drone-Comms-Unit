@@ -73,7 +73,9 @@ runtime dependency on `meshsa`**, so it stays usable as a standalone library in 
 projects. Detection backends are selected from the model file extension (`.pt`/`.engine`/
 `.onnx` → Ultralytics, `.hef` → Hailo stub) and added through the registry with no pipeline
 edits. Lives at `packages/jetson_yolo_gcs`; on-device GPU/encoder validation is a follow-up
-(CI exercises only the pure, fakes-first paths).
+(CI exercises only the pure, fakes-first paths). The concrete, changeable backlog (Hailo `.hef`
+inference, PX4 `LOCAL_NED` dialect, TIMESYNC, precision-landing safety hardening, on-device
+runbook) lives in [NEXTSTEPS.md](NEXTSTEPS.md) under "Perception (initiative D)".
 
 ## Invariants that gate every milestone
 These never relax as the roadmap advances (full list in [CHARTER.md](CHARTER.md) §4):

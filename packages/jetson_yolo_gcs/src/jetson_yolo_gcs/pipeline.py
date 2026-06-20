@@ -66,10 +66,36 @@ class Pipeline:
         self.dropped_detections = 0
         #: Frames whose egress write failed (best-effort stream; never fatal).
         self.dropped_stream = 0
+        #: LANDING_TARGET messages successfully published.
+        self.landing_target_published = 0
+        #: Clock time of the most recent frame read (``None`` until the first frame).
+        #: Drives liveness — ``fps`` alone cannot detect a stall (it only ticks on
+        #: successful frames, so it reports the last good rate during an outage).
+        self._last_frame_t: float | None = None
 
     @property
     def fps(self) -> float:
         return self._fps.fps
+
+    def snapshot(self, *, max_age_s: float = 2.0) -> dict[str, object]:
+        """Return a runtime health/metrics snapshot (pure; safe to call any time).
+
+        ``live`` is ``True`` only if a frame was read within ``max_age_s`` — a true
+        liveness signal that, unlike :attr:`fps`, goes ``False`` when the camera stalls.
+        """
+        last_age: float | None = None
+        live = False
+        if self._last_frame_t is not None:
+            last_age = self._clock.now() - self._last_frame_t
+            live = last_age <= max_age_s
+        return {
+            "fps": round(self._fps.fps, 2),
+            "dropped_detections": self.dropped_detections,
+            "dropped_stream": self.dropped_stream,
+            "landing_target_published": self.landing_target_published,
+            "last_frame_age_s": None if last_age is None else round(last_age, 3),
+            "live": live,
+        }
 
     def request_stop(self) -> None:
         """Ask :meth:`run` to exit after the current iteration (signal-safe)."""
@@ -88,6 +114,7 @@ class Pipeline:
         if frame is None:
             return False
         self._fps.tick()
+        self._last_frame_t = self._clock.now()
 
         try:
             result = self._detector.detect(frame.data)
@@ -110,6 +137,7 @@ class Pipeline:
             if target is not None:
                 # Deliberately unguarded: a failed safety-path publish must surface.
                 self._bridge.publish(target, result)
+                self.landing_target_published += 1
         return True
 
     def _select_target(self, result: DetectionResult) -> Detection | None:

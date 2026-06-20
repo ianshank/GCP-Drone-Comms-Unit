@@ -84,6 +84,7 @@ def health_report(settings: Settings) -> dict[str, Any]:
         "pipeline": {
             "idle_poll_s": settings.pipeline.idle_poll_s,
             "max_consecutive_empty": settings.pipeline.max_consecutive_empty,
+            "liveness_timeout_s": settings.pipeline.liveness_timeout_s,
         },
     }
 
