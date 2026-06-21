@@ -12,6 +12,7 @@ from meshsa import (
     SystemClock,
     UuidFactory,
 )
+from meshsa.inference import _AI_INSIGHT_PREFIX, _is_ai_insight, _require_aiohttp
 
 
 @pytest.fixture
@@ -46,6 +47,9 @@ def mock_router():
             self.published.append(envelope)
 
     return MockRouter()
+
+
+# ── NemotronClient ──────────────────────────────────────────────────────
 
 
 async def test_nemotron_client_success(aio_mock, env):
@@ -98,6 +102,9 @@ async def test_nemotron_client_timeout(aio_mock, env):
         await client.analyze(env)
 
 
+# ── InferenceService ────────────────────────────────────────────────────
+
+
 async def test_inference_service_publishes_chat(aio_mock, mock_router, env):
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
     svc = InferenceService(
@@ -119,8 +126,11 @@ async def test_inference_service_publishes_chat(aio_mock, mock_router, env):
     # Simulate inbound message
     await mock_router.handlers[0](env)
 
-    # Yield to let the bg task run
-    await asyncio.sleep(0.01)
+    # Bounded retry — wait until the bg task publishes rather than fixed sleep
+    for _ in range(200):
+        if mock_router.published:
+            break
+        await asyncio.sleep(0)
     await svc.stop()
 
     assert len(mock_router.published) == 1
@@ -153,3 +163,130 @@ async def test_inference_service_ignores_own_messages(mock_router):
 
     await mock_router.handlers[0](env)
     assert len(svc._bg_tasks) == 0  # Task was not spawned
+
+
+# ── NEW: AI insight feedback loop prevention ────────────────────────────
+
+
+async def test_inference_service_ignores_ai_insights(mock_router):
+    """Messages prefixed with [AI Insight] must be silently dropped."""
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
+    svc = InferenceService(
+        config=cfg,
+        router=mock_router,
+        clock=SystemClock(),
+        id_factory=UuidFactory(),
+        source_uid="node-base",
+    )
+    svc.start()
+
+    insight_env = Envelope(
+        schema_version=1,
+        msg_id="ai-loop-msg",
+        ts=2.0,
+        source_uid="node-other",
+        kind=MessageKind.CHAT,
+        payload={"text": f"{_AI_INSIGHT_PREFIX} Summary of something"},
+    )
+
+    await mock_router.handlers[0](insight_env)
+    assert len(svc._bg_tasks) == 0
+
+
+def test_is_ai_insight_true():
+    env = Envelope(
+        schema_version=1,
+        msg_id="x",
+        ts=1.0,
+        source_uid="a",
+        kind=MessageKind.CHAT,
+        payload={"text": f"{_AI_INSIGHT_PREFIX} some text"},
+    )
+    assert _is_ai_insight(env) is True
+
+
+def test_is_ai_insight_false_pli():
+    env = Envelope(
+        schema_version=1,
+        msg_id="x",
+        ts=1.0,
+        source_uid="a",
+        kind=MessageKind.PLI,
+        payload={"position": {"lat": 0, "lon": 0}},
+    )
+    assert _is_ai_insight(env) is False
+
+
+def test_is_ai_insight_false_normal_chat():
+    env = Envelope(
+        schema_version=1,
+        msg_id="x",
+        ts=1.0,
+        source_uid="a",
+        kind=MessageKind.CHAT,
+        payload={"text": "regular message"},
+    )
+    assert _is_ai_insight(env) is False
+
+
+# ── NEW: _running lifecycle guard ───────────────────────────────────────
+
+
+async def test_inference_service_ignores_after_stop(mock_router, env):
+    """After stop() is called, handle_message must not spawn tasks."""
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
+    svc = InferenceService(
+        config=cfg,
+        router=mock_router,
+        clock=SystemClock(),
+        id_factory=UuidFactory(),
+        source_uid="node-base",
+    )
+    svc.start()
+    await svc.stop()
+
+    # Router still has the handler reference but service is stopped
+    await mock_router.handlers[0](env)
+    assert len(svc._bg_tasks) == 0
+
+
+# ── NEW: double-start guard ────────────────────────────────────────────
+
+
+async def test_inference_service_double_start_no_duplicate_subscribe(mock_router):
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
+    svc = InferenceService(
+        config=cfg,
+        router=mock_router,
+        clock=SystemClock(),
+        id_factory=UuidFactory(),
+        source_uid="node-base",
+    )
+    svc.start()
+    svc.start()  # second start must be idempotent
+    assert len(mock_router.handlers) == 1
+
+
+# ── NEW: missing API key logs warning and does not subscribe ────────────
+
+
+async def test_inference_service_missing_api_key_does_not_start(mock_router):
+    cfg = NemotronConfig(enabled=True, api_key="")
+    svc = InferenceService(
+        config=cfg,
+        router=mock_router,
+        clock=SystemClock(),
+        id_factory=UuidFactory(),
+        source_uid="node-base",
+    )
+    svc.start()
+    assert len(mock_router.handlers) == 0
+    assert svc._running is False
+
+
+# ── NEW: _require_aiohttp guard ─────────────────────────────────────────
+
+
+def test_require_aiohttp_passes_when_available():
+    """Should not raise when aiohttp is installed."""
+    _require_aiohttp()

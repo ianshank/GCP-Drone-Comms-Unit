@@ -2,14 +2,18 @@
 
 Provides AI-driven analysis of situational-awareness messages by bridging
 the mesh network to NVIDIA's OpenAI-compatible NIM API using aiohttp.
+
+``aiohttp`` is an *optional* dependency — install ``meshsa[inference]``
+to enable this module.  The package and ``build_node()`` import it
+unconditionally but guard all runtime paths behind availability checks.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+from typing import Any
 
-import aiohttp
 import structlog
 from pydantic import BaseModel
 
@@ -19,7 +23,31 @@ from .protocols import Clock, IdFactory
 from .router import Router
 from .version import SCHEMA_VERSION
 
+# ── Lazy optional import ────────────────────────────────────────────────
+try:
+    import aiohttp
+except ImportError:  # pragma: no cover — optional dependency
+    aiohttp = None  # type: ignore[assignment]
+
 _log = structlog.get_logger("meshsa.inference")
+
+# Prefix applied to all AI-generated messages.  Used by
+# ``_is_ai_insight`` to prevent multi-node feedback loops.
+_AI_INSIGHT_PREFIX = "[AI Insight]"
+
+
+def _is_ai_insight(envelope: Envelope) -> bool:
+    """Return True when the envelope is an AI-generated insight message."""
+    if envelope.kind != MessageKind.CHAT:
+        return False
+    text: str = envelope.payload.get("text", "") if isinstance(envelope.payload, dict) else ""
+    return text.startswith(_AI_INSIGHT_PREFIX)
+
+
+def _require_aiohttp() -> None:
+    """Raise with an actionable message when aiohttp is absent."""
+    if aiohttp is None:
+        raise RuntimeError("Nemotron inference requires aiohttp; install 'meshsa[inference]'")
 
 
 class InferenceResult(BaseModel):
@@ -39,12 +67,14 @@ class NemotronClient:
         if not self.config.enabled or not self.config.api_key:
             return InferenceResult(summary="", raw_response="")
 
+        _require_aiohttp()
+
         prompt = (
             f"Analyze this {envelope.kind.value} message from {envelope.source_uid}: "
             f"{json.dumps(envelope.payload)}"
         )
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.config.model,
             "messages": [
                 {
@@ -62,16 +92,16 @@ class NemotronClient:
             "Content-Type": "application/json",
         }
 
+        timeout = aiohttp.ClientTimeout(total=self.config.timeout_s)
         retries = self.config.max_retries
         for attempt in range(retries + 1):
             try:
                 async with (
-                    aiohttp.ClientSession() as session,
+                    aiohttp.ClientSession(timeout=timeout) as session,
                     session.post(
                         f"{self.config.base_url.rstrip('/')}/chat/completions",
                         headers=headers,
                         json=payload,
-                        timeout=self.config.timeout_s,
                     ) as resp,
                 ):
                     if resp.status == 429 and attempt < retries:
@@ -79,7 +109,7 @@ class NemotronClient:
                         continue
                     resp.raise_for_status()
                     data = await resp.json()
-                    content = data["choices"][0]["message"]["content"]
+                    content: str = data["choices"][0]["message"]["content"]
                     return InferenceResult(
                         summary=content,
                         raw_response=content,
@@ -115,16 +145,31 @@ class InferenceService:
         self.source_uid = source_uid
         self.client = NemotronClient(config)
         self._bg_tasks: set[asyncio.Task[None]] = set()
+        self._running = False
+        self._subscribed = False
 
     def start(self) -> None:
-        if not self.config.enabled:
+        if not self.config.enabled or self._subscribed:
             return
+        if not self.config.api_key:
+            _log.warning("inference_service_missing_api_key")
+            return
+        self._subscribed = True
+        self._running = True
         self.router.subscribe(self.handle_message)
         _log.info("inference_service_started", model=self.config.model)
 
     async def handle_message(self, envelope: Envelope) -> None:
-        # Prevent infinite loops by not responding to our own inference messages
+        # Bail if the service has been stopped.
+        if not self._running:
+            return
+
+        # Prevent infinite loops by not responding to our own inference messages.
         if envelope.source_uid == self.source_uid:
+            return
+
+        # Avoid analyzing existing AI insights to prevent multi-node feedback loops.
+        if _is_ai_insight(envelope):
             return
 
         task = asyncio.create_task(self._analyze_and_publish(envelope))
@@ -144,7 +189,7 @@ class InferenceService:
                 source_uid=self.source_uid,
                 kind=MessageKind.CHAT,
                 payload=ChatPayload(
-                    text=f"[AI Insight] {result.summary}",
+                    text=f"{_AI_INSIGHT_PREFIX} {result.summary}",
                     to=envelope.source_uid,
                 ).model_dump(),
             )
@@ -154,6 +199,7 @@ class InferenceService:
             _log.warning("inference_task_failed", error=str(exc))
 
     async def stop(self) -> None:
+        self._running = False
         for t in list(self._bg_tasks):
             t.cancel()
         if self._bg_tasks:
