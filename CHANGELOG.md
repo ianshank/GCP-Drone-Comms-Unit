@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Object-detection → CoT marker bridge (Phase A of the DeepStream/YOLO11 work).** A
+  detector process (DeepStream/YOLO11, separate process) sends one JSON detection frame per
+  tracked object over UDP to the new `detection_ingest` source transport; the new
+  `detection` codec maps it to a `MessageKind.MARKER` Envelope, and `CotCodec` gained a real
+  **MARKER encode path** (configurable `marker_type`, default `a-u-G` = unknown ground, with
+  the class label + confidence in `<contact>`/`<remarks>` and a `_meshsa_det` detail element)
+  so detections render as **markers, not friendly PLI tracks**. `meshsa.cv.geo` provides the
+  pure pixel→ground projection (geodetic with a GPS/attitude pose, sensor-relative bearing
+  otherwise) for the detector to call. New `meshsa.models.Detection`. Config exemplar:
+  `flightctl/configs/jetson_gateway.yolo.json` (detection_ingest + tak_tcp). Hardware-free
+  and fully tested; the DeepStream device pieces (install, YOLO11 FP16 engine, pyds probe)
+  are later phases.
+
 ### Security
 - **Commander service no longer receives the whole process environment.**
   `flightctl/run_commander.py` previously passed `dict(os.environ)` into
