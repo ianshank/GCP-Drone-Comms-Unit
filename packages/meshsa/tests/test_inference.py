@@ -11,7 +11,7 @@ from meshsa import (
     SystemClock,
     UuidFactory,
 )
-from meshsa.inference import _AI_INSIGHT_PREFIX, _is_ai_insight, _require_aiohttp
+from meshsa.inference import _DEFAULT_INSIGHT_PREFIX, _is_ai_insight, _require_aiohttp
 
 
 @pytest.fixture
@@ -179,7 +179,7 @@ async def test_inference_service_ignores_ai_insights(mock_router):
         ts=2.0,
         source_uid="node-other",
         kind=MessageKind.CHAT,
-        payload={"text": f"{_AI_INSIGHT_PREFIX} Summary of something"},
+        payload={"text": f"{_DEFAULT_INSIGHT_PREFIX} Summary of something"},
     )
 
     await mock_router.handlers[0](insight_env)
@@ -193,7 +193,7 @@ def test_is_ai_insight_true():
         ts=1.0,
         source_uid="a",
         kind=MessageKind.CHAT,
-        payload={"text": f"{_AI_INSIGHT_PREFIX} some text"},
+        payload={"text": f"{_DEFAULT_INSIGHT_PREFIX} some text"},
     )
     assert _is_ai_insight(env) is True
 
@@ -417,3 +417,64 @@ async def test_nemotron_client_empty_choices_index_error(aio_mock, env):
 
     with pytest.raises(IndexError):
         await client.analyze(env)
+
+
+# ── Injectable sleep and configurable backoff ─────────────────────────
+
+
+async def test_nemotron_client_uses_injectable_sleep_and_backoff_base(aio_mock, env):
+    """Custom sleep and backoff_base should be used during 429 retries."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=2, backoff_base=3.0)
+    client = NemotronClient(cfg, sleep=fake_sleep)
+
+    # Fail twice with 429, then succeed
+    aio_mock.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        status=429,
+    )
+    aio_mock.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        status=429,
+    )
+    aio_mock.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        payload={"choices": [{"message": {"content": "Finally"}}]},
+    )
+
+    result = await client.analyze(env)
+    assert result.summary == "Finally"
+    # backoff_base=3.0: sleep(3**0)=1.0, sleep(3**1)=3.0
+    assert sleeps == [1.0, 3.0]
+
+
+async def test_nemotron_client_injectable_sleep_on_transient_error(aio_mock, env):
+    """Injectable sleep should be used during transient error retries too."""
+    import aiohttp as _aiohttp
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=1, backoff_base=2.0)
+    client = NemotronClient(cfg, sleep=fake_sleep)
+
+    # First attempt: transient error, second: success
+    aio_mock.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        exception=_aiohttp.ClientError("transient"),
+    )
+    aio_mock.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        payload={"choices": [{"message": {"content": "OK"}}]},
+    )
+
+    result = await client.analyze(env)
+    assert result.summary == "OK"
+    # backoff_base=2.0: sleep(2**0)=1.0
+    assert sleeps == [1.0]

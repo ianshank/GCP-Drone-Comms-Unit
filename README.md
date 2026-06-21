@@ -30,9 +30,10 @@ real time.
   operator questions over live telemetry and TAK tracks (it issues no vehicle commands).
 - **AI-powered mesh inference (`meshsa.inference`):** an optional **NVIDIA Nemotron NIM**
   bridge subscribes to mesh traffic, runs tactical AI analysis, and broadcasts
-  `[AI Insight]` summaries. Install with `pip install meshsa[inference]`; configure via
-  `MESHSA_INFERENCE_*` environment variables. Feedback-loop safe (insight messages are
-  never re-analyzed).
+  AI insight summaries (configurable prefix via `MESHSA_INFERENCE_INSIGHT_PREFIX`).
+  Install with `pip install meshsa[inference]`; configure via `MESHSA_INFERENCE_*`
+  environment variables (12 fields incl. backoff tuning). Thread-safe, feedback-loop
+  safe (insight messages are never re-analyzed), with configurable retry backoff.
 - **Modular & backward-compatible by construction:** new transports/codecs register via an
   open/closed registry; every wire envelope is `schema_version`-gated; a node tolerates
   configs written for newer/older builds.
@@ -56,7 +57,7 @@ real time.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e "packages/meshsa[dev]"
-cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (currently ~99%)
+cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (currently 747 tests, ~99.7%)
 ```
 
 Drone/FC telemetry → CoT (no hardware needed — uses the bundled simulator):

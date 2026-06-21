@@ -97,13 +97,16 @@ class Router:
                 continue
             except Exception:  # malformed / undecodable wire data
                 self.metrics.dropped_undecodable += 1
-                _log.warning("dropped undecodable frame", transport=source.name)
+                _log.warning("dropped undecodable frame", transport=source.name, exc_info=True)
                 continue
             self.metrics.rx += 1
             if not self._mark_seen(envelope.msg_id):
                 continue
             for handler in list(self._subscribers):
-                await _maybe_await(handler(envelope))
+                try:
+                    await _maybe_await(handler(envelope))
+                except Exception:  # a failing subscriber must not crash the pump
+                    _log.warning("subscriber raised", exc_info=True)
             for transport in self.transports:
                 if transport is not source:
                     await transport.send(self._codec_for(transport).encode(envelope))
