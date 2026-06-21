@@ -37,15 +37,13 @@ class NemotronClient:
 
     async def analyze(self, envelope: Envelope) -> InferenceResult:
         if not self.config.enabled or not self.config.api_key:
-            return InferenceResult(
-                summary="", raw_response=""
-            )
+            return InferenceResult(summary="", raw_response="")
 
         prompt = (
             f"Analyze this {envelope.kind.value} message from {envelope.source_uid}: "
             f"{json.dumps(envelope.payload)}"
         )
-        
+
         payload = {
             "model": self.config.model,
             "messages": [
@@ -67,14 +65,17 @@ class NemotronClient:
         retries = self.config.max_retries
         for attempt in range(retries + 1):
             try:
-                async with aiohttp.ClientSession() as session, session.post(
-                    f"{self.config.base_url.rstrip('/')}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=self.config.timeout_s,
-                ) as resp:
+                async with (
+                    aiohttp.ClientSession() as session,
+                    session.post(
+                        f"{self.config.base_url.rstrip('/')}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                        timeout=self.config.timeout_s,
+                    ) as resp,
+                ):
                     if resp.status == 429 and attempt < retries:
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(2**attempt)
                         continue
                     resp.raise_for_status()
                     data = await resp.json()
@@ -91,8 +92,8 @@ class NemotronClient:
                 if attempt == retries:
                     _log.error("inference_error", error=str(exc))
                     raise
-            await asyncio.sleep(2 ** attempt)
-            
+            await asyncio.sleep(2**attempt)
+
         raise RuntimeError("Inference failed after max retries")
 
 

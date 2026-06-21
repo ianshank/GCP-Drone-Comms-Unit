@@ -50,6 +50,8 @@ def test_require_file_distinguishes_unreadable_from_missing(tmp_path):
 
     if hasattr(_os, "geteuid") and _os.geteuid() == 0:
         pytest.skip("root bypasses file permission checks")
+    if _os.name == "nt":
+        pytest.skip("Windows os.access(R_OK) does not respect chmod 000")
     f = tmp_path / "ca.pem"
     f.write_text("x", encoding="utf-8")
     _os.chmod(f, 0o000)

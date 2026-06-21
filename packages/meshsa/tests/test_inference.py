@@ -51,12 +51,10 @@ def mock_router():
 async def test_nemotron_client_success(aio_mock, env):
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
     client = NemotronClient(cfg)
-    
+
     aio_mock.post(
         "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={
-            "choices": [{"message": {"content": "Test summary"}}]
-        },
+        payload={"choices": [{"message": {"content": "Test summary"}}]},
     )
 
     result = await client.analyze(env)
@@ -93,8 +91,7 @@ async def test_nemotron_client_timeout(aio_mock, env):
     client = NemotronClient(cfg)
 
     aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        exception=asyncio.TimeoutError()
+        "https://integrate.api.nvidia.com/v1/chat/completions", exception=asyncio.TimeoutError()
     )
 
     with pytest.raises(asyncio.TimeoutError):
@@ -110,7 +107,7 @@ async def test_inference_service_publishes_chat(aio_mock, mock_router, env):
         id_factory=UuidFactory(),
         source_uid="node-base",
     )
-    
+
     aio_mock.post(
         "https://integrate.api.nvidia.com/v1/chat/completions",
         payload={"choices": [{"message": {"content": "Insightful observation"}}]},
@@ -118,10 +115,10 @@ async def test_inference_service_publishes_chat(aio_mock, mock_router, env):
 
     svc.start()
     assert len(mock_router.handlers) == 1
-    
+
     # Simulate inbound message
     await mock_router.handlers[0](env)
-    
+
     # Yield to let the bg task run
     await asyncio.sleep(0.01)
     await svc.stop()
@@ -144,7 +141,7 @@ async def test_inference_service_ignores_own_messages(mock_router):
         source_uid="node-base",
     )
     svc.start()
-    
+
     env = Envelope(
         schema_version=1,
         msg_id="self-msg",
@@ -153,6 +150,6 @@ async def test_inference_service_ignores_own_messages(mock_router):
         kind=MessageKind.CHAT,
         payload={"text": "hello"},
     )
-    
+
     await mock_router.handlers[0](env)
     assert len(svc._bg_tasks) == 0  # Task was not spawned

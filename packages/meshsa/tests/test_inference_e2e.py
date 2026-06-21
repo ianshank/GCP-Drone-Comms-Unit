@@ -49,7 +49,7 @@ async def test_inference_e2e_bridge(aio_mock):
             MessageKind.PLI, {"position": {"lat": 1.0, "lon": 1.0}, "node": {"uid": "user1"}}
         )
         env_to_send.source_uid = "user1"
-        
+
         await peer.send(JsonCodec().encode(env_to_send))
 
         # We can just iterate the peer's stream with a timeout
@@ -58,7 +58,7 @@ async def test_inference_e2e_bridge(aio_mock):
                 env = JsonCodec().decode(data)
                 if env.kind == MessageKind.CHAT and env.source_uid == "base":
                     return env
-                    
+
         env = await asyncio.wait_for(wait_for_chat(), timeout=1.0)
         assert "Nemotron says hello" in env.payload["text"]
         assert env.payload["to"] == "user1"

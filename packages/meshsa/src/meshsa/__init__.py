@@ -2,7 +2,14 @@
 
 from .codec import JsonCodec
 from .compact import CompactCodec
-from .config import HealthConfig, MeshConfig, NemotronConfig, NodeConfig, RouterConfig, TransportConfig
+from .config import (
+    HealthConfig,
+    MeshConfig,
+    NemotronConfig,
+    NodeConfig,
+    RouterConfig,
+    TransportConfig,
+)
 from .cot import CotCodec
 from .errors import (
     DuplicateRegistrationError,

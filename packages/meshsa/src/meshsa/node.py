@@ -115,7 +115,7 @@ def build_node(
         transports, codec, clock=clock, id_factory=id_factory, config=config.router, codecs=codecs
     )
     info = NodeInfo(uid=config.uid, callsign=config.callsign, tier=config.tier)
-    
+
     inference_service = None
     if config.inference.enabled:
         inference_service = InferenceService(
@@ -125,12 +125,12 @@ def build_node(
             id_factory=id_factory,
             source_uid=info.uid,
         )
-        
+
     return Node(
-        config=config, 
-        router=router, 
-        info=info, 
-        clock=clock, 
+        config=config,
+        router=router,
+        info=info,
+        clock=clock,
         id_factory=id_factory,
-        inference_service=inference_service
+        inference_service=inference_service,
     )

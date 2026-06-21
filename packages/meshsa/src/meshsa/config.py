@@ -46,6 +46,7 @@ class NemotronConfig(BaseModel):
     timeout_s: float = 30.0
     max_retries: int = 3
 
+
 class HealthConfig(BaseModel):
     """Opt-in /healthz listener (served by ``meshsa.health``)."""
 
