@@ -150,15 +150,18 @@ class CotCodec:
         detail = ET.SubElement(ev, "detail")
         ET.SubElement(detail, "contact", callsign=callsign)
         # Vendor element preserves the structured detection for round-trip/decode.
-        det_attrs = {"label": label}
+        # Only emitted when actual detection data exists (confidence is required).
         conf = det.get("confidence")
         if conf is not None:
-            det_attrs["confidence"] = str(conf)
-        if det.get("track_id") is not None:
-            det_attrs["track_id"] = str(det["track_id"])
-        if det.get("bearing_deg") is not None:
-            det_attrs["bearing_deg"] = str(det["bearing_deg"])
-        ET.SubElement(detail, self.detection_element, det_attrs)
+            det_attrs: dict[str, str] = {
+                "label": label,
+                "confidence": str(conf),
+            }
+            if det.get("track_id") is not None:
+                det_attrs["track_id"] = str(det["track_id"])
+            if det.get("bearing_deg") is not None:
+                det_attrs["bearing_deg"] = str(det["bearing_deg"])
+            ET.SubElement(detail, self.detection_element, det_attrs)
         remarks = label if conf is None else f"{label} {float(conf) * 100:.0f}%"
         if det.get("bearing_deg") is not None:
             remarks += f" bearing {float(det['bearing_deg']):.0f}°"
@@ -314,6 +317,10 @@ class CotCodec:
         values (consistent with the richer-detail decode)."""
         el = detail.find(self.detection_element)
         if el is None:
+            return None
+        # confidence is required by the Detection model — an element without it
+        # is a legacy/empty marker, not an actual detection.
+        if "confidence" not in el.attrib:
             return None
         raw: dict[str, Any] = {"label": el.attrib.get("label", "detection")}
         try:
