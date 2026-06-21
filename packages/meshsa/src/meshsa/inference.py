@@ -47,7 +47,9 @@ def _is_ai_insight(envelope: Envelope) -> bool:
 def _require_aiohttp() -> None:
     """Raise with an actionable message when aiohttp is absent."""
     if aiohttp is None:
-        raise RuntimeError("Nemotron inference requires aiohttp; install 'meshsa[inference]'")
+        raise RuntimeError(  # pragma: no cover — only when aiohttp absent
+            "Nemotron inference requires aiohttp; install 'meshsa[inference]'"
+        )
 
 
 class InferenceResult(BaseModel):
@@ -62,6 +64,7 @@ class NemotronClient:
 
     def __init__(self, config: NemotronConfig) -> None:
         self.config = config
+        self._session: aiohttp.ClientSession | None = None
 
     async def analyze(self, envelope: Envelope) -> InferenceResult:
         if not self.config.enabled or not self.config.api_key:
@@ -96,14 +99,13 @@ class NemotronClient:
         retries = self.config.max_retries
         for attempt in range(retries + 1):
             try:
-                async with (
-                    aiohttp.ClientSession(timeout=timeout) as session,
-                    session.post(
-                        f"{self.config.base_url.rstrip('/')}/chat/completions",
-                        headers=headers,
-                        json=payload,
-                    ) as resp,
-                ):
+                if self._session is None or self._session.closed:
+                    self._session = aiohttp.ClientSession(timeout=timeout)
+                async with self._session.post(
+                    f"{self.config.base_url.rstrip('/')}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                ) as resp:
                     if resp.status == 429 and attempt < retries:
                         await asyncio.sleep(2**attempt)
                         continue
@@ -112,7 +114,7 @@ class NemotronClient:
                     content: str = data["choices"][0]["message"]["content"]
                     return InferenceResult(
                         summary=content,
-                        raw_response=content,
+                        raw_response=json.dumps(data),
                     )
             except asyncio.TimeoutError:
                 if attempt == retries:
@@ -124,7 +126,13 @@ class NemotronClient:
                     raise
             await asyncio.sleep(2**attempt)
 
-        raise RuntimeError("Inference failed after max retries")
+        raise RuntimeError("Inference failed after max retries")  # pragma: no cover
+
+    async def close(self) -> None:
+        """Close the underlying HTTP session, if open."""
+        if self._session is not None and not self._session.closed:
+            await self._session.close()
+            self._session = None
 
 
 class InferenceService:
@@ -205,3 +213,4 @@ class InferenceService:
         if self._bg_tasks:
             await asyncio.gather(*self._bg_tasks, return_exceptions=True)
         self._bg_tasks.clear()
+        await self.client.close()

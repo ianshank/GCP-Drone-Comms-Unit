@@ -122,3 +122,40 @@ def test_build_node_accepts_injected_codec_instance():
     )
     node = build_node(cfg, codec_instances={"tak": CotCodec(stale_s=42.0)})
     assert node.router.codecs["tak"].stale_s == 42.0  # injected instance wins
+
+
+# ── Inference wiring tests ──────────────────────────────────────────────
+
+
+def test_build_node_inference_disabled_by_default():
+    cfg = NodeConfig(uid="u", callsign="U", transports=[{"name": "mesh", "type": "loopback"}])
+    node = build_node(cfg)
+    assert node.inference_service is None
+
+
+def test_build_node_inference_enabled_creates_service():
+    cfg = NodeConfig(
+        uid="u",
+        callsign="U",
+        transports=[{"name": "mesh", "type": "loopback"}],
+        inference={"enabled": True, "api_key": "nvapi-test"},
+    )
+    node = build_node(cfg)
+    assert node.inference_service is not None
+    assert node.inference_service.source_uid == "u"
+    assert node.inference_service.config.api_key == "nvapi-test"
+
+
+async def test_node_start_stop_with_inference(clock, ids):
+    cfg = NodeConfig(
+        uid="u",
+        callsign="U",
+        transports=[{"name": "mesh", "type": "loopback"}],
+        inference={"enabled": True, "api_key": "nvapi-test"},
+    )
+    node = build_node(cfg, clock=clock, id_factory=ids)
+    assert node.inference_service is not None
+    await node.start()
+    assert node.inference_service._running is True
+    await node.stop()
+    assert node.inference_service._running is False

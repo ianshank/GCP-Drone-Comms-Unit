@@ -118,4 +118,27 @@ class NodeConfig(BaseModel):
             mesh["freq_khz"] = parse_int(key, env[key])
         if mesh:
             data["mesh"] = mesh
+
+        # --- inference (NemotronConfig) env-var bindings ---
+        def _parse_bool(_name: str, v: str) -> bool:
+            return v.strip().lower() in ("true", "1", "yes")
+
+        inference: dict[str, Any] = dict(data.get("inference", {}))
+        inference_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+            f"{prefix}INFERENCE_ENABLED": ("enabled", _parse_bool),
+            f"{prefix}INFERENCE_API_KEY": ("api_key", _str),
+            f"{prefix}INFERENCE_BASE_URL": ("base_url", _str),
+            f"{prefix}INFERENCE_MODEL": ("model", _str),
+            f"{prefix}INFERENCE_SYSTEM_PROMPT": ("system_prompt", _str),
+            f"{prefix}INFERENCE_TEMPERATURE": ("temperature", parse_float),
+            f"{prefix}INFERENCE_MAX_TOKENS": ("max_tokens", parse_int),
+            f"{prefix}INFERENCE_TIMEOUT_S": ("timeout_s", parse_float),
+            f"{prefix}INFERENCE_MAX_RETRIES": ("max_retries", parse_int),
+        }
+        for env_key, (field, caster) in inference_scalars.items():
+            if env_key in env:
+                inference[field] = caster(env_key, env[env_key])
+        if inference:
+            data["inference"] = inference
+
         return cls.model_validate(data)

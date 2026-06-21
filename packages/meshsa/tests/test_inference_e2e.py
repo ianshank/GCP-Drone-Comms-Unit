@@ -1,8 +1,5 @@
 import asyncio
 
-import pytest
-from aioresponses import aioresponses
-
 from meshsa import (
     JsonCodec,
     LoopbackBus,
@@ -11,12 +8,6 @@ from meshsa import (
     NodeConfig,
     build_node,
 )
-
-
-@pytest.fixture
-def aio_mock():
-    with aioresponses() as m:
-        yield m
 
 
 async def test_inference_e2e_bridge(aio_mock):

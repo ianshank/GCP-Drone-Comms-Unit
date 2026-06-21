@@ -1,6 +1,7 @@
 import itertools
 
 import pytest
+from aioresponses import aioresponses
 
 
 class FakeClock:
@@ -28,3 +29,9 @@ def clock() -> FakeClock:
 @pytest.fixture
 def ids() -> SeqIdFactory:
     return SeqIdFactory()
+
+
+@pytest.fixture
+def aio_mock():
+    with aioresponses() as m:
+        yield m
