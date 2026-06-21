@@ -7,41 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Hardening (gap analysis — 2026-06-21)
-- **Config env-var completeness:** `HealthConfig` and `RouterConfig` now have individual
-  `MESHSA_HEALTH_*` / `MESHSA_ROUTER_*` env-var bindings in `NodeConfig.from_env()`, matching
-  the established per-field override pattern. Previously these sections required the JSON blob.
-- **Configurable inference backoff:** `NemotronConfig.backoff_base` (default `2.0`) replaces
-  the hardcoded `2**attempt` retry pattern; `MESHSA_INFERENCE_BACKOFF_BASE` env-var binding
-  added. `NemotronClient` now accepts an injectable `sleep` callable for testability.
-- **Configurable AI insight prefix:** `NemotronConfig.insight_prefix` (default `[AI Insight]`)
-  replaces the module-level constant; `MESHSA_INFERENCE_INSIGHT_PREFIX` env-var binding added.
-  Operators can now customise the prefix without a code change.
-- **Thread-safe session management:** `NemotronClient._session` is now guarded by an
-  `asyncio.Lock`, preventing races between concurrent `analyze()` tasks and `close()`.
-- **Router subscriber resilience:** `Router._pump` wraps each subscriber call in `try/except`,
-  so a failing subscriber no longer crashes the pump or prevents other subscribers from
-  receiving messages. Exception details are logged with `exc_info=True`.
-- **Unified error hierarchy:** `CommandError` now inherits `MeshSAError` (was bare
-  `Exception`), so `except MeshSAError` catches command-path refusals too.
-- **Improved error logging:** added `exc_info=True` to exception-catch warnings in
-  `router.py` and `inference.py` for debuggable tracebacks.
-- **Module-level `_parse_bool`:** extracted from a nested closure in `from_env()` for reuse.
-
-### Tests (gap analysis — 2026-06-21)
-- **`test_models.py` (80 tests):** comprehensive Pydantic model validator boundary coverage
-  — Position lat/lon/course/speed/altitude, Telemetry battery_v/battery_pct/current_a,
-  Attitude, Envelope schema_version defaults, NodeTier enum.
-- **`test_backoff.py` (16 tests):** direct Backoff class unit tests — initial delay, factor
-  growth, max cap, reset, injectable sleep, full lifecycle sequence.
-- **Config env-var tests (10 tests):** HealthConfig, RouterConfig, backoff_base, insight_prefix
-  env-var binding coverage plus `_parse_bool` value/edge tests and error paths.
-- **Injectable sleep tests (2 tests):** verify configurable `backoff_base` and injectable
-  `sleep` in NemotronClient retry logic.
-- **Router subscriber exception test (1 test):** verify pump survives a failing subscriber.
-- **Config validation tests (3 tests):** missing uid/callsign raises ValidationError,
-  nonexistent file raises FileNotFoundError.
-- **Test count:** 639 → **747 tests** (+108); coverage 99.72% → **99.74%**.
+### Added
+- **Object-detection → CoT marker bridge (Phase A of the DeepStream/YOLO11 work).** A
+  detector process (DeepStream/YOLO11, separate process) sends one JSON detection frame per
+  tracked object over UDP to the new `detection_ingest` source transport; the new
+  `detection` codec maps it to a `MessageKind.MARKER` Envelope, and `CotCodec` gained a real
+  **MARKER encode path** (configurable `marker_type`, default `a-u-G` = unknown ground, with
+  the class label + confidence in `<contact>`/`<remarks>` and a `_meshsa_det` detail element)
+  so detections render as **markers, not friendly PLI tracks**. `meshsa.cv.geo` provides the
+  pure pixel→ground projection (geodetic with a GPS/attitude pose, sensor-relative bearing
+  otherwise) for the detector to call. New `meshsa.models.Detection`. Config exemplar:
+  `flightctl/configs/jetson_gateway.yolo.json` (detection_ingest + tak_tcp). Hardware-free
+  and fully tested; the DeepStream device pieces (install, YOLO11 FP16 engine, pyds probe)
+  are later phases.
 
 ### Security
 - **Commander service no longer receives the whole process environment.**

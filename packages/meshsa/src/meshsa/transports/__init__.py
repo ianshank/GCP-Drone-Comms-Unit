@@ -2,6 +2,7 @@
 
 from .base import AbstractTransport
 from .crsf_source import CrsfSourceTransport
+from .detection_ingest import DetectionIngestTransport
 from .loopback import LoopbackBus, LoopbackTransport, NullTransport
 from .mavlink_source import MavlinkSourceTransport
 from .meshtastic_radio import MeshtasticTransport
@@ -14,6 +15,7 @@ __all__ = [
     "LoopbackTransport",
     "NullTransport",
     "CrsfSourceTransport",
+    "DetectionIngestTransport",
     "MavlinkSourceTransport",
     "MspSourceTransport",
     "MeshtasticTransport",

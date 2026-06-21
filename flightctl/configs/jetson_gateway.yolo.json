@@ -1,0 +1,21 @@
+{
+  "uid": "jetson-yolo-gw",
+  "callsign": "YOLOGW",
+  "tier": "base",
+  "default_stale_s": 30.0,
+  "transports": [
+    {
+      "name": "detections",
+      "type": "detection_ingest",
+      "codec": "detection",
+      "options": { "host": "127.0.0.1", "port": 8099 }
+    },
+    {
+      "name": "tak",
+      "type": "tak_tcp",
+      "codec": "cot",
+      "options": { "host": "127.0.0.1", "port": 8087 },
+      "codec_options": { "marker_type": "a-u-G", "stale_s": 30 }
+    }
+  ]
+}
