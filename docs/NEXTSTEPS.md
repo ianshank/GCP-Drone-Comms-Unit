@@ -13,6 +13,24 @@
 - Manually verified on-device: fake MAVLink → gateway → live FreeTAKServer `:8087` → ATAK
   viewer received the air track.
 
+## AI Inference (initiative E — `meshsa.inference`)
+> Optional NVIDIA Nemotron NIM AI bridge: subscribes to mesh traffic → tactical analysis →
+> `[AI Insight]` summaries back on the mesh. Install with `meshsa[inference]`. Config via
+> `MESHSA_INFERENCE_*` env vars (9 fields). Shipped in PR #21 (hardened: lazy aiohttp,
+> session reuse, feedback-loop prevention, lifecycle guards, 639 tests at 99.72% cov).
+
+- [x] **MVP**: `NemotronClient` + `InferenceService` + `NemotronConfig` + `InferenceResult`
+- [x] **Env-var bindings**: 9 `MESHSA_INFERENCE_*` vars in `NodeConfig.from_env()`
+- [x] **Hardening**: lazy aiohttp import, `_require_aiohttp()` guard, session reuse,
+      feedback-loop filter (`[AI Insight]` prefix), lifecycle flags, API key warning
+- [x] **CI**: `meshsa[dev,inference]` install, `aioresponses` mock, 24 inference tests
+- [ ] **Local rate limiting**: add `min_interval_s`/`max_concurrent_requests` to prevent
+      API spend spikes when many mesh messages arrive rapidly
+- [ ] **Structured response parsing**: parse NVIDIA API structured output instead of raw
+      text `content` field — support JSON mode when available
+- [ ] **Multi-model support**: allow switching between Nemotron models at runtime via env var
+- [ ] **Offline fallback**: queue messages when API is unreachable, replay when restored
+
 ## Perception (initiative D — **CHARTER carve-out ratified 2026-06-20**)
 > On-board `jetson_yolo_gcs`: camera → YOLO/Hailo detection → GStreamer video to a GCS →
 > opt-in MAVLink `LANDING_TARGET`. Self-contained (no meshsa runtime dep). MVP shipped in

@@ -27,6 +27,7 @@ ratified extension (see [CHARTER.md](CHARTER.md) §3).
 | **M5** | Packaging & appliance | planned |
 | **C** | Supervised commanding (cross-cutting initiative) | ratified, gated on M2 |
 | **D** | On-board perception (`jetson_yolo_gcs`) | ratified, in progress |
+| **E** | AI inference (`meshsa.inference`) | ratified, MVP shipped |
 
 ### M1 — Telemetry → CoT MVP (done)
 `mavlink_source` + `msp_source` + `crsf_source` + `telemetry`/`cot` codecs → CoT **air** tracks;
@@ -76,6 +77,18 @@ edits. Lives at `packages/jetson_yolo_gcs`; on-device GPU/encoder validation is 
 (CI exercises only the pure, fakes-first paths). The concrete, changeable backlog (Hailo `.hef`
 inference, PX4 `LOCAL_NED` dialect, TIMESYNC, precision-landing safety hardening, on-device
 runbook) lives in [NEXTSTEPS.md](NEXTSTEPS.md) under "Perception (initiative D)".
+
+### Initiative E — AI inference: `meshsa.inference` (ratified 2026-06-21)
+An optional, async **NVIDIA Nemotron NIM** bridge that subscribes to mesh Router traffic,
+sends messages to the NIM API for tactical AI analysis, and broadcasts `[AI Insight]`
+summaries back onto the mesh. Key design decisions: lazy `aiohttp` import (so base install
+is unaffected — install with `meshsa[inference]`); `aiohttp.ClientSession` reuse (not
+per-call); feedback-loop prevention (`[AI Insight]`-prefixed messages are never re-analyzed);
+lifecycle guards (`_running`/`_subscribed`); and all 9 configuration fields are settable via
+`MESHSA_INFERENCE_*` environment variables with the same precedence pattern as existing
+mesh/scalar config. The concrete, changeable backlog (rate limiting, structured response
+parsing, multi-model support, offline fallback) lives in [NEXTSTEPS.md](NEXTSTEPS.md) under
+"AI Inference (initiative E)".
 
 ## Invariants that gate every milestone
 These never relax as the roadmap advances (full list in [CHARTER.md](CHARTER.md) §4):

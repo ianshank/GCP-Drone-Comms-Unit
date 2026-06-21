@@ -28,6 +28,11 @@ real time.
 - **Observability & a read-only SA assistant:** opt-in `/healthz` + `/metrics`
   (Prometheus/JSON) on the gateway; an optional, **read-only** `meshsa.llm` assistant answers
   operator questions over live telemetry and TAK tracks (it issues no vehicle commands).
+- **AI-powered mesh inference (`meshsa.inference`):** an optional **NVIDIA Nemotron NIM**
+  bridge subscribes to mesh traffic, runs tactical AI analysis, and broadcasts
+  `[AI Insight]` summaries. Install with `pip install meshsa[inference]`; configure via
+  `MESHSA_INFERENCE_*` environment variables. Feedback-loop safe (insight messages are
+  never re-analyzed).
 - **Modular & backward-compatible by construction:** new transports/codecs register via an
   open/closed registry; every wire envelope is `schema_version`-gated; a node tolerates
   configs written for newer/older builds.

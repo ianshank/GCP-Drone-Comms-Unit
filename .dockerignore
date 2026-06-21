@@ -56,3 +56,10 @@ flight-logs/
 *.mp4
 *.h264
 *.mkv
+
+# Inference cache
+.inference_cache/
+
+# Agent workspace
+.agents/
+.gemini/

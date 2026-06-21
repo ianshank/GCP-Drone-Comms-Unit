@@ -77,6 +77,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `vendor_element`) and the whole additive block can be disabled with
   `emit_detail=False`. The `telemetry` codec carries the same optional fields.
 
+### Added (inference)
+- **NVIDIA Nemotron inference service (`meshsa.inference`).** An optional, async
+  inference bridge that subscribes to mesh traffic, sends messages to the NVIDIA
+  Nemotron NIM API for AI analysis, and broadcasts `[AI Insight]` summaries back to
+  the mesh. Lazy-imports `aiohttp` so the base install is unaffected; install with
+  `pip install meshsa[inference]`. Key features: retry with exponential backoff,
+  `aiohttp.ClientSession` reuse, feedback-loop prevention (messages prefixed with
+  `[AI Insight]` are never re-analyzed), lifecycle guards (`_running`/`_subscribed`),
+  and configurable via 9 `MESHSA_INFERENCE_*` environment variables.
+- **Inference env-var bindings in `NodeConfig.from_env()`.** All `NemotronConfig`
+  fields (ENABLED, API_KEY, BASE_URL, MODEL, SYSTEM_PROMPT, TEMPERATURE,
+  MAX_TOKENS, TIMEOUT_S, MAX_RETRIES) are now settable via `MESHSA_INFERENCE_*`
+  environment variables, matching the same precedence pattern as mesh config.
+- **`inference` optional extra** in `pyproject.toml` (`aiohttp>=3.8`).
+- **`aioresponses>=0.7`** added to the `dev` extras for inference test mocking.
+
 ### Fixed
 - **`TakMulticastTransport` recovers from receive errors instead of dying.** A transient
   `recv()` error permanently stopped multicast CoT ingestion (the recv loop had no

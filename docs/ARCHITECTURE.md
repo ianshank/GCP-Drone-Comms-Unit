@@ -38,6 +38,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.transports.loopback`    | `LoopbackBus`, `LoopbackTransport`, `NullTransport`                  |
 | `meshsa.transports.meshtastic_radio` | Real Meshtastic (USB / TCP / BLE), reconnect supervisor + mesh provisioning |
 | `meshsa.transports.tak`         | `TakTcpTransport`, `TakMulticastTransport` for FreeTAKServer / ATAK  |
+| `meshsa.inference`              | `NemotronClient` + `InferenceService`: opt-in NVIDIA NIM AI bridge (`[inference]` extra) |
 | `meshsa.examples.base_node`     | Thin re-export of `meshsa.cli` (demonstrative only)                 |
 
 ## Patterns
@@ -56,6 +57,16 @@ no core edits."
 The router's `_codec_for(transport)` map lets a single bridge run JSON over LoRa,
 CoT over TAK TCP, and compact binary over Meshtastic simultaneously. Bridging
 re-encodes when forwarding between transports of different codecs.
+
+### Optional adjunct services
+The node optionally attaches services that are out of the hot path:
+- **`meshsa.health`**: `/healthz` + `/metrics` aiohttp listener (install with `[health]`).
+- **`meshsa.llm`**: read-only situational-awareness assistant over telemetry + TAK tracks.
+- **`meshsa.inference`**: NVIDIA Nemotron NIM AI bridge — subscribes to Router messages,
+  sends traffic to the NIM API for tactical analysis, and broadcasts `[AI Insight]`
+  summaries back. Lazy-imports `aiohttp`; install with `[inference]`. All config via
+  `MESHSA_INFERENCE_*` environment variables (9 fields). Feedback-loop safe: messages
+  prefixed with `[AI Insight]` are never re-analyzed.
 
 ### Schema versioning
 Every `Envelope` carries `schema_version: int`. Codecs compare against

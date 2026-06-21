@@ -52,3 +52,6 @@ flight-logs/
 # Build outputs
 *.whl
 *.tar.gz
+
+# Inference / AI model cache
+.inference_cache/
