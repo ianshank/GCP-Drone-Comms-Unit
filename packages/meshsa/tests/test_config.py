@@ -196,8 +196,12 @@ def test_parse_bool_values():
 
     for truthy in ("true", "True", "TRUE", "1", "yes", "  Yes  "):
         assert _parse_bool("test", truthy) is True, f"Expected True for {truthy!r}"
-    for falsy in ("false", "False", "0", "no", "nope", ""):
+    for falsy in ("false", "False", "0", "no", ""):
         assert _parse_bool("test", falsy) is False, f"Expected False for {falsy!r}"
+    with pytest.raises(ValueError, match="test: expected a boolean"):
+        _parse_bool("test", "nope")
+    with pytest.raises(ValueError, match="test: expected a boolean"):
+        _parse_bool("test", "invalid")
 
 
 def test_from_env_router_bad_numeric():

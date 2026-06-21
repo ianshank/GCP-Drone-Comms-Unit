@@ -72,7 +72,7 @@ class NemotronClient:
         self.config = config
         self._sleep = sleep
         self._session: aiohttp.ClientSession | None = None
-        self._session_lock = asyncio.Lock()
+        self._session_lock: asyncio.Lock | None = None
 
     async def analyze(self, envelope: Envelope) -> InferenceResult:
         if not self.config.enabled or not self.config.api_key:
@@ -107,6 +107,8 @@ class NemotronClient:
         retries = self.config.max_retries
         for attempt in range(retries + 1):
             try:
+                if self._session_lock is None:
+                    self._session_lock = asyncio.Lock()
                 async with self._session_lock:
                     if self._session is None or self._session.closed:
                         self._session = aiohttp.ClientSession(timeout=timeout)
@@ -140,6 +142,8 @@ class NemotronClient:
 
     async def close(self) -> None:
         """Close the underlying HTTP session, if open."""
+        if self._session_lock is None:
+            self._session_lock = asyncio.Lock()
         async with self._session_lock:
             if self._session is not None and not self._session.closed:
                 await self._session.close()

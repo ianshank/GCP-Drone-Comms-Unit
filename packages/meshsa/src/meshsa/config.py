@@ -14,9 +14,18 @@ from ._parsing import parse_float, parse_int
 from .models import NodeTier
 
 
-def _parse_bool(_name: str, v: str) -> bool:
-    """Parse a boolean from an env-var string value."""
-    return v.strip().lower() in ("true", "1", "yes")
+def _parse_bool(name: str, v: str) -> bool:
+    """Parse a boolean from an env-var string value.
+
+    Raises ``ValueError`` for unrecognised inputs so typos like ``"ture"``
+    are surfaced at startup rather than silently defaulting to ``False``.
+    """
+    cleaned = v.strip().lower()
+    if cleaned in ("true", "1", "yes"):
+        return True
+    if cleaned in ("false", "0", "no", ""):
+        return False
+    raise ValueError(f"{name}: expected a boolean, got {v!r}")
 
 
 class TransportConfig(BaseModel):
