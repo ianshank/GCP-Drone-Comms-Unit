@@ -92,6 +92,7 @@ Use these playbooks when the task matches their trigger words:
 - [.agents/skills/meshsa-schema-version-bump/SKILL.md](.agents/skills/meshsa-schema-version-bump/SKILL.md)
 - [.agents/skills/meshsa-test-conventions/SKILL.md](.agents/skills/meshsa-test-conventions/SKILL.md)
 - [.agents/skills/ops-deploy-base-node/SKILL.md](.agents/skills/ops-deploy-base-node/SKILL.md)
+- [.agents/skills/pre-pr-validator/SKILL.md](.agents/skills/pre-pr-validator/SKILL.md)
 
 ## Custom Agents
 

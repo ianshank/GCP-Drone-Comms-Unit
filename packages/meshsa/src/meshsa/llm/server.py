@@ -38,7 +38,9 @@ _UPSTREAM_ERROR = "assistant unavailable; check the server logs"
 #: Max accepted chat prompt length. The endpoint can be exposed off-loopback (with a
 #: token) and each prompt spends model tokens, so an unbounded prompt is a cost/latency
 #: DoS. Generous for real SA questions; oversized prompts get a 400, not a model call.
-MAX_PROMPT_CHARS = 8000
+DEFAULT_MAX_PROMPT_CHARS = 8000
+MAX_PROMPT_CHARS = DEFAULT_MAX_PROMPT_CHARS
+ENV_MAX_PROMPT_CHARS = "MESHSA_LLM_MAX_PROMPT_CHARS"
 
 # Server bind defaults + the environment-variable names that override every
 # setting. Centralized so there are no scattered magic strings/ports.
@@ -67,6 +69,7 @@ class ServerConfig(BaseModel):
     mavlink2rest_url: str = DEFAULT_MAVLINK2REST_URL
     drone_uid: str = DEFAULT_DRONE_UID
     fts_tracks_url: str = DEFAULT_FTS_TRACKS_URL
+    max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
 
 
 def resolve_config(env: Mapping[str, str]) -> ServerConfig:
@@ -87,6 +90,11 @@ def resolve_config(env: Mapping[str, str]) -> ServerConfig:
         mavlink2rest_url=env.get(ENV_MAVLINK2REST_URL, DEFAULT_MAVLINK2REST_URL),
         drone_uid=env.get(ENV_DRONE_UID, DEFAULT_DRONE_UID),
         fts_tracks_url=env.get(ENV_FTS_TRACKS_URL, DEFAULT_FTS_TRACKS_URL),
+        max_prompt_chars=parse_int(
+            ENV_MAX_PROMPT_CHARS,
+            env.get(ENV_MAX_PROMPT_CHARS, str(DEFAULT_MAX_PROMPT_CHARS)),
+            lo=1,
+        ),
     )
 
 
@@ -135,7 +143,11 @@ class _Agent(Protocol):
     async def ask(self, prompt: str, history: list[dict[str, Any]] | None = None) -> AgentReply: ...
 
 
-async def chat_reply(agent: _Agent, payload: Any) -> tuple[dict[str, Any], int]:
+async def chat_reply(
+    agent: _Agent,
+    payload: Any,
+    max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS,
+) -> tuple[dict[str, Any], int]:
     """Validate a chat payload, run the agent, and return ``(body, status)``.
 
     Pure of any web framework: tested directly with a fake agent. A missing or
@@ -148,8 +160,8 @@ async def chat_reply(agent: _Agent, payload: Any) -> tuple[dict[str, Any], int]:
     prompt = payload.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         return {"error": "missing 'prompt'"}, 400
-    if len(prompt) > MAX_PROMPT_CHARS:
-        return {"error": f"prompt too long (max {MAX_PROMPT_CHARS} chars)"}, 400
+    if len(prompt) > max_prompt_chars:
+        return {"error": f"prompt too long (max {max_prompt_chars} chars)"}, 400
     try:
         reply = await agent.ask(prompt.strip())
     except Exception as exc:
@@ -158,7 +170,11 @@ async def chat_reply(agent: _Agent, payload: Any) -> tuple[dict[str, Any], int]:
     return {"reply": reply.text, "tools": reply.tool_calls, "stop_reason": reply.stop_reason}, 200
 
 
-def build_app(agent: _Agent, token: str | None = None) -> Any:
+def build_app(
+    agent: _Agent,
+    token: str | None = None,
+    max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS,
+) -> Any:
     """Build the aiohttp application serving the widget and chat endpoint.
 
     When ``token`` is set, ``/chat`` requires ``Authorization: Bearer <token>``.
@@ -177,7 +193,7 @@ def build_app(agent: _Agent, token: str | None = None) -> Any:
             payload = await request.json()
         except Exception:
             payload = None
-        body, status = await chat_reply(agent, payload)
+        body, status = await chat_reply(agent, payload, max_prompt_chars=max_prompt_chars)
         return web.json_response(body, status=status)
 
     async def healthz(_request: Any) -> Any:
@@ -217,7 +233,11 @@ def main() -> None:  # pragma: no cover - process entry point
     telemetry = Mavlink2RestSource(cfg.mavlink2rest_url, uid=cfg.drone_uid)
     tracks = FtsTrackSource(cfg.fts_tracks_url)
     agent = build_agent(telemetry, tracks)
-    web.run_app(build_app(agent, cfg.token), host=cfg.host, port=cfg.port)
+    web.run_app(
+        build_app(agent, cfg.token, max_prompt_chars=cfg.max_prompt_chars),
+        host=cfg.host,
+        port=cfg.port,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

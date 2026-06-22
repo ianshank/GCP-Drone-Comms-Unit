@@ -93,6 +93,8 @@ def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, 
     resolved = port if port is not None else embedded_port
     if resolved is None:
         resolved = _DEFAULT_TLS_PORT if use_tls else _DEFAULT_PLAINTEXT_PORT
+    else:
+        resolved = int(resolved)
     return host, resolved, use_tls
 
 
@@ -373,7 +375,8 @@ class TakMulticastTransport(AbstractTransport):
         **_: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)
-        self._io_factory = io_factory or (lambda: _default_multicast_io(group, port, iface))
+        self._port = int(port)
+        self._io_factory = io_factory or (lambda: _default_multicast_io(group, self._port, iface))
         self._io: DatagramIO | None = None
         self._task: asyncio.Task[None] | None = None
         self._stopping = False

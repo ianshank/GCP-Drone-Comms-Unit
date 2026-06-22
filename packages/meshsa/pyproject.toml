@@ -41,10 +41,10 @@ msp = [
     "yamspy>=0.3",
 ]
 inference = [
-    "aiohttp>=3.9",
+    "aiohttp>=3.9,<3.10",
 ]
 health = [
-    "aiohttp>=3.9",
+    "aiohttp>=3.9,<3.10",
 ]
 fpv = [
     "pyserial>=3.5",
@@ -55,7 +55,7 @@ camera = [
 ]
 llm = [
     "anthropic>=0.40",
-    "aiohttp>=3.9",
+    "aiohttp>=3.9,<3.10",
 ]
 dev = [
     "pytest>=8",

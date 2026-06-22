@@ -71,3 +71,68 @@ def test_from_file_roundtrip(tmp_path):
     p.write_text(json.dumps(_minimal(port=8096)), encoding="utf-8")
     cfg = CommanderConfig.from_file(p)
     assert cfg.port == 8096
+
+
+def test_from_env():
+    # 1. Loading from minimal environment
+    env = {
+        "MESHSA_COMMANDER_MAVLINK_ENDPOINT": "udp:127.0.0.1:14550",
+        "MESHSA_COMMANDER_AUDIT_PATH": "/tmp/audit.jsonl",
+    }
+    cfg = CommanderConfig.from_env(environ=env)
+    assert cfg.mavlink_endpoint == "udp:127.0.0.1:14550"
+    assert cfg.audit_path == "/tmp/audit.jsonl"
+    assert cfg.port == 8095  # default
+
+    # 2. Loading with config JSON blob
+    env_json = {
+        "MESHSA_COMMANDER_CONFIG_JSON": json.dumps(
+            {
+                "mavlink_endpoint": "tcp:1.1.1.1:5000",
+                "audit_path": "/tmp/a.jsonl",
+                "port": 9000,
+                "allowed": ["rtl"],
+            }
+        )
+    }
+    cfg_json = CommanderConfig.from_env(environ=env_json)
+    assert cfg_json.mavlink_endpoint == "tcp:1.1.1.1:5000"
+    assert cfg_json.port == 9000
+    assert cfg_json.allowed == frozenset({"rtl"})
+
+    # 3. Individual scalar overrides on top of JSON
+    env_overrides = {
+        "MESHSA_COMMANDER_CONFIG_JSON": json.dumps(
+            {
+                "mavlink_endpoint": "tcp:1.1.1.1:5000",
+                "audit_path": "/tmp/a.jsonl",
+                "port": 9000,
+            }
+        ),
+        "MESHSA_COMMANDER_PORT": "9001",
+        "MESHSA_COMMANDER_ALLOW_FORCE_DISARM": "true",
+        "MESHSA_COMMANDER_ACK_TIMEOUT_S": "5.5",
+        "MESHSA_COMMANDER_MAX_ATTEMPTS": "10",
+        "MESHSA_COMMANDER_ARM_REPORT_MAX_AGE_S": "4.0",
+        "MESHSA_COMMANDER_ALLOWED": "set_mode,rtl,arm",
+    }
+    cfg_overrides = CommanderConfig.from_env(environ=env_overrides)
+    assert cfg_overrides.port == 9001
+    assert cfg_overrides.allow_force_disarm is True
+    assert cfg_overrides.ack_timeout_s == 5.5
+    assert cfg_overrides.max_attempts == 10
+    assert cfg_overrides.arm_report_max_age_s == 4.0
+    assert cfg_overrides.allowed == frozenset({"set_mode", "rtl", "arm"})
+
+    # 4. JSON list format for allowed
+    env_json_allowed = {
+        "MESHSA_COMMANDER_CONFIG_JSON": json.dumps(
+            {
+                "mavlink_endpoint": "tcp:1.1.1.1:5000",
+                "audit_path": "/tmp/a.jsonl",
+            }
+        ),
+        "MESHSA_COMMANDER_ALLOWED": '["set_mode", "rtl"]',
+    }
+    cfg_json_allowed = CommanderConfig.from_env(environ=env_json_allowed)
+    assert cfg_json_allowed.allowed == frozenset({"set_mode", "rtl"})

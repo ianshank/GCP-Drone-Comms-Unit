@@ -7,8 +7,10 @@ whole family to a refusal without catching ``Exception``. Every refusal here is
 
 from __future__ import annotations
 
+from ..errors import MeshSAError
 
-class CommandError(Exception):
+
+class CommandError(MeshSAError):
     """Base class for every supervised-command refusal."""
 
 

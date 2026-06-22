@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and fully tested; the DeepStream device pieces (install, YOLO11 FP16 engine, pyds probe)
   are later phases.
 
+### Fixed
+- **CI/CD test failures on Python 3.12**: Capped `aiohttp` to `<3.10` to avoid `stream_writer` signature incompatibility with `aioresponses` mocks.
+- **CI/CD test failures on missing dependencies**: Added dynamic mocking of `sys.modules['anthropic']` in `test_build_agent_resolves_env_vars` to prevent import errors in environments without the `[llm]` extra.
+- **Mypy unused-ignore and call-arg warnings**: Dynamically imported `ultralytics` using `importlib.import_module` and cast `cv2.VideoCapture` to `Any` to resolve environment-dependent type check errors.
+
 ### Security
 - **Commander service no longer receives the whole process environment.**
   `flightctl/run_commander.py` previously passed `dict(os.environ)` into
@@ -44,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parse via a shared helper that names the field on a bad value instead of raising a
   bare `invalid literal for int()`. `MESHSA_LLM_PORT` is additionally range-checked to
   `1..65535`.
+- **Unified `MonotonicClock` in FPV**: Deduplicated FPV monotonic clock implementation by using the framework-level `MonotonicClock` from `meshsa.protocols`.
+- **Configurable LLM prompt length and agent parameters**: Added environment variable bindings `MESHSA_LLM_MAX_PROMPT_CHARS`, `MESHSA_LLM_MAX_TOKENS`, and `MESHSA_LLM_MAX_ITERATIONS` to the LLM assistant server and agent.
+- **Environment variable loading for Commander**: Added `from_env()` method to `CommanderConfig` supporting `MESHSA_COMMANDER_CONFIG_JSON` blobs and individual scalar overrides.
+- **Injectable clock in `FlightLogger`**: Replaced direct `time.monotonic()` calls inside the flight logger writer thread with the injected `self._clock.now()` to allow deterministic testing via `FakeClock`.
 
 ### Migration (already-merged commanding changes worth calling out)
 - `MavlinkCommandLink.start()` is **required** before `send()`/`recv_ack()` (signing is

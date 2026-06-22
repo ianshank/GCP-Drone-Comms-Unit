@@ -143,3 +143,118 @@ def test_from_env_inference_json_blob_then_env_var_wins():
     c = NodeConfig.from_env(env)
     assert c.inference.api_key == "env-key"  # env-var wins over blob
     assert c.inference.max_tokens == 64  # blob value retained
+
+
+def test_from_env_router_overrides():
+    """MESHSA_ROUTER_* env vars override RouterConfig defaults."""
+    env = {
+        "MESHSA_UID": "n1",
+        "MESHSA_CALLSIGN": "FOX",
+        "MESHSA_ROUTER_DEDUPE_CACHE_SIZE": "4096",
+        "MESHSA_ROUTER_QUEUE_MAXSIZE": "500",
+    }
+    c = NodeConfig.from_env(env)
+    assert c.router.dedupe_cache_size == 4096
+    assert c.router.queue_maxsize == 500
+
+
+def test_from_env_health_overrides():
+    """MESHSA_HEALTH_* env vars override HealthConfig defaults."""
+    env = {
+        "MESHSA_UID": "n1",
+        "MESHSA_CALLSIGN": "FOX",
+        "MESHSA_HEALTH_ENABLED": "true",
+        "MESHSA_HEALTH_HOST": "0.0.0.0",
+        "MESHSA_HEALTH_PORT": "9090",
+        "MESHSA_HEALTH_METRICS_ENABLED": "1",
+        "MESHSA_HEALTH_METRICS_PATH": "/stats",
+        "MESHSA_HEALTH_METRICS_FORMAT": "json",
+    }
+    c = NodeConfig.from_env(env)
+    assert c.health.enabled is True
+    assert c.health.host == "0.0.0.0"
+    assert c.health.port == 9090
+    assert c.health.metrics_enabled is True
+    assert c.health.metrics_path == "/stats"
+    assert c.health.metrics_format == "json"
+
+
+def test_from_env_inference_backoff_base_override():
+    """MESHSA_INFERENCE_BACKOFF_BASE env var overrides the default."""
+    env = {
+        "MESHSA_UID": "n1",
+        "MESHSA_CALLSIGN": "FOX",
+        "MESHSA_INFERENCE_BACKOFF_BASE": "3.0",
+    }
+    c = NodeConfig.from_env(env)
+    assert c.inference.backoff_base == 3.0
+
+
+def test_parse_bool_values():
+    """Module-level _parse_bool handles all documented truth values."""
+    from meshsa.config import _parse_bool
+
+    for truthy in ("true", "True", "TRUE", "1", "yes", "  Yes  "):
+        assert _parse_bool("test", truthy) is True, f"Expected True for {truthy!r}"
+    for falsy in ("false", "False", "0", "no", ""):
+        assert _parse_bool("test", falsy) is False, f"Expected False for {falsy!r}"
+    with pytest.raises(ValueError, match="test: expected a boolean"):
+        _parse_bool("test", "nope")
+    with pytest.raises(ValueError, match="test: expected a boolean"):
+        _parse_bool("test", "invalid")
+
+
+def test_from_env_router_bad_numeric():
+    """MESHSA_ROUTER_* env vars with non-numeric values raise ValueError."""
+    with pytest.raises(ValueError, match="MESHSA_ROUTER_DEDUPE_CACHE_SIZE: expected an integer"):
+        NodeConfig.from_env(
+            {"MESHSA_UID": "n", "MESHSA_CALLSIGN": "F", "MESHSA_ROUTER_DEDUPE_CACHE_SIZE": "big"}
+        )
+
+
+def test_from_env_health_bad_port():
+    """MESHSA_HEALTH_PORT with non-integer value raises ValueError."""
+    with pytest.raises(ValueError, match="MESHSA_HEALTH_PORT: expected an integer"):
+        NodeConfig.from_env(
+            {"MESHSA_UID": "n", "MESHSA_CALLSIGN": "F", "MESHSA_HEALTH_PORT": "eighty"}
+        )
+
+
+# ---------- required-field validation ----------
+
+
+def test_missing_uid_raises():
+    """NodeConfig without uid must raise a Pydantic ValidationError."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="uid"):
+        NodeConfig(callsign="ALPHA")  # type: ignore[call-arg]
+
+
+def test_missing_callsign_raises():
+    """NodeConfig without callsign must raise a Pydantic ValidationError."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="callsign"):
+        NodeConfig(uid="u1")  # type: ignore[call-arg]
+
+
+def test_from_file_nonexistent_raises(tmp_path):
+    """from_file with a path that does not exist must raise FileNotFoundError."""
+    missing = str(tmp_path / "does_not_exist.json")
+    with pytest.raises(FileNotFoundError):
+        NodeConfig.from_file(missing)
+
+
+def test_nemotron_config_constraints():
+    from pydantic import ValidationError
+
+    from meshsa.config import NemotronConfig
+
+    # backoff_base < 1.0 raises ValidationError
+    with pytest.raises(ValidationError, match="backoff_base"):
+        NemotronConfig(backoff_base=0.9)
+
+    # insight_prefix empty raises ValidationError
+    with pytest.raises(ValidationError, match="insight_prefix"):
+        NemotronConfig(insight_prefix="")

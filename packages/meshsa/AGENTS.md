@@ -30,6 +30,7 @@ This guide applies under `packages/meshsa`. Also follow the root
 - Adding a codec: use [../../.agents/skills/meshsa-add-codec/SKILL.md](../../.agents/skills/meshsa-add-codec/SKILL.md).
 - Changing the envelope schema: use [../../.agents/skills/meshsa-schema-version-bump/SKILL.md](../../.agents/skills/meshsa-schema-version-bump/SKILL.md).
 - Writing tests: use [../../.agents/skills/meshsa-test-conventions/SKILL.md](../../.agents/skills/meshsa-test-conventions/SKILL.md).
+- Pre-PR validation and checks: use [../../.agents/skills/pre-pr-validator/SKILL.md](../../.agents/skills/pre-pr-validator/SKILL.md).
 
 ## Verification
 

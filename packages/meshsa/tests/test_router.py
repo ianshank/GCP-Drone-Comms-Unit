@@ -101,3 +101,42 @@ async def test_dedupe_cache_bounded_at_scale():
     assert len(r._seen) == 10  # bounded
     assert r._mark_seen("id-99") is False  # most-recent still known
     assert r._mark_seen("id-0") is True  # oldest long since evicted -> new again
+
+
+async def test_subscriber_exception_does_not_crash_pump():
+    """A subscriber that raises must not prevent other subscribers from
+    receiving the message, and the router must keep running afterwards."""
+    from unittest.mock import patch
+
+    bus = LoopbackBus()
+    rx = LoopbackTransport(name="rx", bus=bus)
+    tx = LoopbackTransport(name="tx", bus=bus)
+
+    def exploding_handler(e):
+        raise RuntimeError("boom")
+
+    second_seen: list[str] = []
+
+    r = Router([rx], JsonCodec())
+    r.subscribe(exploding_handler)
+    r.subscribe(lambda e: second_seen.append(e.msg_id))
+
+    # Patch the router module logger so the exc_info formatting doesn't hit
+    # a cp1252 UnicodeEncodeError on Windows.
+    with patch("meshsa.router._log") as mock_log:
+        await r.start()
+
+        await tx.send(JsonCodec().encode(_env("survive")))
+        await asyncio.sleep(0.05)
+
+        # Second subscriber must still receive the message
+        assert second_seen == ["survive"]
+        # The router logged the subscriber failure
+        mock_log.warning.assert_called()
+
+        # Router pump is still alive — send a second message to prove it
+        await tx.send(JsonCodec().encode(_env("after")))
+        await asyncio.sleep(0.05)
+        await r.stop()
+
+    assert "after" in second_seen

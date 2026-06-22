@@ -20,7 +20,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | Module                          | Purpose                                                              |
 |---------------------------------|----------------------------------------------------------------------|
 | `meshsa.version`                | `SCHEMA_VERSION`, `MIN_COMPATIBLE_SCHEMA`, `is_compatible()`, `SUPPORTED_SCHEMAS`, `warn_deprecated()` |
-| `meshsa.errors`                 | Exception hierarchy rooted at `MeshSAError`                          |
+| `meshsa.errors`                 | Exception hierarchy rooted at `MeshSAError`; `CommandError` family inherits from it |
 | `meshsa.protocols`              | `Transport`, `Codec`, `Clock`, `IdFactory` Protocols + defaults      |
 | `meshsa.models`                 | `Position`, `NodeInfo`, `Envelope`, `PliPayload`, `ChatPayload`, `UNKNOWN_ERROR_M` |
 | `meshsa.config`                 | `NodeConfig`, `MeshConfig`, `RouterConfig`, `HealthConfig`, `TransportConfig` |
@@ -29,7 +29,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.codec`                  | `JsonCodec` (Envelope <-> bytes); per-codec `supported_schemas`      |
 | `meshsa.compact`                | `CompactCodec` (LoRa-sized binary, ~40 B)                            |
 | `meshsa.cot`                    | `CotCodec` (ATAK / TAK Cursor-on-Target XML; schema-agnostic)       |
-| `meshsa.router`                 | Async broker: dedupe, bridge, per-transport codec selection; `RouterMetrics` |
+| `meshsa.router`                 | Async broker: dedupe, bridge, per-transport codec selection; resilient subscriber dispatch; `RouterMetrics` |
 | `meshsa.metrics`                | `RouterMetrics` counters (rx/tx/forwarded/dropped/schema-mismatch)  |
 | `meshsa.health`                 | `health_snapshot()` + opt-in `/healthz` aiohttp listener (`[health]`) |
 | `meshsa.node`                   | `Node` dataclass + `build_node(config)` factory (codec-instance injection) |
@@ -39,13 +39,15 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.transports.meshtastic_radio` | Real Meshtastic (USB / TCP / BLE), reconnect supervisor + mesh provisioning |
 | `meshsa.transports.tak`         | `TakTcpTransport`, `TakMulticastTransport` for FreeTAKServer / ATAK  |
 | `meshsa.inference`              | `NemotronClient` + `InferenceService`: opt-in NVIDIA NIM AI bridge (`[inference]` extra) |
+| `meshsa.command`                | Supervised command path: staging, confirmation, audit, MAVLink link + pump |
+| `meshsa.command.errors`         | `CommandError(MeshSAError)` + typed refusal sub-hierarchy             |
 | `meshsa.examples.base_node`     | Thin re-export of `meshsa.cli` (demonstrative only)                 |
 
 ## Patterns
 
 ### Dependency injection via `Protocol`
 Anything I/O-shaped is a `typing.Protocol`. The router and node accept those types,
-not concrete classes. This is what lets the test suite drive a 98-test, 100%
+not concrete classes. This is what lets the test suite drive a 747-test, 99.7%
 coverage run without hardware.
 
 ### Open/closed registries
@@ -63,10 +65,25 @@ The node optionally attaches services that are out of the hot path:
 - **`meshsa.health`**: `/healthz` + `/metrics` aiohttp listener (install with `[health]`).
 - **`meshsa.llm`**: read-only situational-awareness assistant over telemetry + TAK tracks.
 - **`meshsa.inference`**: NVIDIA Nemotron NIM AI bridge — subscribes to Router messages,
-  sends traffic to the NIM API for tactical analysis, and broadcasts `[AI Insight]`
-  summaries back. Lazy-imports `aiohttp`; install with `[inference]`. All config via
-  `MESHSA_INFERENCE_*` environment variables (9 fields). Feedback-loop safe: messages
-  prefixed with `[AI Insight]` are never re-analyzed.
+  sends traffic to the NIM API for tactical analysis, and broadcasts AI insight summaries
+  (configurable prefix via `NemotronConfig.insight_prefix`). Thread-safe session management
+  via `asyncio.Lock`; configurable retry backoff (`backoff_base`); injectable `sleep` for
+  testability. Lazy-imports `aiohttp`; install with `[inference]`. All config via
+  `MESHSA_INFERENCE_*` environment variables (12 fields). Feedback-loop safe: messages
+  matching the configured insight prefix are never re-analyzed.
+
+### Resilient subscriber dispatch
+The router's `_pump` wraps each subscriber callback in `try/except`: a failing subscriber
+is logged with `exc_info=True` and never crashes the pump or prevents other subscribers
+from receiving messages. This ensures the message-delivery hot path is fault-tolerant.
+
+### Env-var bindings
+`NodeConfig.from_env()` reads `MESHSA_*` environment variables for all config sections:
+scalar node fields, `MESHSA_MESH_*` (MeshConfig), `MESHSA_ROUTER_*` (RouterConfig),
+`MESHSA_HEALTH_*` (HealthConfig), and `MESHSA_INFERENCE_*` (NemotronConfig). Individual
+env-vars always override the JSON blob value for the same field. Parsing uses shared
+helpers (`parse_int`, `parse_float`, `_parse_bool`) that name the offending variable on
+bad values.
 
 ### Schema versioning
 Every `Envelope` carries `schema_version: int`. Codecs compare against

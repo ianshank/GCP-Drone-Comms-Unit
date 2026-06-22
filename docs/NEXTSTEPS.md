@@ -16,13 +16,16 @@
 ## AI Inference (initiative E — `meshsa.inference`)
 > Optional NVIDIA Nemotron NIM AI bridge: subscribes to mesh traffic → tactical analysis →
 > `[AI Insight]` summaries back on the mesh. Install with `meshsa[inference]`. Config via
-> `MESHSA_INFERENCE_*` env vars (9 fields). Shipped in PR #21 (hardened: lazy aiohttp,
-> session reuse, feedback-loop prevention, lifecycle guards, 639 tests at 99.72% cov).
+> `MESHSA_INFERENCE_*` env vars (12 fields incl. `backoff_base`, `insight_prefix`). Hardened:
+> lazy aiohttp, session reuse with `asyncio.Lock`, feedback-loop prevention, configurable
+> backoff, lifecycle guards, injectable sleep for testability. 780 tests at 99.48% cov.
 
 - [x] **MVP**: `NemotronClient` + `InferenceService` + `NemotronConfig` + `InferenceResult`
-- [x] **Env-var bindings**: 9 `MESHSA_INFERENCE_*` vars in `NodeConfig.from_env()`
-- [x] **Hardening**: lazy aiohttp import, `_require_aiohttp()` guard, session reuse,
-      feedback-loop filter (`[AI Insight]` prefix), lifecycle flags, API key warning
+- [x] **Env-var bindings**: 12 `MESHSA_INFERENCE_*` vars in `NodeConfig.from_env()` (incl.
+      `backoff_base`, `insight_prefix`)
+- [x] **Hardening**: lazy aiohttp import, `_require_aiohttp()` guard, session reuse with
+      `asyncio.Lock`, feedback-loop filter (configurable `insight_prefix`), lifecycle flags,
+      API key warning, configurable backoff via `backoff_base`, injectable `sleep`
 - [x] **CI**: `meshsa[dev,inference]` install, `aioresponses` mock, 24 inference tests
 - [ ] **Local rate limiting**: add `min_interval_s`/`max_concurrent_requests` to prevent
       API spend spikes when many mesh messages arrive rapidly
@@ -157,29 +160,39 @@ Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
 - [ ] Fleet resilience: **Meshtastic store-and-forward** for intermittent links
       ([S&F module](https://meshtastic.org/docs/configuration/module/store-and-forward-module/)).
 
-## Code-quality backlog (2026-06-16 gap scan)
-Found by a read-only gap/deviation scan of the 0.3.x hardening + FPV-Phase-2 work; lint,
-`mypy --strict`, format, and the test suite are all green — these are design/robustness items.
+## Code-quality backlog (2026-06-21 gap scan)
+Found by automated gap analysis (source code + test coverage subagents); lint,
+`mypy --strict`, format, and the test suite are all green — these are deferred design items.
+- [x] **[config] `HealthConfig` + `RouterConfig` missing env-var bindings** (`config.py`).
+      Fixed: `MESHSA_HEALTH_*` and `MESHSA_ROUTER_*` bindings added in `NodeConfig.from_env()`.
+- [x] **[robustness] `NemotronClient._session` race condition** (`inference.py`). Fixed:
+      `asyncio.Lock` guards all `_session` access (creation, use, close).
+- [x] **[robustness] Router subscriber exception crashes pump** (`router.py`). Fixed:
+      subscriber calls wrapped in `try/except` with `exc_info=True` logging.
+- [x] **[consistency] `CommandError` disconnected from `MeshSAError` hierarchy**
+      (`command/errors.py`). Fixed: now inherits `MeshSAError`.
+- [x] **[config] Hardcoded AI insight prefix and backoff base** (`inference.py`). Fixed:
+      `insight_prefix` and `backoff_base` are now configurable `NemotronConfig` fields with
+      env-var bindings.
+- [x] **[logging] Missing `exc_info=True` on exception warnings** (`router.py`, `inference.py`).
+      Fixed: tracebacks are now preserved in structured logs.
 - [x] **[security] `meshsa.llm` server bound `0.0.0.0` with no auth** (`llm/server.py`). Fixed:
       `DEFAULT_HOST` is now `127.0.0.1`, a `MESHSA_LLM_TOKEN` bearer check gates `/chat`, and the
-      server **fails closed** (refuses to start) on a non-loopback bind without a token. **M2
-      security invariant restored** — was the gate on the commanding initiative
-      (see [ROADMAP.md](ROADMAP.md) Initiative C).
+      server **fails closed** (refuses to start) on a non-loopback bind without a token.
 - [x] **[robustness] `TakMulticastTransport._recv_loop` had no error recovery** (`transports/tak.py`).
-      Fixed: the recv loop now closes the wedged socket, rebuilds via the factory, and backs off via
-      the shared `Backoff` (mirrors the TCP supervisor) instead of dying on a transient error.
-- [x] **[safety] `ArmGuard._last_report` lock** (`fpv/arm_guard.py`) — **re-scoped after review.** No
-      concurrent caller exists today (`update_health` has no non-test caller; no FPV thread touches
-      `ArmGuard`) and the reads already snapshot the reference, so a lock would be speculative. The
-      single-thread/serialize-by-caller contract is now documented in the class; add a `Lock` +
-      concurrent test when the live monitor and RC loop are wired on separate threads (Initiative C).
+      Fixed: the recv loop now closes the wedged socket, rebuilds via the factory, and backs off.
 - [ ] **[consistency] `FlightLogger.dropped_records` omits the `"events"`/`"frames"` keys**
-      (`fpv/flight_logger.py`) so the manifest omits a `0` for them (cosmetic — drops are still
-      counted via `.get()`); init all four streams.
+      (`fpv/flight_logger.py`) so the manifest omits a `0` for them (cosmetic).
+- [x] **[consistency] Duplicate `MonotonicClock` classes** (`protocols.py` vs `fpv/protocols.py`);
+      deduplicate by importing the framework-level `MonotonicClock` in the FPV subsystem.
+- [x] **[config] `FpvSettings` and `CommanderConfig` lack `from_env()` with individual bindings**
+      — operators must use the JSON blob for non-`sessions_root` fields.
+- [x] **[DI] `FlightLogger._writer()` calls `time.monotonic()` directly** instead of the injected
+      `Clock` — flush-interval timing is untestable via `FakeClock`.
+- [x] **[config] `llm/server.py` `MAX_PROMPT_CHARS` and `llm/agent.py` `DEFAULT_MAX_TOKENS`/
+      `DEFAULT_MAX_ITERATIONS`** have no env-var bindings.
 - [ ] **[robustness] guard unguarded teardown/parse paths:** `camera.py close()` source close,
       `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions.
-      (Dropped from this list after verification: there are **no per-frame WARNING floods** in
-      `crsf_source` / `meshtastic_radio` — logging there is already one-per-error, not per-frame.)
 - [ ] **[cleanup] drop `# pragma: no cover` on pure logic** in `fpv/crsf/rc.py` (span==0 guards)
       and source the remaining magic numbers (`rc.py` pad=992, `monitor.py` interval) from config.
 

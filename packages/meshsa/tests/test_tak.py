@@ -580,3 +580,21 @@ async def test_multicast_joins_on_start_and_leaves_on_stop():
     assert made["n"] == 1 and not io.closed  # joined exactly once
     await t.stop()
     assert io.closed  # left the group
+
+
+def test_tak_transports_string_ports():
+    # TCP transport resolved endpoint with string port
+    t_tcp = TakTcpTransport(
+        host="127.0.0.1", port="8090", connector=lambda: _conn(QueueReader(), FakeWriter())
+    )
+    assert t_tcp.port == 8090
+
+    # TCP transport with schemed host
+    t_tcp_scheme = TakTcpTransport(
+        host="tcp://127.0.0.1:8091", connector=lambda: _conn(QueueReader(), FakeWriter())
+    )
+    assert t_tcp_scheme.port == 8091
+
+    # Multicast transport accepts string port
+    t_mc = TakMulticastTransport(port="6970", io_factory=lambda: FakeDgram())
+    assert t_mc._port == 6970

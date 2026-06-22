@@ -223,7 +223,8 @@ def _default_camera_factory(settings: CameraSettings) -> CameraFactory:  # pragm
     def factory() -> CameraSource:
         import cv2  # lazy: importing this module must not require opencv
 
-        cap = cv2.VideoCapture(settings.device)
+        video_capture: Any = cv2.VideoCapture
+        cap = video_capture(settings.device)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, settings.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, settings.height)
         cap.set(cv2.CAP_PROP_FPS, settings.fps)

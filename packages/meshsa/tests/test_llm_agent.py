@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import pytest
+
 from meshsa.llm.agent import SAAgent, _extract_text
 from meshsa.llm.sources import DroneState, StaticTelemetrySource, StaticTrackSource, Track
 from meshsa.llm.tools import GET_DRONE_STATE, LIST_TRACKS, ToolDispatcher
@@ -155,3 +157,51 @@ async def test_none_stop_reason_defaults_to_end_turn() -> None:
 def test_extract_text_joins_and_strips() -> None:
     blocks = [_TextBlock("  a"), _ToolUseBlock("t", "i", {}), _TextBlock("b  ")]
     assert _extract_text(blocks) == "ab"
+
+
+@pytest.mark.anyio
+async def test_build_agent_resolves_env_vars() -> None:
+    import sys
+    from unittest.mock import MagicMock, patch
+
+    mock_anthropic = MagicMock()
+    orig_anthropic = sys.modules.get("anthropic")
+    sys.modules["anthropic"] = mock_anthropic
+
+    try:
+        from meshsa.llm.agent import build_agent
+        from meshsa.llm.sources import StaticTelemetrySource, StaticTrackSource
+
+        mock_async_anthropic = mock_anthropic.AsyncAnthropic
+        mock_client = MagicMock()
+        mock_async_anthropic.return_value = mock_client
+
+        # 1. Test defaults
+        with patch.dict("os.environ", {}, clear=True):
+            agent = build_agent(
+                StaticTelemetrySource(None),
+                StaticTrackSource([]),
+            )
+            assert agent._model == "claude-opus-4-8"
+            assert agent._max_tokens == 2048
+            assert agent._max_iterations == 6
+
+        # 2. Test overrides
+        env = {
+            "MESHSA_LLM_MODEL": "claude-custom",
+            "MESHSA_LLM_MAX_TOKENS": "1000",
+            "MESHSA_LLM_MAX_ITERATIONS": "5",
+        }
+        with patch.dict("os.environ", env, clear=True):
+            agent2 = build_agent(
+                StaticTelemetrySource(None),
+                StaticTrackSource([]),
+            )
+            assert agent2._model == "claude-custom"
+            assert agent2._max_tokens == 1000
+            assert agent2._max_iterations == 5
+    finally:
+        if orig_anthropic is None:
+            sys.modules.pop("anthropic", None)
+        else:
+            sys.modules["anthropic"] = orig_anthropic

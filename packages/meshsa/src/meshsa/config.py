@@ -14,6 +14,20 @@ from ._parsing import parse_float, parse_int
 from .models import NodeTier
 
 
+def _parse_bool(name: str, v: str) -> bool:
+    """Parse a boolean from an env-var string value.
+
+    Raises ``ValueError`` for unrecognised inputs so typos like ``"ture"``
+    are surfaced at startup rather than silently defaulting to ``False``.
+    """
+    cleaned = v.strip().lower()
+    if cleaned in ("true", "1", "yes"):
+        return True
+    if cleaned in ("false", "0", "no", ""):
+        return False
+    raise ValueError(f"{name}: expected a boolean, got {v!r}")
+
+
 class TransportConfig(BaseModel):
     name: str
     type: str  # transport registry key
@@ -45,6 +59,8 @@ class NemotronConfig(BaseModel):
     max_tokens: int = 512
     timeout_s: float = 30.0
     max_retries: int = 3
+    backoff_base: float = Field(default=2.0, ge=1.0)
+    insight_prefix: str = Field(default="[AI Insight]", min_length=1)
 
 
 class HealthConfig(BaseModel):
@@ -119,10 +135,35 @@ class NodeConfig(BaseModel):
         if mesh:
             data["mesh"] = mesh
 
-        # --- inference (NemotronConfig) env-var bindings ---
-        def _parse_bool(_name: str, v: str) -> bool:
-            return v.strip().lower() in ("true", "1", "yes")
+        # --- router (RouterConfig) env-var bindings ---
+        router: dict[str, Any] = dict(data.get("router", {}))
+        router_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+            f"{prefix}ROUTER_DEDUPE_CACHE_SIZE": ("dedupe_cache_size", parse_int),
+            f"{prefix}ROUTER_QUEUE_MAXSIZE": ("queue_maxsize", parse_int),
+        }
+        for env_key, (field, caster) in router_scalars.items():
+            if env_key in env:
+                router[field] = caster(env_key, env[env_key])
+        if router:
+            data["router"] = router
 
+        # --- health (HealthConfig) env-var bindings ---
+        health: dict[str, Any] = dict(data.get("health", {}))
+        health_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+            f"{prefix}HEALTH_ENABLED": ("enabled", _parse_bool),
+            f"{prefix}HEALTH_HOST": ("host", _str),
+            f"{prefix}HEALTH_PORT": ("port", parse_int),
+            f"{prefix}HEALTH_METRICS_ENABLED": ("metrics_enabled", _parse_bool),
+            f"{prefix}HEALTH_METRICS_PATH": ("metrics_path", _str),
+            f"{prefix}HEALTH_METRICS_FORMAT": ("metrics_format", _str),
+        }
+        for env_key, (field, caster) in health_scalars.items():
+            if env_key in env:
+                health[field] = caster(env_key, env[env_key])
+        if health:
+            data["health"] = health
+
+        # --- inference (NemotronConfig) env-var bindings ---
         inference: dict[str, Any] = dict(data.get("inference", {}))
         inference_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
             f"{prefix}INFERENCE_ENABLED": ("enabled", _parse_bool),
@@ -134,6 +175,8 @@ class NodeConfig(BaseModel):
             f"{prefix}INFERENCE_MAX_TOKENS": ("max_tokens", parse_int),
             f"{prefix}INFERENCE_TIMEOUT_S": ("timeout_s", parse_float),
             f"{prefix}INFERENCE_MAX_RETRIES": ("max_retries", parse_int),
+            f"{prefix}INFERENCE_BACKOFF_BASE": ("backoff_base", parse_float),
+            f"{prefix}INFERENCE_INSIGHT_PREFIX": ("insight_prefix", _str),
         }
         for env_key, (field, caster) in inference_scalars.items():
             if env_key in env:
