@@ -21,7 +21,7 @@ _log = structlog.get_logger("jetson_yolo_gcs.detection.ultralytics")
 
 
 def _load_model(settings: YoloSettings) -> Any:  # pragma: no cover - real ultralytics load
-    from ultralytics import YOLO
+    from ultralytics import YOLO  # type: ignore[attr-defined]
 
     model = YOLO(settings.model_path)
     return model

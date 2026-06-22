@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "export-model":  # pragma: no cover - real ultralytics export
-        from ultralytics import YOLO
+        from ultralytics import YOLO  # type: ignore[attr-defined]
 
         model = YOLO(settings.yolo.model_path)
         model.export(format=args.format)
