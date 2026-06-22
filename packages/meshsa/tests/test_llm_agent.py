@@ -161,12 +161,18 @@ def test_extract_text_joins_and_strips() -> None:
 
 @pytest.mark.anyio
 async def test_build_agent_resolves_env_vars() -> None:
+    import sys
     from unittest.mock import MagicMock, patch
 
-    from meshsa.llm.agent import build_agent
-    from meshsa.llm.sources import StaticTelemetrySource, StaticTrackSource
+    mock_anthropic = MagicMock()
+    orig_anthropic = sys.modules.get("anthropic")
+    sys.modules["anthropic"] = mock_anthropic
 
-    with patch("anthropic.AsyncAnthropic") as mock_async_anthropic:
+    try:
+        from meshsa.llm.agent import build_agent
+        from meshsa.llm.sources import StaticTelemetrySource, StaticTrackSource
+
+        mock_async_anthropic = mock_anthropic.AsyncAnthropic
         mock_client = MagicMock()
         mock_async_anthropic.return_value = mock_client
 
@@ -194,3 +200,8 @@ async def test_build_agent_resolves_env_vars() -> None:
             assert agent2._model == "claude-custom"
             assert agent2._max_tokens == 1000
             assert agent2._max_iterations == 5
+    finally:
+        if orig_anthropic is None:
+            sys.modules.pop("anthropic", None)
+        else:
+            sys.modules["anthropic"] = orig_anthropic

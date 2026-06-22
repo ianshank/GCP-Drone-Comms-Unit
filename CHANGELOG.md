@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and fully tested; the DeepStream device pieces (install, YOLO11 FP16 engine, pyds probe)
   are later phases.
 
+### Fixed
+- **CI/CD test failures on Python 3.12**: Capped `aiohttp` to `<3.10` to avoid `stream_writer` signature incompatibility with `aioresponses` mocks.
+- **CI/CD test failures on missing dependencies**: Added dynamic mocking of `sys.modules['anthropic']` in `test_build_agent_resolves_env_vars` to prevent import errors in environments without the `[llm]` extra.
+- **Mypy unused-ignore and call-arg warnings**: Dynamically imported `ultralytics` using `importlib.import_module` and cast `cv2.VideoCapture` to `Any` to resolve environment-dependent type check errors.
+
 ### Security
 - **Commander service no longer receives the whole process environment.**
   `flightctl/run_commander.py` previously passed `dict(os.environ)` into

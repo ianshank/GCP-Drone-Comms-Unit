@@ -86,7 +86,8 @@ def _default_camera_factory(settings: CameraSettings) -> CameraFactory:  # pragm
         import cv2
 
         pipeline = build_capture_pipeline(settings)
-        cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+        video_capture: Any = cv2.VideoCapture
+        cap = video_capture(pipeline, cv2.CAP_GSTREAMER)
         # Fail fast: a pipeline that never opens would otherwise read () forever and,
         # with max_consecutive_empty=None, idle-loop indefinitely with no actionable error.
         if not cap.isOpened():
