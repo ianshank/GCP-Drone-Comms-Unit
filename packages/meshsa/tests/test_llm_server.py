@@ -182,3 +182,34 @@ def test_validate_bind_allows_loopback_without_token() -> None:
 def test_validate_bind_refuses_exposed_without_token() -> None:
     with pytest.raises(ValueError, match="MESHSA_LLM_TOKEN"):
         validate_bind("0.0.0.0", None)
+
+
+def test_resolve_config_max_prompt_chars() -> None:
+    # Test default
+    cfg_default = resolve_config({})
+    assert cfg_default.max_prompt_chars == 8000
+
+    # Test override
+    cfg_override = resolve_config({"MESHSA_LLM_MAX_PROMPT_CHARS": "500"})
+    assert cfg_override.max_prompt_chars == 500
+
+    # Test invalid values raise
+    with pytest.raises(ValueError, match="MESHSA_LLM_MAX_PROMPT_CHARS: expected an integer"):
+        resolve_config({"MESHSA_LLM_MAX_PROMPT_CHARS": "notanint"})
+    with pytest.raises(ValueError, match="below the minimum 1"):
+        resolve_config({"MESHSA_LLM_MAX_PROMPT_CHARS": "0"})
+
+
+async def test_chat_reply_with_custom_max_prompt_chars() -> None:
+    agent = _FakeAgent(AgentReply(text="ok", stop_reason="end_turn"))
+
+    # Custom max_prompt_chars limit = 10
+    body, status = await chat_reply(agent, {"prompt": "A" * 11}, max_prompt_chars=10)
+    assert status == 400
+    assert "too long" in body["error"]
+    assert "max 10 chars" in body["error"]
+    assert agent.prompts == []
+
+    # Custom limit = 10, exact length
+    body2, status2 = await chat_reply(agent, {"prompt": "A" * 10}, max_prompt_chars=10)
+    assert status2 == 200

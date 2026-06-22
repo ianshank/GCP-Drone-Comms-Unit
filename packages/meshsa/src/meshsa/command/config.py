@@ -19,11 +19,15 @@ Backwards-compat staging (the file is operator-authored and may already be deplo
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
+from .._parsing import parse_float, parse_int
+from ..config import _parse_bool
 from .commands import CommanderSettings
 
 _log = structlog.get_logger("meshsa.command.config")
@@ -99,3 +103,50 @@ class CommanderConfig(BaseModel):
         error handling to ``FileNotFoundError``/``OSError``/``ValidationError``.
         """
         return cls.model_validate_json(Path(path).read_bytes())
+
+    @classmethod
+    def from_env(
+        cls, environ: Mapping[str, str] | None = None, prefix: str = "MESHSA_COMMANDER_"
+    ) -> CommanderConfig:
+        """Build config from environment variables; a ``<prefix>CONFIG_JSON``
+        blob is merged first, then individual scalar overrides are applied."""
+        import json
+        import os
+
+        env = dict(os.environ if environ is None else environ)
+        data: dict[str, Any] = {}
+
+        blob = env.get(f"{prefix}CONFIG_JSON")
+        if blob:
+            data.update(json.loads(blob))
+
+        def _str(_name: str, value: str) -> str:
+            return value
+
+        def _set(_name: str, value: str) -> frozenset[str]:
+            if value.startswith("[") and value.endswith("]"):
+                try:
+                    return frozenset(json.loads(value))
+                except Exception:
+                    pass
+            return frozenset(x.strip() for x in value.split(",") if x.strip())
+
+        scalar_map: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+            f"{prefix}HOST": ("host", _str),
+            f"{prefix}PORT": ("port", parse_int),
+            f"{prefix}MAVLINK_ENDPOINT": ("mavlink_endpoint", _str),
+            f"{prefix}AUDIT_PATH": ("audit_path", _str),
+            f"{prefix}TARGET_SYSTEM": ("target_system", parse_int),
+            f"{prefix}TARGET_COMPONENT": ("target_component", parse_int),
+            f"{prefix}ALLOWED": ("allowed", _set),
+            f"{prefix}ALLOW_FORCE_DISARM": ("allow_force_disarm", _parse_bool),
+            f"{prefix}ACK_TIMEOUT_S": ("ack_timeout_s", parse_float),
+            f"{prefix}MAX_ATTEMPTS": ("max_attempts", parse_int),
+            f"{prefix}ARM_REPORT_MAX_AGE_S": ("arm_report_max_age_s", parse_float),
+        }
+
+        for env_key, (field, caster) in scalar_map.items():
+            if env_key in env:
+                data[field] = caster(env_key, env[env_key])
+
+        return cls.model_validate(data)

@@ -152,9 +152,32 @@ def build_agent(
     """
     from anthropic import AsyncAnthropic
 
+    from .._parsing import parse_int
+
     client = AsyncAnthropic(api_key=api_key) if api_key else AsyncAnthropic()
     resolved_model = model or os.environ.get("MESHSA_LLM_MODEL", DEFAULT_MODEL)
+
+    max_tokens_str = os.environ.get("MESHSA_LLM_MAX_TOKENS")
+    resolved_max_tokens = (
+        parse_int("MESHSA_LLM_MAX_TOKENS", max_tokens_str, lo=1)
+        if max_tokens_str is not None
+        else DEFAULT_MAX_TOKENS
+    )
+
+    max_iterations_str = os.environ.get("MESHSA_LLM_MAX_ITERATIONS")
+    resolved_max_iterations = (
+        parse_int("MESHSA_LLM_MAX_ITERATIONS", max_iterations_str, lo=1)
+        if max_iterations_str is not None
+        else DEFAULT_MAX_ITERATIONS
+    )
+
     # The SDK's overloaded create() is narrower than our **kwargs protocol; the
     # call sites in ``ask`` use only the subset every overload accepts.
     messages = cast(MessagesAPI, client.messages)
-    return SAAgent(messages, ToolDispatcher(telemetry, tracks), model=resolved_model)
+    return SAAgent(
+        messages,
+        ToolDispatcher(telemetry, tracks),
+        model=resolved_model,
+        max_tokens=resolved_max_tokens,
+        max_iterations=resolved_max_iterations,
+    )

@@ -18,7 +18,7 @@
 > `[AI Insight]` summaries back on the mesh. Install with `meshsa[inference]`. Config via
 > `MESHSA_INFERENCE_*` env vars (12 fields incl. `backoff_base`, `insight_prefix`). Hardened:
 > lazy aiohttp, session reuse with `asyncio.Lock`, feedback-loop prevention, configurable
-> backoff, lifecycle guards, injectable sleep for testability. 747 tests at 99.74% cov.
+> backoff, lifecycle guards, injectable sleep for testability. 780 tests at 99.48% cov.
 
 - [x] **MVP**: `NemotronClient` + `InferenceService` + `NemotronConfig` + `InferenceResult`
 - [x] **Env-var bindings**: 12 `MESHSA_INFERENCE_*` vars in `NodeConfig.from_env()` (incl.
@@ -183,13 +183,13 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
       Fixed: the recv loop now closes the wedged socket, rebuilds via the factory, and backs off.
 - [ ] **[consistency] `FlightLogger.dropped_records` omits the `"events"`/`"frames"` keys**
       (`fpv/flight_logger.py`) so the manifest omits a `0` for them (cosmetic).
-- [ ] **[consistency] Duplicate `MonotonicClock` classes** (`protocols.py` vs `fpv/protocols.py`);
+- [x] **[consistency] Duplicate `MonotonicClock` classes** (`protocols.py` vs `fpv/protocols.py`);
       deduplicate by importing the framework-level `MonotonicClock` in the FPV subsystem.
-- [ ] **[config] `FpvSettings` and `CommanderConfig` lack `from_env()` with individual bindings**
+- [x] **[config] `FpvSettings` and `CommanderConfig` lack `from_env()` with individual bindings**
       — operators must use the JSON blob for non-`sessions_root` fields.
-- [ ] **[DI] `FlightLogger._writer()` calls `time.monotonic()` directly** instead of the injected
+- [x] **[DI] `FlightLogger._writer()` calls `time.monotonic()` directly** instead of the injected
       `Clock` — flush-interval timing is untestable via `FakeClock`.
-- [ ] **[config] `llm/server.py` `MAX_PROMPT_CHARS` and `llm/agent.py` `DEFAULT_MAX_TOKENS`/
+- [x] **[config] `llm/server.py` `MAX_PROMPT_CHARS` and `llm/agent.py` `DEFAULT_MAX_TOKENS`/
       `DEFAULT_MAX_ITERATIONS`** have no env-var bindings.
 - [ ] **[robustness] guard unguarded teardown/parse paths:** `camera.py close()` source close,
       `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions.

@@ -24,7 +24,6 @@ import os
 import queue
 import subprocess
 import threading
-import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import asdict
@@ -282,13 +281,13 @@ class FlightLogger:
             )
 
     def _writer(self) -> None:
-        last_flush = time.monotonic()
+        last_flush = self._clock.now()
         while True:
             try:
                 item = self._queue.get(timeout=self._s.flush_every_s)
             except queue.Empty:
                 self._flush()
-                last_flush = time.monotonic()
+                last_flush = self._clock.now()
                 continue
             if item is _SENTINEL:
                 self._queue.task_done()
@@ -305,9 +304,9 @@ class FlightLogger:
                 _log.exception("logger write failed; dropping record", stream=stream)
             finally:
                 self._queue.task_done()
-            if time.monotonic() - last_flush >= self._s.flush_every_s:
+            if self._clock.now() - last_flush >= self._s.flush_every_s:
                 self._flush()
-                last_flush = time.monotonic()
+                last_flush = self._clock.now()
         self._flush()
 
     def _flush(self) -> None:
