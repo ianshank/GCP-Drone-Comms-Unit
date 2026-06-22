@@ -244,3 +244,17 @@ def test_from_file_nonexistent_raises(tmp_path):
     missing = str(tmp_path / "does_not_exist.json")
     with pytest.raises(FileNotFoundError):
         NodeConfig.from_file(missing)
+
+
+def test_nemotron_config_constraints():
+    from pydantic import ValidationError
+
+    from meshsa.config import NemotronConfig
+
+    # backoff_base < 1.0 raises ValidationError
+    with pytest.raises(ValidationError, match="backoff_base"):
+        NemotronConfig(backoff_base=0.9)
+
+    # insight_prefix empty raises ValidationError
+    with pytest.raises(ValidationError, match="insight_prefix"):
+        NemotronConfig(insight_prefix="")

@@ -218,6 +218,8 @@ class InferenceService:
             )
             await self.router.publish(reply)
             _log.info("inference_published", original_id=envelope.msg_id, reply_id=reply.msg_id)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             _log.warning("inference_task_failed", exc_info=True)
 

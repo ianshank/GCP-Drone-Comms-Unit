@@ -59,8 +59,8 @@ class NemotronConfig(BaseModel):
     max_tokens: int = 512
     timeout_s: float = 30.0
     max_retries: int = 3
-    backoff_base: float = 2.0
-    insight_prefix: str = "[AI Insight]"
+    backoff_base: float = Field(default=2.0, ge=1.0)
+    insight_prefix: str = Field(default="[AI Insight]", min_length=1)
 
 
 class HealthConfig(BaseModel):

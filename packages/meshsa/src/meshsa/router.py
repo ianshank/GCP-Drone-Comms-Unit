@@ -105,6 +105,8 @@ class Router:
             for handler in list(self._subscribers):
                 try:
                     await _maybe_await(handler(envelope))
+                except asyncio.CancelledError:
+                    raise
                 except Exception:  # a failing subscriber must not crash the pump
                     _log.warning("subscriber raised", exc_info=True)
             for transport in self.transports:
