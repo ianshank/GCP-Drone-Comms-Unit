@@ -49,6 +49,13 @@
       (detect=drop-and-count, egress=best-effort, **publish=fail-loud**), `--health-check`.
 - [x] **Deploy glue** (this iteration): `flightctl/systemd/jetson-yolo-gcs.service` + deploy
       note; pipeline runtime counters + **liveness** snapshot (`fps` ≠ liveness during a stall).
+- [x] **Detection → CoT MARKER bridge (Phase A, meshsa side):** a separate detector process
+      sends one JSON detection frame per object over UDP to the new `detection_ingest` source
+      transport; the new `detection` codec maps it to a `MessageKind.MARKER` Envelope and
+      `CotCodec` gained a real MARKER encode path (configurable `marker_type`, class+confidence
+      in `<contact>`/`<remarks>`). `meshsa.cv.geo` does the pure pixel→ground projection. Config:
+      `flightctl/configs/jetson_gateway.yolo.json`. Hardware-free + fully tested. **Remaining:**
+      the DeepStream/YOLO11 device pieces (install, FP16 engine, pyds probe) — later phases.
 - [ ] **Real Hailo-8 `.hef` inference** (preferred offload; TensorRT GPU is the fallback).
       `.pt`→ONNX→`.hef` is built on an **x86 Ubuntu host only** (Hailo DFC is not ARM); the
       `.hef` is an offline artifact. Add a `[hailo]` extra + model-prep note.
@@ -79,18 +86,25 @@
 > [CHARTER.md](CHARTER.md) §3 supervised-commanding carve-out (ratified 2026-06-16). The
 > MAVLink plumbing is the easy part; the work is the safety/auth/audit layer. Sequence this
 > **after** M2 hardening — do not ship a command surface before TLS + auth land.
+>
+> **⚠️ Status (2026-06-30): the command stack is IMPLEMENTED and unit-tested** — `meshsa.command.*`
+> (commands/config/safety/audit/health/lifecycle/mavlink_link/mavlink_pump/service/errors) + nine
+> `tests/test_command_*.py` + `flightctl/run_commander.py`. The design adopted the standalone
+> **supervised service** structure (`run_commander.py`), not the registry-`mavlink_sink` seam (see
+> the design doc §10 amendment). **The M2-gate clearance is a maintainer decision** — see
+> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) Track E.
 - [x] **Scope ratified** in [CHARTER.md](CHARTER.md) (2026-06-16): whitelist safe commands first
       (SET_MODE, RTL) before destructive ones (force-disarm). Maintainer sign-off recorded.
-- [ ] **Command path via the registry:** add a write-capable `mavlink_sink`
-      transport + command codec (no router/node edits). Reuse `mavlink2rest` (`:8088`)
-      or pymavlink. Prefer `COMMAND_INT` for positional commands; confirm via
-      `COMMAND_ACK`/`MAV_RESULT` with bounded retries on missing ACK.
-      ([command](https://mavlink.io/en/services/command.html) /
-      [mission](https://mavlink.io/en/services/mission.html) specs)
-- [ ] **Safety layer (the real work):** operator-confirmation gate, command
-      authentication, full audit log, and `health_all_ok`-style preconditions before
-      arm. Note `MAV_CMD_COMPONENT_ARM_DISARM` param2=`21196` **force-bypasses
-      interlocks incl. in-flight disarm** — gate it explicitly.
+- [x] **Command path (standalone service, not registry seam):** `flightctl/run_commander.py`
+      owns a pymavlink link; `COMMAND_INT`/`COMMAND_LONG` packing in `command/mavlink_link.py`,
+      ACK/retry state machine in `command/lifecycle.py` with bounded retries + fail-closed.
+      (Design §10 documents why the `mavlink_sink` registry seam did not hold for MAVLink.)
+- [x] **Safety layer:** operator-confirmation gate (`command/safety.py` `ConfirmationGate`),
+      `MESHSA_CMD_TOKEN` bearer auth + loopback-default bind (`run_commander.py`), append-only
+      fsync-durable audit log (`command/audit.py` `JsonlAuditLog`), and `arm_allowed()` +
+      `HeartbeatHealth` preconditions. `MAV_CMD_COMPONENT_ARM_DISARM` param2=`21196` force path is
+      off by default behind a **separate** force confirmation. **Remaining (Track E):** audit-soak
+      under sustained overflow; confirm whitelist defaults; review off-loopback bind vs M2 TLS.
       ([ArduPilot](https://ardupilot.org/dev/docs/mavlink-arming-and-disarming.html))
 - [ ] ⚠️ `mavlink2rest` on `:8088` is a bidirectional command surface with **no
       built-in auth or interlock** ([mavlink2rest](https://github.com/mavlink/mavlink2rest));
@@ -102,20 +116,19 @@
 ## Near-term (M2 hardening)
 - [ ] **Automated FTS e2e** (non-coverage job): bring up FTS in CI on a self-hosted Jetson
       runner; assert a track via the FTS REST API and a multicast CoT listener.
-- [ ] **TLS CoT (`:8089`)** for `TakTcpTransport` (currently plaintext) + signed ATAK
-      data-package / cert generation flow; document the client import. Keep plain `:8087`
-      for closed dev nets. Follow PyTAK conventions: `tls://` scheme + `PYTAK_TLS_CLIENT_CERT`
-      ([PyTAK config](https://pytak.readthedocs.io/en/stable/configuration/)); generate the
-      FTS CA→server→per-user PKI with an `AtakOfTheCerts`-style helper
-      ([ATAK-Certs](https://github.com/lennisthemenace/ATAK-Certs)).
-- [ ] **Pacing / rate-limit** to FTS (PyTAK-style **`FTS_COMPAT=1`**) so fast tracks aren't
-      dropped ([PyTAK](https://github.com/snstac/pytak)).
-- [ ] **Transport observability:** periodic rx-count / link-state structlog fields on
-      `mavlink_source` / `msp_source`; surface `dropped_inbox_full` per transport; export
-      `RouterMetrics` (Prometheus/JSON). Add a **Grafana dashboard** mapping the existing
-      `rx/tx/forwarded/dropped/reconnects` counters to the four golden signals
-      ([Google SRE](https://sre.google/sre-book/monitoring-distributed-systems/)). If the
-      gateway is ever run multi-process, set & **wipe `PROMETHEUS_MULTIPROC_DIR` between runs**
+- [x] **TLS CoT (`:8089`)** for the TAK TCP transport (shipped — `transports/tak.py`:
+      `tls://`/`ssl://`/`tcp://` scheme parsing, `_build_ssl_context`, CA + client cert/key,
+      8089 default; plain `:8087` kept for closed dev nets). **Remaining:** signed ATAK
+      data-package / `AtakOfTheCerts`-style CA→server→per-user PKI generation + client-import doc.
+- [x] **Pacing / rate-limit** to FTS (shipped — `transports/pacing.py`, 100% cov) so fast
+      tracks aren't dropped ([PyTAK](https://github.com/snstac/pytak)).
+- [x] **Transport observability:** shipped — per-transport `rx_frames` + throttled `"source rx"`
+      link-state log on `PollingSourceTransport`; `dropped_inbox_full` surfaced per transport;
+      `RouterMetrics.as_dict()` + `meshsa.render_prometheus` export (Prometheus/JSON) on an
+      opt-in `/metrics` route. **Remaining:** the **Grafana golden-signal dashboard** artifact
+      (`ops/observability/grafana/`, plan Track A.1) mapping `rx/tx/forwarded/dropped/reconnects`
+      to the four signals ([Google SRE](https://sre.google/sre-book/monitoring-distributed-systems/));
+      if ever multi-process, set & **wipe `PROMETHEUS_MULTIPROC_DIR` between runs**
       ([client_python](http://prometheus.github.io/client_python/multiprocess/)).
 - [x] **Pin FTS deps** in a constraints file (`flightctl/constraints/fts-constraints.txt`:
       `setuptools<81`, `requests`, `opentelemetry==1.20.0`) so `setup_fts.sh` is reproducible.
