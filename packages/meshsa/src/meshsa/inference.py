@@ -47,8 +47,12 @@ _DEFAULT_INSIGHT_PREFIX = "[AI Insight]"
 
 #: HTTP status that signals upstream rate limiting (retried with backoff).
 _HTTP_TOO_MANY_REQUESTS = 429
-#: First HTTP status considered an error response.
+#: First HTTP status considered an error response (4xx client errors).
 _HTTP_ERROR_FLOOR = 400
+#: First HTTP status considered a (retryable) server error (5xx).
+_HTTP_SERVER_ERROR_FLOOR = 500
+#: OpenAI-compatible chat-completions path appended to ``NemotronConfig.base_url``.
+_CHAT_COMPLETIONS_PATH = "/chat/completions"
 
 
 # ── Errors (neutral, transport-agnostic) ────────────────────────────────
@@ -102,7 +106,7 @@ class HttpTransport(Protocol):
 def _require_aiohttp() -> None:
     """Raise with an actionable message when aiohttp is absent."""
     if aiohttp is None:
-        raise RuntimeError(  # pragma: no cover — only when aiohttp absent
+        raise RuntimeError(
             "Nemotron inference requires aiohttp; install 'meshsa[inference]' "
             "or inject a custom HttpTransport"
         )
@@ -111,16 +115,35 @@ def _require_aiohttp() -> None:
 class AiohttpTransport:
     """Default :class:`HttpTransport` backed by a reused ``aiohttp`` session.
 
-    This is the only socket glue in the module: it owns the
+    This is the only socket-bound transport in the module: it owns the
     ``aiohttp.ClientSession`` (created lazily, reused across calls, guarded by an
     ``asyncio.Lock``) and maps ``aiohttp`` errors onto the neutral error model.
+
+    The session is built by ``session_factory``; the default builds a real
+    ``aiohttp.ClientSession`` (the lone ``# pragma: no cover`` socket glue), while
+    tests inject a fake factory so the reuse/lock/error-mapping logic is covered
+    without sockets.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, session_factory: Callable[[], Any] | None = None) -> None:
+        self._session_factory = session_factory
         self._session: Any | None = None
         self._session_lock: asyncio.Lock | None = None
 
-    async def post_json(  # pragma: no cover — real socket I/O
+    def _new_session(self) -> Any:
+        if self._session_factory is not None:
+            return self._session_factory()
+        return aiohttp.ClientSession()  # pragma: no cover — real socket I/O
+
+    async def _session_for_request(self) -> Any:
+        if self._session_lock is None:
+            self._session_lock = asyncio.Lock()
+        async with self._session_lock:
+            if self._session is None or self._session.closed:
+                self._session = self._new_session()
+            return self._session
+
+    async def post_json(
         self,
         url: str,
         *,
@@ -129,13 +152,7 @@ class AiohttpTransport:
         timeout_s: float,
     ) -> HttpResponse:
         _require_aiohttp()
-        if self._session_lock is None:
-            self._session_lock = asyncio.Lock()
-        async with self._session_lock:
-            if self._session is None or self._session.closed:
-                self._session = aiohttp.ClientSession()
-            session = self._session
-
+        session = await self._session_for_request()
         timeout = aiohttp.ClientTimeout(total=timeout_s)
         _log.debug("inference_http_request", url=url)
         try:
@@ -154,11 +171,13 @@ class AiohttpTransport:
         except aiohttp.ClientError as exc:
             raise InferenceTransportError(str(exc)) from exc
 
-    async def aclose(self) -> None:  # pragma: no cover — real socket I/O
+    async def aclose(self) -> None:
         if self._session_lock is None:
             self._session_lock = asyncio.Lock()
         async with self._session_lock:
-            if self._session is not None and not self._session.closed:
+            # All three logical outcomes are tested (none/open/already-closed); the
+            # residual arc coverage flags here is the async-with exception exit.
+            if self._session is not None and not self._session.closed:  # pragma: no branch
                 await self._session.close()
                 self._session = None
 
@@ -218,10 +237,12 @@ class NemotronClient:
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
         }
-        url = f"{self.config.base_url.rstrip('/')}/chat/completions"
+        url = f"{self.config.base_url.rstrip('/')}{_CHAT_COMPLETIONS_PATH}"
         retries = self.config.max_retries
 
-        for attempt in range(retries + 1):
+        # Every iteration returns or raises; the loop never falls through (the
+        # final raise below is defensive) — tell coverage not to expect that edge.
+        for attempt in range(retries + 1):  # pragma: no branch
             try:
                 resp = await self._transport.post_json(
                     url, headers=headers, json_body=payload, timeout_s=self.config.timeout_s
@@ -231,27 +252,40 @@ class NemotronClient:
                     _log.error("inference_error", error=str(exc), exc_info=True)
                     raise
                 _log.debug("inference_transport_retry", attempt=attempt, error=str(exc))
-                await self._sleep(self.config.backoff_base**attempt)
+                await self._sleep(self._backoff_delay(attempt))
                 continue
 
-            if resp.status == _HTTP_TOO_MANY_REQUESTS and attempt < retries:
-                _log.debug("inference_rate_limited", attempt=attempt)
-                await self._sleep(self.config.backoff_base**attempt)
-                continue
-            if resp.status >= _HTTP_ERROR_FLOOR:
+            status = resp.status
+            # Rate limiting and 5xx server errors are transient: retry with backoff.
+            if status == _HTTP_TOO_MANY_REQUESTS or status >= _HTTP_SERVER_ERROR_FLOOR:
                 if attempt < retries:
-                    _log.debug("inference_http_retry", attempt=attempt, status=resp.status)
-                    await self._sleep(self.config.backoff_base**attempt)
+                    _log.debug("inference_http_retry", attempt=attempt, status=status)
+                    await self._sleep(self._backoff_delay(attempt))
                     continue
-                _log.error("inference_http_error", status=resp.status)
-                raise InferenceHttpError(resp.status)
+                _log.error("inference_http_error", status=status, transient=True)
+                raise InferenceHttpError(status)
+            # Other 4xx (bad key, bad request) are not transient: fail fast.
+            if status >= _HTTP_ERROR_FLOOR:
+                _log.error("inference_http_error", status=status, transient=False)
+                raise InferenceHttpError(status)
 
-            data = resp.payload
-            content: str = data["choices"][0]["message"]["content"]
-            _log.debug("inference_success", reply_chars=len(content))
-            return InferenceResult(summary=content, raw_response=json.dumps(data))
+            return self._parse(resp.payload)
 
         raise InferenceError("inference failed after max retries")  # pragma: no cover
+
+    def _backoff_delay(self, attempt: int) -> float:
+        """Exponential backoff for ``attempt``, capped at ``backoff_max_s``."""
+        return min(self.config.backoff_base**attempt, self.config.backoff_max_s)
+
+    @staticmethod
+    def _parse(data: dict[str, Any]) -> InferenceResult:
+        """Extract the completion text, mapping a malformed body to InferenceError."""
+        try:
+            content: str = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise InferenceError("malformed completion payload") from exc
+        _log.debug("inference_success", reply_chars=len(content))
+        return InferenceResult(summary=content, raw_response=json.dumps(data))
 
     async def close(self) -> None:
         """Close the underlying transport, if any."""

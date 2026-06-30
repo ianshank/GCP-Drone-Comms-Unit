@@ -60,6 +60,7 @@ class NemotronConfig(BaseModel):
     timeout_s: float = 30.0
     max_retries: int = 3
     backoff_base: float = Field(default=2.0, ge=1.0)
+    backoff_max_s: float = Field(default=30.0, ge=0.0)
     insight_prefix: str = Field(default="[AI Insight]", min_length=1)
 
 
@@ -176,6 +177,7 @@ class NodeConfig(BaseModel):
             f"{prefix}INFERENCE_TIMEOUT_S": ("timeout_s", parse_float),
             f"{prefix}INFERENCE_MAX_RETRIES": ("max_retries", parse_int),
             f"{prefix}INFERENCE_BACKOFF_BASE": ("backoff_base", parse_float),
+            f"{prefix}INFERENCE_BACKOFF_MAX_S": ("backoff_max_s", parse_float),
             f"{prefix}INFERENCE_INSIGHT_PREFIX": ("insight_prefix", _str),
         }
         for env_key, (field, caster) in inference_scalars.items():

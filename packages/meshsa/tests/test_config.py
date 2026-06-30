@@ -99,6 +99,9 @@ def test_from_env_inference_all_fields():
         "MESHSA_INFERENCE_MAX_TOKENS": "256",
         "MESHSA_INFERENCE_TIMEOUT_S": "15.5",
         "MESHSA_INFERENCE_MAX_RETRIES": "5",
+        "MESHSA_INFERENCE_BACKOFF_BASE": "1.5",
+        "MESHSA_INFERENCE_BACKOFF_MAX_S": "12.0",
+        "MESHSA_INFERENCE_INSIGHT_PREFIX": "[AI]",
     }
     c = NodeConfig.from_env(env)
     assert c.inference.enabled is True
@@ -110,6 +113,9 @@ def test_from_env_inference_all_fields():
     assert c.inference.max_tokens == 256
     assert c.inference.timeout_s == pytest.approx(15.5)
     assert c.inference.max_retries == 5
+    assert c.inference.backoff_base == pytest.approx(1.5)
+    assert c.inference.backoff_max_s == pytest.approx(12.0)
+    assert c.inference.insight_prefix == "[AI]"
 
 
 @pytest.mark.parametrize(

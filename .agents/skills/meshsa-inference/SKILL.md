@@ -29,13 +29,17 @@ summaries back on the mesh. Install with `meshsa[inference]`. Keep the base inst
    with the standard precedence. New tunables (e.g. `min_interval_s`, `max_concurrent_requests`)
    are config fields with explicit defaults + env bindings — no literals.
 
-## Test-mock compatibility (known gotcha)
+## HTTP boundary (injectable transport — do not reintroduce aioresponses)
 
-The suite mocks the HTTP layer with `aioresponses`, which is sensitive to the installed
-`aiohttp` major (the `stream_writer` signature drifts). A narrow pin (`aiohttp<3.10`) is brittle
-and breaks the gate when the environment ships a newer `aiohttp` (plan Track 0.1). Prefer making
-the test double version-tolerant (lean on the injectable client seam / bump `aioresponses`)
-over chasing pins; keep the `inference` extra installable on current `aiohttp`.
+The network boundary is the injectable **`HttpTransport`** `Protocol` (`HttpResponse` + default
+socket-backed `AiohttpTransport`). The pure retry/backoff/parse logic lives in `NemotronClient`;
+the `asyncio.Lock`-guarded session reuse + error mapping live in `AiohttpTransport` (the only
+socket glue — testable via its injectable `session_factory`). **Unit-test against a fake**
+(`FakeHttpTransport` via the `make_transport` fixture) — never mock `aiohttp` internals. The old
+`aioresponses` mock coupled to `aiohttp` internals and broke on version drift; it and the
+`aiohttp<3.10` pin were removed (plan Track 0.1). Behaviour to preserve: non-429 4xx fail fast;
+429/5xx retry with **capped** backoff (`backoff_base`/`backoff_max_s`); failures surface as
+`InferenceTransportError`/`InferenceHttpError`; a malformed body raises `InferenceError`.
 
 ## Gates
 

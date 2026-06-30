@@ -68,13 +68,17 @@ pure state machine over `HttpResponse`/`InferenceTransportError` and is fully fa
 
 `analyze()` retry loop (config-driven, no literals):
 
-- **Transport error** (`InferenceTransportError` from timeout/connection): retry with
-  `backoff_base**attempt` sleep up to `max_retries`; on exhaustion, re-raise.
-- **HTTP 429:** retry with backoff while `attempt < max_retries`.
-- **HTTP ≥ 400 (incl. exhausted 429):** retry while budget remains, else **fail closed** with
-  `InferenceHttpError(status)`.
-- **2xx:** parse `choices[0].message.content`; malformed/empty bodies raise `KeyError`/
-  `IndexError` and are **not** retried (a bad shape is not a transient fault).
+- **Transport error** (`InferenceTransportError` from timeout/connection): retry up to
+  `max_retries`; on exhaustion, re-raise.
+- **HTTP 429 / 5xx (transient):** retry while `attempt < max_retries`; on exhaustion **fail
+  closed** with `InferenceHttpError(status)`.
+- **Other 4xx (e.g. 401 bad key — not transient):** **fail fast** with `InferenceHttpError(status)`
+  immediately; do not consume the retry budget.
+- **Backoff:** `min(backoff_base**attempt, backoff_max_s)` via the injectable `sleep` — capped to
+  avoid unbounded waits / thundering-herd.
+- **2xx:** parse `choices[0].message.content`; a malformed/empty body raises **`InferenceError`**
+  ("malformed completion payload"), not a raw `KeyError`/`IndexError`, and is **not** retried (a
+  bad shape is not a transient fault).
 
 Service: own-source messages and `insight_prefix`-prefixed messages are dropped (feedback-loop
 prevention); analysis runs in a tracked background task; cancellation propagates, other failures
@@ -90,8 +94,9 @@ are logged and swallowed (one bad message never tears down the service).
 - `HttpTransport` (`Protocol`, runtime-checkable): `post_json(url, *, headers, json_body,
   timeout_s) -> HttpResponse`; `aclose()`. Implementations map native failures to
   `InferenceTransportError`.
-- `AiohttpTransport` — default; lazy `aiohttp`, reused session under `asyncio.Lock`; the only
-  `# pragma: no cover` glue.
+- `AiohttpTransport` — default; lazy `aiohttp`, reused session under `asyncio.Lock`, maps native
+  errors to the neutral model. Takes an injectable `session_factory` so the reuse/lock/error-map
+  logic is unit-tested; only real `aiohttp.ClientSession()` construction is `# pragma: no cover`.
 - `NemotronClient(config, *, sleep=asyncio.sleep, transport=None)` — pure logic; default
   transport is `AiohttpTransport`.
 - `InferenceService(..., *, transport=None)`; `build_node(..., inference_transport=None)`.
@@ -107,8 +112,9 @@ are logged and swallowed (one bad message never tears down the service).
 | `system_prompt` | tactical-summary prompt | system role text |
 | `temperature` / `max_tokens` | `0.6` / `512` | sampling |
 | `timeout_s` | `30.0` | per-request timeout |
-| `max_retries` | `3` | retry budget |
+| `max_retries` | `3` | retry budget (429/5xx/transport only) |
 | `backoff_base` | `2.0` (`>= 1.0`) | `delay = backoff_base**attempt` |
+| `backoff_max_s` | `30.0` (`>= 0.0`) | cap applied as `min(backoff_base**attempt, backoff_max_s)` |
 | `insight_prefix` | `[AI Insight]` (`min_length 1`) | feedback-loop marker |
 
 **Track-B additions (Definition):** `min_interval_s`, `max_concurrent_requests` (rate limiting);

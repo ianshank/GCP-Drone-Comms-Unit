@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `InferenceTransportError`, instead of leaking `aiohttp`-typed exceptions to callers.
   Backwards-compatible: existing callers that pass no `transport` are unaffected. Debug-level
   structured logs were added around the request/retry path.
+- **Inference retry hardening.** Non-429 4xx (e.g. a bad API key → 401) now **fail fast**
+  instead of burning the whole retry budget; 429 and 5xx still retry. Backoff is **capped** by
+  a new `NemotronConfig.backoff_max_s` field (default 30 s, env `MESHSA_INFERENCE_BACKOFF_MAX_S`)
+  to avoid unbounded sleeps. A malformed completion body now raises `InferenceError`
+  ("malformed completion payload") rather than a raw `KeyError`/`IndexError`, so callers catch a
+  single error hierarchy. `AiohttpTransport` gained an injectable `session_factory` so its
+  session-reuse/error-mapping logic is unit-tested (only real `aiohttp.ClientSession`
+  construction remains `# pragma: no cover`).
 - **Object-detection → CoT marker bridge (Phase A of the DeepStream/YOLO11 work).** A
   detector process (DeepStream/YOLO11, separate process) sends one JSON detection frame per
   tracked object over UDP to the new `detection_ingest` source transport; the new
@@ -72,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Injectable clock in `FlightLogger`**: Replaced direct `time.monotonic()` calls inside the flight logger writer thread with the injected `self._clock.now()` to allow deterministic testing via `FakeClock`.
 
 ### Migration (already-merged commanding changes worth calling out)
+- **`NemotronClient.analyze` no longer raises `aiohttp`-typed exceptions.** A caller that
+  previously caught `aiohttp.ClientError`/`ClientResponseError` (or `KeyError`/`IndexError` on a
+  malformed body) should now catch the `meshsa.InferenceError` hierarchy
+  (`InferenceTransportError` for network/timeout, `InferenceHttpError(.status)` for HTTP errors,
+  `InferenceError` for a malformed payload). Nothing in-repo caught the old types, so this is
+  internal-only; external callers should migrate their `except` clauses.
 - `MavlinkCommandLink.start()` is **required** before `send()`/`recv_ack()` (signing is
   configured in `start()`; sending first would transmit unsigned frames). The
   production path (`MavlinkCommandPump.start()` → `link.start()`) already does this.
