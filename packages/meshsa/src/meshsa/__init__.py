@@ -19,7 +19,17 @@ from .errors import (
     UnknownComponentError,
 )
 from .health import health_snapshot
-from .inference import InferenceResult, InferenceService, NemotronClient
+from .inference import (
+    AiohttpTransport,
+    HttpResponse,
+    HttpTransport,
+    InferenceError,
+    InferenceHttpError,
+    InferenceResult,
+    InferenceService,
+    InferenceTransportError,
+    NemotronClient,
+)
 from .metrics import RouterMetrics, render_prometheus
 from .models import (
     Attitude,
@@ -111,4 +121,10 @@ __all__ = [
     "InferenceResult",
     "NemotronClient",
     "InferenceService",
+    "HttpTransport",
+    "HttpResponse",
+    "AiohttpTransport",
+    "InferenceError",
+    "InferenceTransportError",
+    "InferenceHttpError",
 ]

@@ -8,11 +8,14 @@ avoid drift. When editing inside a subfolder, also read the nearest scoped
 
 **Reading order to stay on track: [docs/CHARTER.md](docs/CHARTER.md) →
 [docs/ROADMAP.md](docs/ROADMAP.md) → the nearest scoped `AGENTS.md` →
-[docs/NEXTSTEPS.md](docs/NEXTSTEPS.md).** CHARTER is the stable scope/non-goals + invariants
-that must not drift; ROADMAP is the stable milestone trajectory. Both change rarely and only
-by deliberate decision — put changeable, near-term to-dos in NEXTSTEPS, not in either.
-Architecture detail lives in [docs/C4.md](docs/C4.md) and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+[docs/NEXTSTEPS.md](docs/NEXTSTEPS.md) → [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
+→ the relevant [docs/specs/](docs/specs/) spec.** CHARTER is the stable scope/non-goals +
+invariants that must not drift; ROADMAP is the stable milestone trajectory. Both change rarely
+and only by deliberate decision — put changeable, near-term to-dos in NEXTSTEPS, not in either.
+The IMPLEMENTATION_PLAN sequences *how* the remaining work lands (spec-driven); every
+roadmap/initiative feature gets a committed spec under `docs/specs/` before code (see
+[docs/specs/README.md](docs/specs/README.md)). Architecture detail lives in
+[docs/C4.md](docs/C4.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Repository Map
 
 | Path | Scope |
@@ -87,9 +90,14 @@ not run. CI should keep mypy required, not advisory.
 
 Use these playbooks when the task matches their trigger words:
 
+- [.agents/skills/spec-driven-change/SKILL.md](.agents/skills/spec-driven-change/SKILL.md)
 - [.agents/skills/meshsa-add-transport/SKILL.md](.agents/skills/meshsa-add-transport/SKILL.md)
 - [.agents/skills/meshsa-add-codec/SKILL.md](.agents/skills/meshsa-add-codec/SKILL.md)
 - [.agents/skills/meshsa-schema-version-bump/SKILL.md](.agents/skills/meshsa-schema-version-bump/SKILL.md)
+- [.agents/skills/meshsa-commanding-safety/SKILL.md](.agents/skills/meshsa-commanding-safety/SKILL.md)
+- [.agents/skills/meshsa-observability/SKILL.md](.agents/skills/meshsa-observability/SKILL.md)
+- [.agents/skills/meshsa-inference/SKILL.md](.agents/skills/meshsa-inference/SKILL.md)
+- [.agents/skills/jetson-perception/SKILL.md](.agents/skills/jetson-perception/SKILL.md)
 - [.agents/skills/meshsa-test-conventions/SKILL.md](.agents/skills/meshsa-test-conventions/SKILL.md)
 - [.agents/skills/ops-deploy-base-node/SKILL.md](.agents/skills/ops-deploy-base-node/SKILL.md)
 - [.agents/skills/pre-pr-validator/SKILL.md](.agents/skills/pre-pr-validator/SKILL.md)
@@ -100,5 +108,7 @@ The focused modes in [.github/agents](.github/agents) are optional helpers for
 larger tasks:
 
 - `meshsa-framework.agent.md` for framework implementation.
+- `meshsa-perception.agent.md` for `jetson_yolo_gcs` perception changes.
+- `meshsa-commanding.agent.md` for the supervised command path (safety layer foregrounded).
 - `meshsa-ops.agent.md` for deployment/runbook changes.
 - `meshsa-review.agent.md` for review and risk analysis.

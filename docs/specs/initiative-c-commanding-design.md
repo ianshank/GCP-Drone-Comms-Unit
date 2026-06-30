@@ -1,7 +1,20 @@
-# Initiative C — Supervised Two-Way Commanding (Design Only)
+# Initiative C — Supervised Two-Way Commanding (Design + Status)
 
-> **Status: DESIGN / NOT IMPLEMENTED.** This is governance documentation for a
-> **ratified-but-gated** initiative. It defines *how* a bounded, human-supervised
+> **⚠️ STATUS UPDATE (2026-06-30): the command path is IMPLEMENTED and unit-tested.**
+> The original "design only / not implemented" framing below is now historically inaccurate
+> for the *code* — the full stack exists: `meshsa.command.{commands,config,safety,audit,health,`
+> `lifecycle,mavlink_link,mavlink_pump,service,errors}` with nine `tests/test_command_*.py`
+> files, plus the `flightctl/run_commander.py` HTTP glue (loopback-default bind, `MESHSA_CMD_TOKEN`
+> bearer auth, fail-closed off-loopback, four endpoints). **The §4 safety design below still
+> governs** and must not be relaxed. What remains is a *governance decision*, not a build:
+> ROADMAP marks Initiative C "ratified, gated on M2," and the M2 auth/TLS building blocks have
+> since shipped — **whether the GATE below is formally cleared is a maintainer decision
+> (CHARTER §6).** Until that ruling, treat the GATE as in force: no command surface ships
+> off-loopback without the M2 auth/TLS layer in front of it. See
+> [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) Track 0.2 / Track E.
+
+> **Original status (historical): DESIGN / NOT IMPLEMENTED.** This is governance documentation
+> for a **ratified-but-gated** initiative. It defines *how* a bounded, human-supervised
 > command path would be built so that the safety layer is designed before any code
 > exists — it does **not** authorize shipping code. Reading order for an agent
 > picking up this area: [CHARTER.md](../CHARTER.md) §3 (supervised-commanding

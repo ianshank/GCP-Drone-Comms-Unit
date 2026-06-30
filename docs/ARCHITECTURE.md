@@ -66,11 +66,17 @@ The node optionally attaches services that are out of the hot path:
 - **`meshsa.llm`**: read-only situational-awareness assistant over telemetry + TAK tracks.
 - **`meshsa.inference`**: NVIDIA Nemotron NIM AI bridge — subscribes to Router messages,
   sends traffic to the NIM API for tactical analysis, and broadcasts AI insight summaries
-  (configurable prefix via `NemotronConfig.insight_prefix`). Thread-safe session management
-  via `asyncio.Lock`; configurable retry backoff (`backoff_base`); injectable `sleep` for
-  testability. Lazy-imports `aiohttp`; install with `[inference]`. All config via
-  `MESHSA_INFERENCE_*` environment variables (12 fields). Feedback-loop safe: messages
-  matching the configured insight prefix are never re-analyzed.
+  (configurable prefix via `NemotronConfig.insight_prefix`). The HTTP boundary is an injectable
+  `HttpTransport` `Protocol` (`HttpResponse` + the default socket-backed `AiohttpTransport`,
+  which owns the reused `asyncio.Lock`-guarded session and maps native errors to the neutral
+  model); the `NemotronClient` retry/backoff/parse logic is pure and fake-tested (no sockets,
+  no `aiohttp`-version coupling). Backoff is exponential and **capped**
+  (`backoff_base`/`backoff_max_s`); **non-429 4xx fail fast** while 429/5xx retry; failures
+  surface as `InferenceTransportError`/`InferenceHttpError` (both `MeshSAError`), and a
+  malformed completion body raises `InferenceError`, never a raw `KeyError`. Injectable `sleep`
+  for testability. Lazy-imports `aiohttp`; install with `[inference]`. All config via
+  `MESHSA_INFERENCE_*` environment variables (13 fields incl. `backoff_max_s`). Feedback-loop
+  safe: messages matching the configured insight prefix are never re-analyzed.
 
 ### Resilient subscriber dispatch
 The router's `_pump` wraps each subscriber callback in `try/except`: a failing subscriber

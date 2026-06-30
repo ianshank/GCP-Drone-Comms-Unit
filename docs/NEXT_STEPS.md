@@ -1,5 +1,11 @@
 # Next Steps
 
+> **⚠️ SUPERSEDED — do not treat as current.** This file (`docs/NEXT_STEPS.md`, with the
+> underscore) is a small, stale duplicate. The canonical backlog is
+> [NEXTSTEPS.md](NEXTSTEPS.md) and the execution plan is
+> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Content below is kept for history only and may
+> be inaccurate (e.g. the "integration complete" framing predates the current baseline scan).
+
 With the NVIDIA Nemotron Ultra integration complete and the technical debt resolved, the following areas represent the next phases of project maturity:
 
 ## 1. Field Testing & Hardware Integration
