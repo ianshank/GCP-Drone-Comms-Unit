@@ -26,7 +26,13 @@
 - [x] **Hardening**: lazy aiohttp import, `_require_aiohttp()` guard, session reuse with
       `asyncio.Lock`, feedback-loop filter (configurable `insight_prefix`), lifecycle flags,
       API key warning, configurable backoff via `backoff_base`, injectable `sleep`
-- [x] **CI**: `meshsa[dev,inference]` install, `aioresponses` mock, 24 inference tests
+- [x] **CI**: `meshsa[dev,inference]` install, 30 inference tests (fakes-only)
+- [x] **Version-robust test gate (Track 0.1)**: the HTTP boundary is now an injectable
+      `HttpTransport` `Protocol` (`HttpResponse` + default `AiohttpTransport`); unit tests use a
+      pure `FakeHttpTransport` (no `aiohttp`/sockets), so the suite no longer breaks on `aiohttp`
+      version drift. The brittle `aiohttp<3.10` pin and `aioresponses` were removed; persistent
+      non-2xx → `InferenceHttpError`, transport/timeout → `InferenceTransportError`.
+      Spec: [specs/initiative-e-inference.md](specs/initiative-e-inference.md). `inference.py` 100% cov.
 - [ ] **Local rate limiting**: add `min_interval_s`/`max_concurrent_requests` to prevent
       API spend spikes when many mesh messages arrive rapidly
 - [ ] **Structured response parsing**: parse NVIDIA API structured output instead of raw

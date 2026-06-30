@@ -34,6 +34,7 @@ Reading order for an agent picking up work:
 | [PHASE0_ERRATA.md](PHASE0_ERRATA.md) | FPV ground-side: half-duplex wiring + echo suppression (E1) | Implemented |
 | [PHASE1_SPEC_v1_1.md](PHASE1_SPEC_v1_1.md) | FPV telemetry ingest, link health, flight logger | Implemented (bench §8 pending → Validated) |
 | [initiative-c-commanding-design.md](initiative-c-commanding-design.md) | Supervised two-way commanding (safety/auth/audit/health) | **Implemented** (code shipped; M2-gate clearance is a maintainer decision — see banner) |
+| [initiative-e-inference.md](initiative-e-inference.md) | AI inference bridge (`meshsa.inference`) — Nemotron NIM + injectable HTTP-transport seam | **Implemented** (MVP + transport seam; Track-B hardening is Definition) |
 
 ## Specs to author (tracked in the implementation plan)
 
@@ -42,7 +43,6 @@ These are queued by [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md). Auth
 
 | Planned spec | Track | Purpose |
 | ------------ | ----- | ------- |
-| `initiative-e-inference.md` | B | Nemotron bridge MVP + rate-limit / structured-parse / multi-model / offline-fallback |
 | `initiative-d-perception.md` | C | `jetson_yolo_gcs` hardening — **precision-landing safety section is mandatory** |
 | `m3-richer-tracks.md` | D | SPI/FoV CoT + stable multi-UAS UIDs (M3.2; M3.1 already shipped additively) |
 | `detection-cot-bridge.md` (retro) | 0.2 | Back-fill the shipped detection→CoT MARKER bridge |

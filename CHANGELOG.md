@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Injectable `HttpTransport` seam for the inference layer (CHARTER §4.3/§4.4).** `meshsa`
+  now exports `HttpTransport` (a runtime-checkable `Protocol`), `HttpResponse`, the default
+  socket-backed `AiohttpTransport`, and neutral errors `InferenceError` /
+  `InferenceTransportError` / `InferenceHttpError`. `NemotronClient`, `InferenceService`, and
+  `build_node` accept an optional `transport=` (default unchanged: a reused `aiohttp` session).
+  The stateful HTTP I/O (session reuse under an `asyncio.Lock`, error mapping) now lives in the
+  transport — the only `# pragma: no cover` glue — while the retry/backoff/429/parse logic stays
+  pure and is 100%-covered with a fake. Persistent non-2xx responses now raise
+  `InferenceHttpError` (carrying `.status`) and transport/timeout failures raise
+  `InferenceTransportError`, instead of leaking `aiohttp`-typed exceptions to callers.
+  Backwards-compatible: existing callers that pass no `transport` are unaffected. Debug-level
+  structured logs were added around the request/retry path.
 - **Object-detection → CoT marker bridge (Phase A of the DeepStream/YOLO11 work).** A
   detector process (DeepStream/YOLO11, separate process) sends one JSON detection frame per
   tracked object over UDP to the new `detection_ingest` source transport; the new
@@ -22,7 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are later phases.
 
 ### Fixed
-- **CI/CD test failures on Python 3.12**: Capped `aiohttp` to `<3.10` to avoid `stream_writer` signature incompatibility with `aioresponses` mocks.
+- **Inference test gate no longer couples to an `aiohttp` version.** The suite mocked the HTTP
+  boundary with `aioresponses`, which reaches into `aiohttp` internals and broke whenever the
+  environment shipped `aiohttp >= 3.10` (`ClientResponse.__init__() missing … 'stream_writer'`).
+  The previous band-aid pin (`aiohttp >= 3.9, < 3.10`) was removed; the boundary is now an
+  injectable `HttpTransport` `Protocol` (see Added) and tests use a pure in-memory fake, so they
+  pass on any supported `aiohttp` (verified on 3.14). `aioresponses` is dropped from `dev`.
 - **CI/CD test failures on missing dependencies**: Added dynamic mocking of `sys.modules['anthropic']` in `test_build_agent_resolves_env_vars` to prevent import errors in environments without the `[llm]` extra.
 - **Mypy unused-ignore and call-arg warnings**: Dynamically imported `ultralytics` using `importlib.import_module` and cast `cv2.VideoCapture` to `Any` to resolve environment-dependent type check errors.
 

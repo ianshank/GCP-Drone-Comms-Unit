@@ -10,7 +10,7 @@ import structlog
 
 from .codec import JsonCodec
 from .config import NodeConfig
-from .inference import InferenceService
+from .inference import HttpTransport, InferenceService
 from .models import ChatPayload, Envelope, MessageKind, NodeInfo, PliPayload, Position
 from .protocols import Clock, Codec, IdFactory, SystemClock, Transport, UuidFactory
 from .registry import Registry, codec_registry, transport_registry
@@ -75,6 +75,7 @@ def build_node(
     registry: Registry[Transport] | None = None,
     transport_kwargs: dict[str, dict[str, object]] | None = None,
     codec_instances: dict[str, Codec] | None = None,
+    inference_transport: HttpTransport | None = None,
 ) -> Node:
     """Assemble a Node from config. Unknown transport types are skipped (not
     fatal), so a node tolerates configs written for newer/older builds.
@@ -124,6 +125,7 @@ def build_node(
             clock=clock,
             id_factory=id_factory,
             source_uid=info.uid,
+            transport=inference_transport,
         )
 
     return Node(

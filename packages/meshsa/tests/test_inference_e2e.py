@@ -1,6 +1,7 @@
 import asyncio
 
 from meshsa import (
+    HttpResponse,
     JsonCodec,
     LoopbackBus,
     LoopbackTransport,
@@ -10,7 +11,7 @@ from meshsa import (
 )
 
 
-async def test_inference_e2e_bridge(aio_mock):
+async def test_inference_e2e_bridge(make_transport):
     # Setup node with loopback transport and inference enabled
     cfg = NodeConfig.from_mapping(
         {
@@ -26,11 +27,19 @@ async def test_inference_e2e_bridge(aio_mock):
 
     bus = LoopbackBus()
     peer = LoopbackTransport(name="peer", bus=bus)
-    node = build_node(cfg, transport_kwargs={"mesh": {"bus": bus}})
-
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": [{"message": {"content": "Nemotron says hello"}}]},
+    # Inject the fake HTTP transport into the inference service the node builds.
+    inference_transport = make_transport(
+        [
+            HttpResponse(
+                status=200, payload={"choices": [{"message": {"content": "Nemotron says hello"}}]}
+            )
+        ],
+        repeat_last=True,
+    )
+    node = build_node(
+        cfg,
+        transport_kwargs={"mesh": {"bus": bus}},
+        inference_transport=inference_transport,
     )
 
     await node.start()

@@ -1,10 +1,23 @@
+"""Inference-layer tests.
+
+The HTTP boundary is exercised through an injected ``FakeHttpTransport`` (the
+``make_transport`` fixture) — pure, no ``aiohttp`` and no sockets — so these tests
+are independent of any ``aiohttp`` version. The retry/backoff/parse logic under
+test lives entirely in :class:`NemotronClient`; the real socket transport
+(:class:`AiohttpTransport`) is the only ``# pragma: no cover`` glue.
+"""
+
 import asyncio
 
 import pytest
 
 from meshsa import (
     Envelope,
+    HttpResponse,
+    HttpTransport,
+    InferenceHttpError,
     InferenceService,
+    InferenceTransportError,
     MessageKind,
     NemotronClient,
     NemotronConfig,
@@ -12,6 +25,15 @@ from meshsa import (
     UuidFactory,
 )
 from meshsa.inference import _DEFAULT_INSIGHT_PREFIX, _is_ai_insight, _require_aiohttp
+
+
+def _ok(content: str) -> HttpResponse:
+    """A 200 response shaped like the NIM chat-completions payload."""
+    return HttpResponse(status=200, payload={"choices": [{"message": {"content": content}}]})
+
+
+async def _noop_sleep(_delay: float) -> None:
+    """A sleep that records nothing and never yields wall-clock time."""
 
 
 @pytest.fixture
@@ -45,60 +67,68 @@ def mock_router():
 # ── NemotronClient ──────────────────────────────────────────────────────
 
 
-async def test_nemotron_client_success(aio_mock, env):
+async def test_nemotron_client_success(make_transport, env):
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
-    client = NemotronClient(cfg)
-
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": [{"message": {"content": "Test summary"}}]},
-    )
+    transport = make_transport([_ok("Test summary")])
+    client = NemotronClient(cfg, transport=transport)
 
     result = await client.analyze(env)
     assert result.summary == "Test summary"
+    # Request shape: signed bearer header + chat-completions endpoint.
+    call = transport.calls[0]
+    assert call["url"].endswith("/chat/completions")
+    assert call["headers"]["Authorization"] == "Bearer nvapi-test"
+    assert call["timeout_s"] == cfg.timeout_s
 
 
-async def test_nemotron_client_disabled(env):
+async def test_nemotron_client_satisfies_protocol(make_transport):
+    # The fake is a structural HttpTransport (runtime-checkable Protocol).
+    assert isinstance(make_transport([]), HttpTransport)
+
+
+async def test_nemotron_client_disabled(make_transport, env):
     cfg = NemotronConfig(enabled=False)
-    client = NemotronClient(cfg)
+    transport = make_transport([])
+    client = NemotronClient(cfg, transport=transport)
     result = await client.analyze(env)
     assert result.summary == ""
+    assert transport.calls == []  # short-circuits before any HTTP call
 
 
-async def test_nemotron_client_retry_on_429(aio_mock, env):
+async def test_nemotron_client_retry_on_429(make_transport, env):
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=1)
-    client = NemotronClient(cfg)
-
-    # First fails with 429, second succeeds
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        status=429,
-    )
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": [{"message": {"content": "Recovered"}}]},
-    )
+    transport = make_transport([HttpResponse(status=429, payload={}), _ok("Recovered")])
+    client = NemotronClient(cfg, sleep=_noop_sleep, transport=transport)
 
     result = await client.analyze(env)
     assert result.summary == "Recovered"
+    assert len(transport.calls) == 2
 
 
-async def test_nemotron_client_timeout(aio_mock, env):
+async def test_nemotron_client_persistent_429_raises(make_transport, env):
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=1)
+    transport = make_transport([HttpResponse(status=429, payload={}) for _ in range(2)])
+    client = NemotronClient(cfg, sleep=_noop_sleep, transport=transport)
+
+    with pytest.raises(InferenceHttpError) as exc:
+        await client.analyze(env)
+    assert exc.value.status == 429
+    assert len(transport.calls) == 2
+
+
+async def test_nemotron_client_timeout_propagates(make_transport, env):
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", timeout_s=0.1, max_retries=0)
-    client = NemotronClient(cfg)
+    transport = make_transport([InferenceTransportError("timed out")])
+    client = NemotronClient(cfg, transport=transport)
 
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions", exception=asyncio.TimeoutError()
-    )
-
-    with pytest.raises(asyncio.TimeoutError):
+    with pytest.raises(InferenceTransportError):
         await client.analyze(env)
 
 
 # ── InferenceService ────────────────────────────────────────────────────
 
 
-async def test_inference_service_publishes_chat(aio_mock, mock_router, env):
+async def test_inference_service_publishes_chat(make_transport, mock_router, env):
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
     svc = InferenceService(
         config=cfg,
@@ -106,11 +136,7 @@ async def test_inference_service_publishes_chat(aio_mock, mock_router, env):
         clock=SystemClock(),
         id_factory=UuidFactory(),
         source_uid="node-base",
-    )
-
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": [{"message": {"content": "Insightful observation"}}]},
+        transport=make_transport([_ok("Insightful observation")]),
     )
 
     svc.start()
@@ -158,7 +184,7 @@ async def test_inference_service_ignores_own_messages(mock_router):
     assert len(svc._bg_tasks) == 0  # Task was not spawned
 
 
-# ── NEW: AI insight feedback loop prevention ────────────────────────────
+# ── AI insight feedback loop prevention ─────────────────────────────────
 
 
 async def test_inference_service_ignores_ai_insights(mock_router):
@@ -222,7 +248,7 @@ def test_is_ai_insight_false_normal_chat():
     assert _is_ai_insight(env) is False
 
 
-# ── NEW: _running lifecycle guard ───────────────────────────────────────
+# ── _running lifecycle guard ────────────────────────────────────────────
 
 
 async def test_inference_service_ignores_after_stop(mock_router, env):
@@ -243,7 +269,7 @@ async def test_inference_service_ignores_after_stop(mock_router, env):
     assert len(svc._bg_tasks) == 0
 
 
-# ── NEW: double-start guard ────────────────────────────────────────────
+# ── double-start guard ──────────────────────────────────────────────────
 
 
 async def test_inference_service_double_start_no_duplicate_subscribe(mock_router):
@@ -260,7 +286,7 @@ async def test_inference_service_double_start_no_duplicate_subscribe(mock_router
     assert len(mock_router.handlers) == 1
 
 
-# ── NEW: missing API key logs warning and does not subscribe ────────────
+# ── missing API key logs warning and does not subscribe ─────────────────
 
 
 async def test_inference_service_missing_api_key_does_not_start(mock_router):
@@ -277,7 +303,7 @@ async def test_inference_service_missing_api_key_does_not_start(mock_router):
     assert svc._running is False
 
 
-# ── NEW: _require_aiohttp guard ─────────────────────────────────────────
+# ── _require_aiohttp guard ──────────────────────────────────────────────
 
 
 def test_require_aiohttp_passes_when_available():
@@ -285,26 +311,28 @@ def test_require_aiohttp_passes_when_available():
     _require_aiohttp()
 
 
-# ── Coverage gap fills ──────────────────────────────────────────────────
+# ── Transport-error and lifecycle coverage ──────────────────────────────
 
 
-async def test_nemotron_client_retries_on_client_error(aio_mock, env):
-    """ClientError on final attempt must propagate after logging."""
-    import aiohttp as _aiohttp
-
+async def test_nemotron_client_transport_error_propagates(make_transport, env):
+    """A transport error on the final attempt must propagate after logging."""
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=0)
-    client = NemotronClient(cfg)
+    transport = make_transport([InferenceTransportError("connection reset")])
+    client = NemotronClient(cfg, transport=transport)
 
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        exception=_aiohttp.ClientError("connection reset"),
-    )
-
-    with pytest.raises(_aiohttp.ClientError):
+    with pytest.raises(InferenceTransportError):
         await client.analyze(env)
 
 
-async def test_analyze_and_publish_empty_summary_noop(aio_mock, mock_router, env):
+async def test_close_delegates_to_transport(make_transport):
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
+    transport = make_transport([])
+    client = NemotronClient(cfg, transport=transport)
+    await client.close()
+    assert transport.closed is True
+
+
+async def test_analyze_and_publish_empty_summary_noop(make_transport, mock_router, env):
     """When the API returns an empty summary, no message should be published."""
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test")
     svc = InferenceService(
@@ -313,11 +341,7 @@ async def test_analyze_and_publish_empty_summary_noop(aio_mock, mock_router, env
         clock=SystemClock(),
         id_factory=UuidFactory(),
         source_uid="node-base",
-    )
-
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": [{"message": {"content": ""}}]},
+        transport=make_transport([_ok("")]),
     )
 
     svc.start()
@@ -332,10 +356,8 @@ async def test_analyze_and_publish_empty_summary_noop(aio_mock, mock_router, env
     assert len(mock_router.published) == 0
 
 
-async def test_analyze_and_publish_exception_logged(aio_mock, mock_router, env):
+async def test_analyze_and_publish_exception_logged(make_transport, mock_router, env):
     """When the API call fails, the exception should be caught and logged."""
-    import aiohttp as _aiohttp
-
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=0)
     svc = InferenceService(
         config=cfg,
@@ -343,11 +365,7 @@ async def test_analyze_and_publish_exception_logged(aio_mock, mock_router, env):
         clock=SystemClock(),
         id_factory=UuidFactory(),
         source_uid="node-base",
-    )
-
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        exception=_aiohttp.ClientError("boom"),
+        transport=make_transport([InferenceTransportError("boom")]),
     )
 
     svc.start()
@@ -363,10 +381,10 @@ async def test_analyze_and_publish_exception_logged(aio_mock, mock_router, env):
     assert len(mock_router.published) == 0
 
 
-async def test_nemotron_client_no_api_key_returns_empty(env):
+async def test_nemotron_client_no_api_key_returns_empty(make_transport, env):
     """When api_key is empty but enabled is True, analyze returns empty result."""
     cfg = NemotronConfig(enabled=True, api_key="")
-    client = NemotronClient(cfg)
+    client = NemotronClient(cfg, transport=make_transport([]))
     result = await client.analyze(env)
     assert result.summary == ""
     assert result.raw_response == ""
@@ -375,45 +393,44 @@ async def test_nemotron_client_no_api_key_returns_empty(env):
 # ── Server error and malformed response tests ───────────────────────────
 
 
-async def test_nemotron_client_500_error_raises(aio_mock, env):
-    """5xx server errors should propagate as ClientResponseError."""
-    import aiohttp as _aiohttp
-
+async def test_nemotron_client_500_error_raises(make_transport, env):
+    """5xx server errors should propagate as InferenceHttpError carrying the status."""
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=0)
-    client = NemotronClient(cfg)
+    transport = make_transport([HttpResponse(status=500, payload={})])
+    client = NemotronClient(cfg, transport=transport)
 
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        status=500,
-    )
-
-    with pytest.raises(_aiohttp.ClientResponseError):
+    with pytest.raises(InferenceHttpError) as exc:
         await client.analyze(env)
+    assert exc.value.status == 500
 
 
-async def test_nemotron_client_malformed_json_key_error(aio_mock, env):
-    """Missing 'choices' key in response should propagate as KeyError."""
+async def test_nemotron_client_500_retried_then_raised(make_transport, env):
+    """A retryable 5xx is retried up to the budget, then fails closed."""
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=1)
+    transport = make_transport([HttpResponse(status=500, payload={}) for _ in range(2)])
+    client = NemotronClient(cfg, sleep=_noop_sleep, transport=transport)
+
+    with pytest.raises(InferenceHttpError) as exc:
+        await client.analyze(env)
+    assert exc.value.status == 500
+    assert len(transport.calls) == 2  # one initial + one retry
+
+
+async def test_nemotron_client_malformed_json_key_error(make_transport, env):
+    """Missing 'choices' key in a 200 response should propagate as KeyError (no retry)."""
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=0)
-    client = NemotronClient(cfg)
-
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"error": "unexpected format"},
-    )
+    transport = make_transport([HttpResponse(status=200, payload={"error": "unexpected"})])
+    client = NemotronClient(cfg, transport=transport)
 
     with pytest.raises(KeyError):
         await client.analyze(env)
 
 
-async def test_nemotron_client_empty_choices_index_error(aio_mock, env):
-    """Empty 'choices' array in response should propagate as IndexError."""
+async def test_nemotron_client_empty_choices_index_error(make_transport, env):
+    """Empty 'choices' array in a 200 response should propagate as IndexError (no retry)."""
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=0)
-    client = NemotronClient(cfg)
-
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": []},
-    )
+    transport = make_transport([HttpResponse(status=200, payload={"choices": []})])
+    client = NemotronClient(cfg, transport=transport)
 
     with pytest.raises(IndexError):
         await client.analyze(env)
@@ -422,7 +439,7 @@ async def test_nemotron_client_empty_choices_index_error(aio_mock, env):
 # ── Injectable sleep and configurable backoff ─────────────────────────
 
 
-async def test_nemotron_client_uses_injectable_sleep_and_backoff_base(aio_mock, env):
+async def test_nemotron_client_uses_injectable_sleep_and_backoff_base(make_transport, env):
     """Custom sleep and backoff_base should be used during 429 retries."""
     sleeps: list[float] = []
 
@@ -430,21 +447,10 @@ async def test_nemotron_client_uses_injectable_sleep_and_backoff_base(aio_mock, 
         sleeps.append(delay)
 
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=2, backoff_base=3.0)
-    client = NemotronClient(cfg, sleep=fake_sleep)
-
-    # Fail twice with 429, then succeed
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        status=429,
+    transport = make_transport(
+        [HttpResponse(status=429, payload={}), HttpResponse(status=429, payload={}), _ok("Finally")]
     )
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        status=429,
-    )
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": [{"message": {"content": "Finally"}}]},
-    )
+    client = NemotronClient(cfg, sleep=fake_sleep, transport=transport)
 
     result = await client.analyze(env)
     assert result.summary == "Finally"
@@ -452,29 +458,43 @@ async def test_nemotron_client_uses_injectable_sleep_and_backoff_base(aio_mock, 
     assert sleeps == [1.0, 3.0]
 
 
-async def test_nemotron_client_injectable_sleep_on_transient_error(aio_mock, env):
+async def test_nemotron_client_injectable_sleep_on_transient_error(make_transport, env):
     """Injectable sleep should be used during transient error retries too."""
-    import aiohttp as _aiohttp
-
     sleeps: list[float] = []
 
     async def fake_sleep(delay: float) -> None:
         sleeps.append(delay)
 
     cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=1, backoff_base=2.0)
-    client = NemotronClient(cfg, sleep=fake_sleep)
-
-    # First attempt: transient error, second: success
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        exception=_aiohttp.ClientError("transient"),
-    )
-    aio_mock.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        payload={"choices": [{"message": {"content": "OK"}}]},
-    )
+    transport = make_transport([InferenceTransportError("transient"), _ok("OK")])
+    client = NemotronClient(cfg, sleep=fake_sleep, transport=transport)
 
     result = await client.analyze(env)
     assert result.summary == "OK"
     # backoff_base=2.0: sleep(2**0)=1.0
     assert sleeps == [1.0]
+
+
+async def test_analyze_and_publish_propagates_cancellation(mock_router, env):
+    """Cooperative cancellation must propagate, not be swallowed as a task failure."""
+
+    class _CancellingTransport:
+        async def post_json(self, url, *, headers, json_body, timeout_s):
+            raise asyncio.CancelledError
+
+        async def aclose(self) -> None:
+            pass
+
+    cfg = NemotronConfig(enabled=True, api_key="nvapi-test", max_retries=0)
+    svc = InferenceService(
+        config=cfg,
+        router=mock_router,
+        clock=SystemClock(),
+        id_factory=UuidFactory(),
+        source_uid="node-base",
+        transport=_CancellingTransport(),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await svc._analyze_and_publish(env)
+    assert mock_router.published == []

@@ -92,21 +92,20 @@ docs) and goes first.
 
 ### Track 0 — Make the baseline trustworthy (P0, do first)
 
-**0.1 Green the inference gate without a brittle pin.**
-- *Problem:* `aiohttp>=3.9,<3.10` (`pyproject.toml` ×3) is a band-aid that breaks the suite the
-  moment the environment ships a newer `aiohttp` (here 3.14.1) — exactly what happened. The
-  `aioresponses` mock's `stream_writer` signature changed across aiohttp majors.
-- *Spec:* back-fill a short inference test-harness note in the inference spec (0.2 below).
-- *Approach (no hardcoded brittleness):* widen the supported range and make the test mocks
-  version-tolerant — prefer adapting the `aioresponses` usage / bumping `aioresponses`, or
-  introduce a thin response-shim seam so the test double does not depend on aiohttp internals.
-  Keep the `inference` extra installable on current aiohttp.
-- *Invariants:* DI via `Protocol` (the HTTP client is already injectable — lean on that for the
-  test double); quality gates green.
-- *Tests:* the existing 9 must pass on the installed aiohttp; add one test asserting the client
-  works against the **declared minimum and a current** aiohttp (or document the matrix in CI).
-- *Backward-compat:* none on the wire; dependency-range widening only.
-- *Coverage:* restore `inference.py` to its prior ~99% line+branch.
+**0.1 Green the inference gate without a brittle pin. ✅ DONE (2026-06-30).**
+- *Problem (was):* `aiohttp>=3.9,<3.10` (`pyproject.toml` ×3) was a band-aid that broke the suite
+  the moment the environment shipped a newer `aiohttp` (3.14.1) — the `aioresponses` mock's
+  `ClientResponse` construction changed across aiohttp majors (`missing … 'stream_writer'`).
+- *What landed:* the HTTP boundary is now an injectable `HttpTransport` `Protocol` (`HttpResponse`
+  + default socket-backed `AiohttpTransport`; CHARTER §4.3/§4.4). `NemotronClient` /
+  `InferenceService` / `build_node` accept an optional `transport=`; unit tests inject a pure
+  `FakeHttpTransport` (no `aiohttp`, no sockets). The `<3.10` pin and `aioresponses` are removed.
+  Non-2xx → `InferenceHttpError(status)`; transport/timeout → `InferenceTransportError`. Debug
+  logging added on the request/retry path. Spec:
+  [specs/initiative-e-inference.md](specs/initiative-e-inference.md) (status Implemented).
+- *Result:* full suite **780 passed, 0 failed**; total coverage **99.09%**; `inference.py` **100%**
+  line+branch; `ruff`/`ruff format`/`mypy --strict` clean; `python -m build` green. Backwards-
+  compatible (callers passing no `transport` are unaffected).
 
 **0.2 Reconcile docs with shipped code (no scope change).**
 - Tick the shipped `[ ]` items in `NEXTSTEPS.md` (TLS, pacing, metrics, rx observability) and
@@ -116,8 +115,18 @@ docs) and goes first.
   `meshsa.command.*` and `flightctl/run_commander.py`. Do **not** alter the safety design.
 - Back-fill retro-specs (Implemented status) for: detection→CoT bridge, metrics/observability.
 - **Flag for human decision (CHARTER §6):** ROADMAP marks Initiative C "ratified, gated on M2."
-  M2's auth/TLS gate items are now shipped and the command stack exists — the maintainer should
-  decide whether the gate is formally cleared. This plan does **not** clear it unilaterally.
+  M2's *TLS CoT* item shipped solidly (`transports/tak.py` mutual TLS); the command stack exists.
+  But M2's gate is **transport/endpoint authentication**, and what actually exists is mutual TLS
+  on the TAK transport plus per-endpoint bearer tokens on only two HTTP surfaces (`meshsa.llm`
+  and the commander) — **not** transport-wide endpoint auth (e.g. Meshtastic relies on
+  link-layer PSK, not endpoint auth). A **full M2 transport/endpoint-authentication audit** —
+  enumerating every transport/surface and its actual auth posture — is itself a prerequisite
+  task here, **before** any maintainer gate-clearance decision. This plan does **not** clear the
+  gate unilaterally and does **not** assert transport-wide auth exists.
+- **Redundant backlog file:** `docs/NEXT_STEPS.md` (with the underscore) is a separate, small,
+  stale file that duplicates the canonical `docs/NEXTSTEPS.md` and still claims "NVIDIA Nemotron
+  Ultra integration complete." Consolidate it into `docs/NEXTSTEPS.md` (or delete it) so there is
+  a single canonical backlog.
 
 *Exit:* `pytest` green (0 failed), NEXTSTEPS reflects reality, no agent is misled by a stale
 "NOT IMPLEMENTED" header.
@@ -258,13 +267,20 @@ not a greenfield build:
 and that force-disarm (`param2=21196`) stays behind its separate confirmation + off-by-default
 flag — add/keep adversarial tests for "normal confirm must never release a force command."
 **E.3** Command-channel auth review against the M2 TLS posture before any non-loopback bind is
-documented for deployment. Keep `meshsa.llm` read-only.
+documented for deployment. The commander HTTP surface today has endpoint auth (bearer token,
+loopback-default, fail-closed) — as does `meshsa.llm` — but this is **per-endpoint** auth on two
+HTTP surfaces, not transport-wide M2 auth; the review is part of the full M2
+transport/endpoint-authentication audit (Track 0.2), not a settled posture. Keep `meshsa.llm`
+read-only.
 **E.4** Audit-log durability soak: assert the block-then-`LoggerOverflowError` contract holds
 under sustained overflow (never silently drops an audit record).
 
 > ⛔ No deployment exposes a command surface off-loopback without the M2 auth/TLS layer in
-> front of it. This plan does not change that gate — it documents that the *building blocks*
-> now exist and asks the maintainer to rule on clearance.
+> front of it. This plan does not change that gate. TLS CoT shipped on the TAK transport, and
+> endpoint auth exists for the `meshsa.llm` and commander HTTP surfaces (bearer token,
+> loopback-default, fail-closed) — but that is **not** transport-wide M2 auth. Before any
+> clearance the maintainer needs the full M2 transport/endpoint-authentication audit (Track 0.2);
+> this plan does not assert the auth building blocks are complete.
 
 ---
 
