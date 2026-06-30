@@ -57,4 +57,3 @@ hardware.
 - `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/{detection,streaming,mavlink,pipeline}.py`
 - `docs/specs/initiative-d-perception.md` (author from TEMPLATE before Track C work)
 - `docs/CHARTER.md` §3 perception carve-out
-</content>

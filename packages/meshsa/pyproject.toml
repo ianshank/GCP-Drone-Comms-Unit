@@ -62,6 +62,9 @@ dev = [
     "pytest-cov>=5",
     "pytest-asyncio>=0.23",
     "hypothesis>=6",
+    # aiohttp is needed by the test suite (AiohttpTransport + the _require_aiohttp
+    # success path), so `[dev]` alone can run the full suite without `[inference]`.
+    "aiohttp>=3.9",
     "ruff>=0.6",
     "mypy>=1.10",
     "pre-commit>=3.7",

@@ -51,4 +51,3 @@ These are queued by [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md). Auth
 | `m2-soak-fuzz.md` | A.3 | Soak/fuzz on real radios + MAVLink 2 signing research |
 | `m4-store-and-forward.md` | F.1 | Meshtastic store-and-forward (research semantics first) |
 | `m5-packaging.md` | F.2 | Reproducible multi-arch image + signed releases |
-</content>

@@ -103,4 +103,3 @@ Fakes-first, no hardware in unit tests. State the **coverage floor** for the new
 | 5 | Config-driven, no magic numbers | <§5 config table> |
 | 6 | Quality gates green; hardware glue is the only `# pragma: no cover` | <coverage floor> |
 | 7 | No secrets / machine fingerprints in repo | <deploy-time `*.env`/runtime config> |
-</content>

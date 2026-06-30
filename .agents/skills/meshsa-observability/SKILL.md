@@ -46,4 +46,3 @@ Run from `packages/meshsa`: `python -m pytest`, `mypy src`, `ruff check .`,
 - `packages/meshsa/src/meshsa/transports/polling_source.py` (`rx_frames`, link log)
 - `ops/observability/README.md`
 - Google SRE golden signals: https://sre.google/sre-book/monitoring-distributed-systems/
-</content>

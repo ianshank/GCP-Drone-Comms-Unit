@@ -38,4 +38,3 @@ a write path to a vehicle. The MAVLink plumbing is the easy part; the safety lay
 
 Return changed files, the verification run, which safety control each test exercises, and any
 residual risk to the safety/auth/audit guarantees.
-</content>

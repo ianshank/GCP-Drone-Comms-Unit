@@ -46,4 +46,3 @@ argument-hint: "The feature/initiative, the milestone or plan track, and the sea
 - `docs/specs/PHASE1_SPEC_v1_1.md` (worked example; code cites `§5.1` etc.)
 - `docs/IMPLEMENTATION_PLAN.md` (the queued specs to author)
 - `docs/CHARTER.md` §4 (the invariant checklist every spec answers)
-</content>

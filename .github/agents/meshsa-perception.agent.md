@@ -34,4 +34,3 @@ MAVLink `LANDING_TARGET`).
 ## Output Format
 
 Return changed files, the verification run, coverage on the safety files, and any residual risk.
-</content>

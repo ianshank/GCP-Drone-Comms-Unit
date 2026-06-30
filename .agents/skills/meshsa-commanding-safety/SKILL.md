@@ -56,4 +56,3 @@ plumbing is easy; the safety/auth/audit layer is the point. Never relax it to la
 - `flightctl/run_commander.py`
 - `packages/meshsa/tests/test_command_*.py`
 - `docs/specs/initiative-c-commanding-design.md` (§4 safety layer, §5 force gate, §10 amendment)
-</content>

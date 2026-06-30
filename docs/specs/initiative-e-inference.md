@@ -171,4 +171,3 @@ Fakes-first; **no `aiohttp`/sockets in unit tests** (a `FakeHttpTransport` injec
 | 5 | Config-driven, no magic numbers | All operational values are `NemotronConfig` fields with env bindings (§5). |
 | 6 | Quality gates; glue is the only `# pragma: no cover` | Only `AiohttpTransport`'s socket I/O is pragma'd; 100% elsewhere. |
 | 7 | No secrets in repo | `api_key` is deploy-time (`MESHSA_INFERENCE_API_KEY`), never committed. |
-</content>

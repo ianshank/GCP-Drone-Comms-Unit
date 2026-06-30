@@ -52,4 +52,3 @@ Run from `packages/meshsa` with the extra installed
 - `packages/meshsa/src/meshsa/inference.py`, `config.py` (`MESHSA_INFERENCE_*` bindings)
 - `packages/meshsa/tests/test_inference.py`, `test_inference_e2e.py`
 - `docs/specs/initiative-e-inference.md` (author from TEMPLATE before Track B work)
-</content>

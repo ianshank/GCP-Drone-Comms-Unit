@@ -386,5 +386,3 @@ the projection math has one home.
 - **Scope discipline:** mission/waypoint autonomy, swarm, and BVLOS stay out of scope pending a
   separate CHARTER §6 amendment. If an item seems to require expanding scope or relaxing an
   invariant, stop and surface it.
-</content>
-</invoke>
