@@ -82,8 +82,9 @@ class Pipeline:
         self.landing_target_published = 0
         #: LANDING_TARGET sends suppressed by the fail-closed heartbeat gate.
         self.landing_target_suppressed = 0
-        #: Successful publishes whose gap since the previous one fell below the cadence floor
-        #: (observability only — the loop cannot publish faster than detections arrive).
+        #: Successful publishes whose rate fell below the cadence floor — i.e. the interval
+        #: since the previous publish *exceeded* ``1 / min_publish_rate_hz`` (too slow, not too
+        #: fast). Observability only — the loop cannot publish faster than detections arrive.
         self.landing_target_cadence_violations = 0
         #: LANDING_TARGET publish attempts that raised (counted; escalates past tolerance).
         self.landing_target_publish_failures = 0
@@ -206,7 +207,9 @@ class Pipeline:
         self._note_publish_cadence()
 
     def _note_publish_cadence(self) -> None:
-        """Count a cadence violation when the gap since the last publish underran the floor."""
+        """Count a cadence violation when the interval since the last publish *exceeded* the
+        max allowed gap (``1 / min_publish_rate_hz``) — i.e. the publish rate fell below the floor.
+        """
         now = self._clock.now()
         if self._last_publish_t is not None and self._min_publish_rate_hz > 0:
             max_gap_s = 1.0 / self._min_publish_rate_hz

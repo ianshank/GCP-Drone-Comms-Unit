@@ -184,10 +184,12 @@ def test_poll_heartbeat_wildcard_accepts_any_source() -> None:
 
 
 def test_poll_heartbeat_noop_without_connection_or_gate() -> None:
-    # No connection -> nothing to read.
-    bridge = LandingTargetBridge(MavlinkSettings(enable_landing_target=True))
+    # Factory yields nothing -> the link can't open -> nothing to read (no real IO).
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True), connection_factory=lambda: None
+    )
     assert bridge.poll_heartbeat() is False
-    # Gate disabled -> poll is a no-op even with a connection.
+    # Gate disabled -> poll is a no-op even with a connection (never touches the link).
     conn = _FakeConn(heartbeats=[_FakeMsg()])
     bridge2 = LandingTargetBridge(
         MavlinkSettings(enable_landing_target=True, require_heartbeat=False),
@@ -195,6 +197,30 @@ def test_poll_heartbeat_noop_without_connection_or_gate() -> None:
     )
     assert bridge2.poll_heartbeat() is False
     assert conn.recv_calls == 0
+
+
+def test_poll_heartbeat_lazily_opens_link_via_factory() -> None:
+    # Gate on, connection never explicitly started: poll must open the link (via the factory)
+    # so heartbeats can be received and the gate can eventually open — not stay closed forever.
+    conn = _FakeConn(heartbeats=[_FakeMsg(src_system=1, src_component=1)])
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, target_system=1, target_component=1),
+        connection_factory=lambda: conn,
+    )
+    assert bridge.poll_heartbeat() is True  # lazily opened the link and consumed the beat
+    det, result = _result_with((90, 90, 110, 110))
+    assert bridge.publish(det, result) is True  # gate now open
+    assert len(conn.mav.calls) == 1
+
+
+def test_poll_heartbeat_swallows_link_open_error() -> None:
+    def _boom_factory() -> object:
+        raise OSError("cannot open link")
+
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True), connection_factory=_boom_factory
+    )
+    assert bridge.poll_heartbeat() is False  # open error swallowed, loop survives
 
 
 def test_poll_heartbeat_swallows_read_error() -> None:

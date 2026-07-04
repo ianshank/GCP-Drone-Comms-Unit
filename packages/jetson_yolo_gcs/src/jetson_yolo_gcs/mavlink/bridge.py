@@ -114,16 +114,23 @@ class LandingTargetBridge:
         """Non-blocking drain of a pending autopilot HEARTBEAT into the freshness gate.
 
         Returns ``True`` iff a heartbeat from the configured ``target_system``/
-        ``target_component`` (``0`` = wildcard) was consumed. A read error is swallowed (a
-        transient link fault must never kill the caller's loop); with the gate disabled or
-        no connection this is a no-op. Safe to call every pipeline step.
+        ``target_component`` (``0`` = wildcard) was consumed. With the gate disabled this is a
+        no-op; otherwise the link is opened lazily (idempotent) so heartbeats can actually be
+        received — without this, a factory-built bridge that was never explicitly started would
+        stay fail-closed forever. A link open/read error is swallowed (a transient fault must
+        never kill the caller's loop). Safe to call every pipeline step, and the pipeline calls
+        it *before* ``publish`` so the gate sees the freshest link state.
         """
-        if self._heartbeat is None or self._conn is None:
+        if self._heartbeat is None:
             return False
         try:
+            if self._conn is None:
+                self.start()
+            if self._conn is None:
+                return False
             msg = self._conn.recv_match(type="HEARTBEAT", blocking=False)
-        except Exception:  # noqa: BLE001 - a transient link read error must not kill the loop
-            _log.debug("heartbeat poll read error", exc_info=True)
+        except Exception:  # noqa: BLE001 - a transient link open/read error must not kill the loop
+            _log.debug("heartbeat poll error", exc_info=True)
             return False
         if msg is None or not self._is_target_heartbeat(msg):
             return False
