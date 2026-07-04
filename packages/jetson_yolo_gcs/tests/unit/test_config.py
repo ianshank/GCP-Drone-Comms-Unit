@@ -114,8 +114,14 @@ def test_publish_failure_tolerance_env_override(monkeypatch: pytest.MonkeyPatch)
     assert get_settings().pipeline.publish_failure_tolerance == 5
 
 
-def test_publish_failure_tolerance_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_publish_failure_tolerance_zero_is_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 0 = fail loud on the first failure (tolerate none); it is a valid, meaningful setting.
     monkeypatch.setenv("PIPELINE_PUBLISH_FAILURE_TOLERANCE", "0")
+    assert get_settings().pipeline.publish_failure_tolerance == 0
+
+
+def test_publish_failure_tolerance_rejects_negative(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_PUBLISH_FAILURE_TOLERANCE", "-1")
     with pytest.raises(ValidationError):
         get_settings()
 

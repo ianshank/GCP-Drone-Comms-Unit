@@ -27,10 +27,11 @@ from typing import Any
 import structlog
 
 from ..core.clock import Clock, SystemClock
-from ..core.config import MavlinkSettings
+from ..core.config import MavlinkSettings, PipelineSettings
 from ..core.errors import MavlinkError
 from ..detection.base import Detection, DetectionResult
-from .heartbeat import HeartbeatMonitor
+from ..utils.log_throttle import should_log_throttled
+from .heartbeat import HeartbeatMonitor, HeartbeatReport
 
 ConnectionFactory = Callable[[], Any]
 
@@ -39,14 +40,9 @@ _log = structlog.get_logger("jetson_yolo_gcs.mavlink.bridge")
 #: MAV_FRAME_BODY_FRD — angles are relative to the vehicle body (forward-right-down).
 _MAV_FRAME_BODY_FRD = 12
 
-#: Emit the "suppressed; no fresh heartbeat" warning on the 1st suppression and every Nth
-#: thereafter, so a persistently silent autopilot link never floods the log at detection rate.
-_SUPPRESSED_LOG_EVERY = 100
-
-
-def _should_log_suppressed(count: int) -> bool:
-    """True on the 1st suppression and every :data:`_SUPPRESSED_LOG_EVERY` thereafter."""
-    return count == 1 or count % _SUPPRESSED_LOG_EVERY == 0
+#: Default throttle for the "suppressed; no fresh heartbeat" warning (1st + every Nth), sourced
+#: from the same config default as the pipeline's drop-log throttle so operators tune one knob.
+_DEFAULT_LOG_EVERY: int = int(PipelineSettings.model_fields["drop_log_every"].default)
 
 
 def compute_angles(
@@ -87,7 +83,10 @@ class LandingTargetBridge:
         connection_factory: ConnectionFactory | None = None,
         clock: Clock | None = None,
         heartbeat: HeartbeatMonitor | None = None,
+        log_every: int = _DEFAULT_LOG_EVERY,
     ) -> None:
+        if log_every < 1:
+            raise ValueError(f"log_every must be >= 1, got {log_every}")
         self._settings = settings
         self._conn = connection
         self._factory = connection_factory or _default_connection_factory(settings)
@@ -101,9 +100,13 @@ class LandingTargetBridge:
             self._heartbeat = HeartbeatMonitor(max_age_s=settings.heartbeat_timeout_s)
         else:
             self._heartbeat = None
-        #: Rate-limit the "suppressed; no fresh heartbeat" warning so a silent link never
-        #: floods the log at detection rate (mirrors the pipeline's drop-log throttle).
+        #: Throttle interval for the "suppressed; no fresh heartbeat" warning (operator-tunable
+        #: via ``PIPELINE_DROP_LOG_EVERY``) so a silent link never floods the log at frame rate.
+        self._log_every = log_every
         self._suppressed_count = 0
+        #: Last observed gate freshness, for edge-triggered lost/reacquired logging (``None``
+        #: until the first observation). A fail-closed safety gate must announce transitions.
+        self._last_fresh: bool | None = None
 
     def start(self) -> None:
         """Open the MAVLink connection if one was not injected (idempotent)."""
@@ -123,19 +126,22 @@ class LandingTargetBridge:
         """
         if self._heartbeat is None:
             return False
+        consumed = False
         try:
             if self._conn is None:
                 self.start()
-            if self._conn is None:
-                return False
-            msg = self._conn.recv_match(type="HEARTBEAT", blocking=False)
-        except Exception:  # noqa: BLE001 - a transient link open/read error must not kill the loop
+            if self._conn is not None:
+                msg = self._conn.recv_match(type="HEARTBEAT", blocking=False)
+                # The target check + beat() read duck-typed message accessors, so they stay
+                # inside the guard: a malformed message must not kill the caller's loop either.
+                if msg is not None and self._is_target_heartbeat(msg):
+                    self._heartbeat.beat()
+                    consumed = True
+        except Exception:  # noqa: BLE001 - a transient link open/read/parse error must not kill the loop
             _log.debug("heartbeat poll error", exc_info=True)
-            return False
-        if msg is None or not self._is_target_heartbeat(msg):
-            return False
-        self._heartbeat.beat()
-        return True
+        # Monitor is non-None here (guarded at the top), so freshness is well-defined.
+        self._note_freshness_transition(self._heartbeat.is_fresh())
+        return consumed
 
     def _is_target_heartbeat(self, msg: Any) -> bool:
         """True when ``msg`` is a HEARTBEAT from the configured autopilot (``0`` = any)."""
@@ -144,6 +150,31 @@ class LandingTargetBridge:
         return (want_sys == 0 or msg.get_srcSystem() == want_sys) and (
             want_comp == 0 or msg.get_srcComponent() == want_comp
         )
+
+    def _note_freshness_transition(self, fresh: bool) -> None:
+        """Edge-triggered log on the gate's fresh<->stale transitions (safety-critical event).
+
+        Unlike the rate-limited suppression warning, this fires exactly once per transition so
+        the operator sees precisely when the autopilot link was acquired, lost, or reacquired.
+        """
+        if fresh == self._last_fresh:
+            return
+        if self._last_fresh is None:
+            if fresh:
+                _log.info("autopilot heartbeat acquired; LANDING_TARGET gate open")
+        elif fresh:
+            _log.info("autopilot heartbeat reacquired; LANDING_TARGET gate reopened")
+        else:
+            _log.warning("autopilot heartbeat lost; LANDING_TARGET gate now suppressing")
+        self._last_fresh = fresh
+
+    def heartbeat_status(self) -> HeartbeatReport | None:
+        """Current gate freshness report, or ``None`` when the gate is disabled.
+
+        Lets the pipeline surface ``landing_target_heartbeat_fresh`` in its snapshot so a link
+        that never delivers heartbeats is observable (not silently suppressing every publish).
+        """
+        return self._heartbeat.report() if self._heartbeat is not None else None
 
     def publish(self, detection: Detection, result: DetectionResult) -> bool:
         """Send one ``LANDING_TARGET`` for ``detection``.
@@ -155,15 +186,17 @@ class LandingTargetBridge:
         """
         if not self._settings.enable_landing_target:
             return False
-        if self._heartbeat is not None and not self._heartbeat.is_fresh():
-            self._suppressed_count += 1
-            if _should_log_suppressed(self._suppressed_count):
-                _log.warning(
-                    "LANDING_TARGET suppressed: no fresh autopilot heartbeat (fail-closed)",
-                    suppressed=self._suppressed_count,
-                    reasons=self._heartbeat.report().reasons,
-                )
-            return False
+        if self._heartbeat is not None:
+            report = self._heartbeat.report()  # single clock read for both fresh + reasons
+            if not report.fresh:
+                self._suppressed_count += 1
+                if should_log_throttled(self._suppressed_count, self._log_every):
+                    _log.warning(
+                        "LANDING_TARGET suppressed: no fresh autopilot heartbeat (fail-closed)",
+                        suppressed=self._suppressed_count,
+                        reasons=report.reasons,
+                    )
+                return False
         if self._conn is None:
             self.start()
         angle_x, angle_y = compute_angles(

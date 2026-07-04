@@ -16,31 +16,36 @@ from collections.abc import Callable
 import structlog
 
 from .core.clock import Clock, MonotonicClock
-from .core.config import Settings
+from .core.config import MavlinkSettings, PipelineSettings, Settings
 from .core.errors import DetectionError
 from .detection.base import Detection, DetectionResult, DetectorBase
 from .mavlink.bridge import LandingTargetBridge
 from .streaming.camera import CameraSource
 from .streaming.gstreamer import StreamWriter
 from .utils.fps import FpsCounter
+from .utils.log_throttle import should_log_throttled
 
 #: Injectable idle back-off (defaults to ``time.sleep``); tests substitute a fake.
 SleepCallable = Callable[[float], None]
 
-#: Default liveness / drop-log thresholds (overridable per-pipeline and via PipelineSettings).
-_DEFAULT_LIVENESS_TIMEOUT_S = 2.0
-_DEFAULT_DROP_LOG_EVERY = 100
-#: Default LANDING_TARGET cadence floor (Hz) and publish-failure tolerance; both are
-#: overridable per-pipeline and via MavlinkSettings/PipelineSettings (no magic numbers).
-_DEFAULT_MIN_PUBLISH_RATE_HZ = 10.0
-_DEFAULT_PUBLISH_FAILURE_TOLERANCE = 3
+#: Per-pipeline defaults sourced from the settings models so there is a single source of truth:
+#: a direct ``Pipeline(...)`` and a settings-driven ``build_pipeline`` never diverge (no magic
+#: numbers, no drift). Cast pins the type for mypy since ``FieldInfo.default`` is ``Any``.
+_DEFAULT_LIVENESS_TIMEOUT_S: float = float(
+    PipelineSettings.model_fields["liveness_timeout_s"].default
+)
+_DEFAULT_DROP_LOG_EVERY: int = int(PipelineSettings.model_fields["drop_log_every"].default)
+_DEFAULT_MIN_PUBLISH_RATE_HZ: float = float(
+    MavlinkSettings.model_fields["min_publish_rate_hz"].default
+)
+_DEFAULT_PUBLISH_FAILURE_TOLERANCE: int = int(
+    PipelineSettings.model_fields["publish_failure_tolerance"].default
+)
 
 _log = structlog.get_logger("jetson_yolo_gcs.pipeline")
 
-
-def _should_log_drop(count: int, every: int) -> bool:
-    """True on the 1st drop and every ``every`` drops thereafter (rate-limited logging)."""
-    return count == 1 or count % every == 0
+#: Backwards-compatible alias for the shared throttle predicate (kept for existing importers).
+_should_log_drop = should_log_throttled
 
 
 class Pipeline:
@@ -61,6 +66,19 @@ class Pipeline:
         min_publish_rate_hz: float = _DEFAULT_MIN_PUBLISH_RATE_HZ,
         publish_failure_tolerance: int = _DEFAULT_PUBLISH_FAILURE_TOLERANCE,
     ) -> None:
+        # Enforce the class's own invariants independent of config Field bounds — a direct
+        # ``Pipeline(...)`` (tests, embedders) must not be able to construct a self-inconsistent
+        # loop (e.g. ``drop_log_every=0`` would divide-by-zero in the throttle).
+        if liveness_timeout_s <= 0:
+            raise ValueError(f"liveness_timeout_s must be > 0, got {liveness_timeout_s}")
+        if drop_log_every < 1:
+            raise ValueError(f"drop_log_every must be >= 1, got {drop_log_every}")
+        if min_publish_rate_hz <= 0:
+            raise ValueError(f"min_publish_rate_hz must be > 0, got {min_publish_rate_hz}")
+        if publish_failure_tolerance < 0:
+            raise ValueError(
+                f"publish_failure_tolerance must be >= 0, got {publish_failure_tolerance}"
+            )
         self._camera = camera
         self._detector = detector
         self._stream = stream
@@ -114,6 +132,13 @@ class Pipeline:
         if self._last_frame_t is not None:
             last_age = self._clock.now() - self._last_frame_t
             live = last_age <= threshold
+        #: ``None`` when there is no bridge or the gate is disabled; ``False`` exposes a gate
+        #: that is on but has never seen a fresh heartbeat — the observable signal that a
+        #: misconfigured (e.g. non-receiving) link is silently suppressing every publish.
+        heartbeat_fresh: bool | None = None
+        if self._bridge is not None:
+            status = self._bridge.heartbeat_status()
+            heartbeat_fresh = None if status is None else status.fresh
         return {
             "fps": round(self._fps.fps, 2),
             "dropped_detections": self.dropped_detections,
@@ -122,6 +147,7 @@ class Pipeline:
             "landing_target_suppressed": self.landing_target_suppressed,
             "landing_target_cadence_violations": self.landing_target_cadence_violations,
             "landing_target_publish_failures": self.landing_target_publish_failures,
+            "landing_target_heartbeat_fresh": heartbeat_fresh,
             "last_frame_age_s": None if last_age is None else round(last_age, 3),
             "live": live,
         }
@@ -175,34 +201,39 @@ class Pipeline:
     def _publish_target(self, target: Detection, result: DetectionResult) -> None:
         """Publish one target through the bridge, applying the failure/cadence policy.
 
-        A failed publish is counted and rate-limited-logged; it re-raises only once
-        ``publish_failure_tolerance`` *consecutive* failures accrue (escalation). A send that
-        the bridge suppresses (heartbeat gate) is counted separately and is never an error.
+        A failed publish is counted and rate-limited-logged; it re-raises once the number of
+        *consecutive* failures **exceeds** ``publish_failure_tolerance`` (so ``tolerance`` blips
+        are tolerated and the ``tolerance + 1``-th escalates; ``tolerance == 0`` fails loud on
+        the first). A send the bridge suppresses (heartbeat gate) is counted separately and is
+        neither a success nor a failure — it does **not** reset the consecutive-failure streak,
+        so an intermittently-fresh link with a persistently broken send still escalates.
         """
         assert self._bridge is not None  # guarded by the caller
         try:
             sent = self._bridge.publish(target, result)
-        except Exception:
+        except Exception:  # noqa: BLE001 - a publish fault is counted/tolerated, never crashes the loop
             self.landing_target_publish_failures += 1
             self._consecutive_publish_failures += 1
-            if _should_log_drop(self.landing_target_publish_failures, self._drop_log_every):
+            if should_log_throttled(self.landing_target_publish_failures, self._drop_log_every):
                 _log.warning(
                     "LANDING_TARGET publish failed",
                     failures=self.landing_target_publish_failures,
                     consecutive=self._consecutive_publish_failures,
                 )
-            if self._consecutive_publish_failures >= self._publish_failure_tolerance:
+            if self._consecutive_publish_failures > self._publish_failure_tolerance:
                 _log.error(
                     "LANDING_TARGET publish failing persistently; escalating",
                     consecutive=self._consecutive_publish_failures,
                     tolerance=self._publish_failure_tolerance,
+                    exc_info=True,
                 )
                 raise
             return
-        self._consecutive_publish_failures = 0
         if not sent:
+            # Gate suppression: not a send attempt, so leave the failure streak intact.
             self.landing_target_suppressed += 1
             return
+        self._consecutive_publish_failures = 0  # reset only on an actual successful send
         self.landing_target_published += 1
         self._note_publish_cadence()
 
@@ -292,7 +323,7 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
         )
     bridge: LandingTargetBridge | None = None
     if settings.mavlink.enable_landing_target:
-        bridge = LandingTargetBridge(settings.mavlink)
+        bridge = LandingTargetBridge(settings.mavlink, log_every=settings.pipeline.drop_log_every)
         bridge.start()
     return Pipeline(
         camera=camera,

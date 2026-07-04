@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from structlog.testing import capture_logs
 
 from jetson_yolo_gcs.core.config import MavlinkSettings
 from jetson_yolo_gcs.core.errors import MavlinkError
@@ -280,11 +281,72 @@ def test_publish_raises_mavlink_error_when_no_connection() -> None:
 
 
 def test_suppressed_publish_logs_are_rate_limited() -> None:
-    # The gate stays closed; repeated suppressed publishes must not raise and the bridge
-    # tracks the running suppression count (used to throttle the warning).
+    # The gate stays closed; with log_every=3 the warning fires on the 1st and 3rd suppression
+    # only (rate-limited), never sends, and carries the structured reason codes.
     conn = _FakeConn()
-    bridge = LandingTargetBridge(MavlinkSettings(enable_landing_target=True), connection=conn)
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True), connection=conn, log_every=3
+    )
     det, result = _result_with((90, 90, 110, 110))
-    for _ in range(5):
-        assert bridge.publish(det, result) is False
+    with capture_logs() as logs:
+        for _ in range(4):
+            assert bridge.publish(det, result) is False
     assert conn.mav.calls == []
+    warnings = [e for e in logs if e["event"].startswith("LANDING_TARGET suppressed")]
+    assert [e["suppressed"] for e in warnings] == [1, 3]  # 1st + every 3rd
+    assert warnings[0]["reasons"] == ("no_heartbeat",)
+
+
+def test_log_every_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="log_every"):
+        LandingTargetBridge(MavlinkSettings(), log_every=0)
+
+
+def test_heartbeat_status_reflects_gate_state() -> None:
+    # Gate disabled -> None; gate enabled -> a report whose freshness tracks beats.
+    off = LandingTargetBridge(MavlinkSettings(require_heartbeat=False))
+    assert off.heartbeat_status() is None
+
+    mon = _fresh_monitor()
+    on = LandingTargetBridge(MavlinkSettings(enable_landing_target=True), heartbeat=mon)
+    status = on.heartbeat_status()
+    assert status is not None and status.fresh is True
+
+
+def test_poll_heartbeat_logs_lost_and_reacquired_transitions() -> None:
+    # Edge-triggered: acquired (first fresh) -> lost (aged out) -> reacquired, each logged once.
+    clk = SettableClock(100.0)
+    mon = HeartbeatMonitor(clk, max_age_s=2.0)
+    conn = _FakeConn(
+        heartbeats=[_FakeMsg(1, 1), _FakeMsg(1, 1), None, _FakeMsg(1, 1)]  # beat, beat, none, beat
+    )
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, target_system=1, target_component=1),
+        connection=conn,
+        heartbeat=mon,
+    )
+    with capture_logs() as logs:
+        bridge.poll_heartbeat()  # beat at t=100 -> acquired
+        bridge.poll_heartbeat()  # still fresh -> no transition, no duplicate log
+        clk.t = 105.0  # age out
+        bridge.poll_heartbeat()  # recv None -> stale -> lost
+        bridge.poll_heartbeat()  # beat at t=105 -> reacquired
+    events = [e["event"] for e in logs]
+    assert sum("acquired" in e and "reacquired" not in e for e in events) == 1  # exactly once
+    assert any("lost" in e for e in events)
+    assert any("reacquired" in e for e in events)
+
+
+def test_poll_heartbeat_swallows_target_check_error() -> None:
+    # A malformed message whose accessors raise must not kill the caller's loop (the target
+    # check + beat() run inside the guard).
+    class _BadMsg:
+        def get_srcSystem(self) -> int:  # noqa: N802 - pymavlink accessor name
+            raise ValueError("garbled")
+
+        def get_srcComponent(self) -> int:  # noqa: N802 - pymavlink accessor name
+            return 1
+
+    conn = _FakeConn(heartbeats=[_BadMsg()])
+    bridge = LandingTargetBridge(MavlinkSettings(enable_landing_target=True), connection=conn)
+    assert bridge.poll_heartbeat() is False  # error swallowed
