@@ -131,17 +131,22 @@
 - [x] **Transport observability:** shipped — per-transport `rx_frames` + throttled `"source rx"`
       link-state log on `PollingSourceTransport`; `dropped_inbox_full` surfaced per transport;
       `RouterMetrics.as_dict()` + `meshsa.render_prometheus` export (Prometheus/JSON) on an
-      opt-in `/metrics` route. **Remaining:** the **Grafana golden-signal dashboard** artifact
-      (`ops/observability/grafana/`, plan Track A.1) mapping `rx/tx/forwarded/dropped/reconnects`
-      to the four signals ([Google SRE](https://sre.google/sre-book/monitoring-distributed-systems/));
-      if ever multi-process, set & **wipe `PROMETHEUS_MULTIPROC_DIR` between runs**
+      opt-in `/metrics` route. The **Grafana golden-signal dashboard** (plan Track A.1) also
+      shipped — `ops/observability/grafana-meshsa-dashboard.json` + README map
+      `rx/tx/forwarded/dropped/reconnects` to the four signals
+      ([Google SRE](https://sre.google/sre-book/monitoring-distributed-systems/)), with a
+      series-drift guard in `test_metrics.py::test_render_prometheus_emits_all_dashboard_metric_names`.
+      **Remaining:** if ever multi-process, set & **wipe `PROMETHEUS_MULTIPROC_DIR` between runs**
       ([client_python](http://prometheus.github.io/client_python/multiprocess/)).
 - [x] **Pin FTS deps** in a constraints file (`flightctl/constraints/fts-constraints.txt`:
       `setuptools<81`, `requests`, `opentelemetry==1.20.0`) so `setup_fts.sh` is reproducible.
 
 ## Mid-term (M3 richer tracks)
-- [ ] Course/speed/battery/attitude as **additive `payload` keys** + a CoT detail-aware
-      codec (no `MessageKind` change; bump `schema_version` only if the envelope shape changes).
+- [x] Course/speed/battery/attitude as **additive `payload` keys** + a CoT detail-aware
+      codec (no `MessageKind` change; `schema_version` unchanged). Shipped (M3.1):
+      `Position.course_deg/speed_ms`, `Attitude`, `Telemetry.battery_v/attitude` in
+      `models.py`; `CotCodec` `_emit_richer_detail` (track/status/vendor/attitude children,
+      `emit_detail` opt-out) with round-trip decode in `cot.py`.
 - [ ] Sensor Point-of-Interest / field-of-view CoT; multiple simultaneous UAS with stable UIDs.
       Implement SPI/FOV **natively in the `cot` codec** — do not depend on FreeTAKUAS
       ([abandoned since 2022](https://github.com/FreeTAKTeam/FreeTAKUAS)).
