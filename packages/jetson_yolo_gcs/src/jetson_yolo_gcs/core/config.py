@@ -85,6 +85,21 @@ class MavlinkSettings(BaseSettings):
     #: Camera field of view used to convert a bbox centre into MAVLink angular offsets.
     fov_x_rad: float = Field(default=1.204, gt=0.0)  # ~69 deg horizontal
     fov_y_rad: float = Field(default=0.733, gt=0.0)  # ~42 deg vertical
+    #: Fail-closed gate: when enabled (and ``enable_landing_target``), publishing is
+    #: suppressed until a *fresh* autopilot HEARTBEAT is seen. Requires a **bidirectional**
+    #: ``endpoint`` (e.g. ``udp:``/``udpin:``); a send-only ``udpout:`` can never receive a
+    #: heartbeat and would suppress every publish. Opt out with ``MAVLINK_REQUIRE_HEARTBEAT=false``.
+    require_heartbeat: bool = True
+    #: Heartbeat freshness window (s). Matches ArduPilot ``LANDING_TARGET_TIMEOUT_MS`` (2 s):
+    #: a beat older than this counts as stale and suppresses publishing.
+    heartbeat_timeout_s: float = Field(default=2.0, gt=0.0)
+    #: Cadence-floor for observability: if the effective publish rate falls below this, the
+    #: pipeline counts a cadence violation (the MAVLink guide recommends 10–50 Hz).
+    min_publish_rate_hz: float = Field(default=10.0, gt=0.0)
+    #: Autopilot IDs whose HEARTBEAT gates publishing (``0`` = wildcard/any). Distinct from
+    #: ``source_system``/``source_component`` above, which are *this* unit's own IDs.
+    target_system: int = Field(default=1, ge=0, le=255)
+    target_component: int = Field(default=1, ge=0, le=255)
 
     @property
     def target_class_set(self) -> frozenset[str] | None:
@@ -107,6 +122,10 @@ class PipelineSettings(BaseSettings):
     #: Log a dropped-frame warning on the 1st drop and every Nth thereafter, so a
     #: persistent fault never floods the log at frame rate.
     drop_log_every: int = Field(default=100, ge=1)
+    #: Consecutive LANDING_TARGET publish failures tolerated before the loop escalates
+    #: (re-raises). A transient link blip is counted and logged, not fatal; a persistently
+    #: broken safety feed still fails loud so it never *looks* healthy.
+    publish_failure_tolerance: int = Field(default=3, ge=1)
 
 
 class Settings(BaseSettings):

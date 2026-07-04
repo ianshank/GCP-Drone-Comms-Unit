@@ -74,17 +74,28 @@
 - [ ] **TIMESYNC + capture-time `time_usec`:** align to the vehicle clock, *then* stamp frame
       capture time. Until then keep publish-time or send `0` (ArduPilot ignores the field; raw
       unsynced monotonic is a fusion hazard). ([TIMESYNC](https://mavlink.io/en/services/timesync.html))
-- [ ] **Precision-landing safety hardening:** autopilot-**heartbeat** gate (reuse the
-      `meshsa.command.health.HeartbeatHealth` pattern, fail-closed); **≥10 Hz cadence floor +
-      stale-target suppression**; reconsider in-flight publish-failure policy (count/escalate, do
-      not crash the camera+stream loop); CHARTER wording (advisory hint, but **authoritative for
-      final approach** once the operator enables precision landing) + `PLND_STRICT` failsafe note.
+- [x] **Precision-landing safety hardening (software; HW validation still pending):**
+      autopilot-**heartbeat** gate shipped — a self-contained `mavlink/heartbeat.py`
+      `HeartbeatMonitor` mirrors the `meshsa.command.health.HeartbeatHealth` fail-closed pattern;
+      `LandingTargetBridge.publish` suppresses (returns `False`, no send) until a fresh autopilot
+      HEARTBEAT is polled (`poll_heartbeat`, filtered by `target_system`/`target_component`). The
+      pipeline now **counts + escalates** publish failures (`PIPELINE_PUBLISH_FAILURE_TOLERANCE`,
+      default 3) instead of crashing the camera+stream loop, and counts **cadence-floor**
+      violations against `MAVLINK_MIN_PUBLISH_RATE_HZ` (default 10). Config: `MAVLINK_REQUIRE_HEARTBEAT`
+      (default true), `MAVLINK_HEARTBEAT_TIMEOUT_S` (default 2 s = ArduPilot `LANDING_TARGET_TIMEOUT_MS`).
+      **Remaining:** CHARTER wording (advisory hint, but **authoritative for final approach** once
+      the operator enables precision landing) + `PLND_STRICT` failsafe note; and on-vehicle HW
+      validation of the gate. Note: the gate needs a **bidirectional** endpoint (`udp:`/`udpin:`),
+      not the send-only `udpout:` default.
 - [ ] **On-device runbook:** TensorRT `.engine` export (FP16; INT8 `imgsz=320,batch=1,workspace=1`
       on JetPack 6); realistic **~30–40 FPS YOLOv8n FP16 @640 on Orin Nano** (60 FPS is NX/INT8);
       `nvv4l2` NVMM-caps smoke (NX/AGX); QGroundControl RTP smoke (`udp:5600`, `pt=96`).
 - [ ] **Live `/healthz` + watchdog:** optional `[health]` aiohttp listener (lazy in-function
       import, mirroring `meshsa.health`); wire liveness → systemd `WatchdogSec`/`sd_notify`.
-- [ ] **Tighten coverage** (patch/per-file) on the safety files `pipeline.py` + `mavlink/bridge.py`.
+- [x] **Tighten coverage** on the safety files `pipeline.py` + `mavlink/bridge.py` +
+      `mavlink/heartbeat.py` — the heartbeat gate, suppression, poll accept/ignore/wildcard/read-error,
+      failure-tolerance escalation, and cadence-violation paths are all covered fakes-only
+      (`tests/unit/test_mavlink_heartbeat.py`, `test_mavlink_bridge.py`, `tests/integration/test_pipeline_mock.py`).
 - [ ] **(Longer, M3)** detections → `cot` codec sensor PoI/FoV (needs pixel→geo / camera pose).
 
 ## GCS commanding (initiative — **CHARTER carve-out ratified 2026-06-16**)

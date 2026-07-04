@@ -30,6 +30,10 @@ SleepCallable = Callable[[float], None]
 #: Default liveness / drop-log thresholds (overridable per-pipeline and via PipelineSettings).
 _DEFAULT_LIVENESS_TIMEOUT_S = 2.0
 _DEFAULT_DROP_LOG_EVERY = 100
+#: Default LANDING_TARGET cadence floor (Hz) and publish-failure tolerance; both are
+#: overridable per-pipeline and via MavlinkSettings/PipelineSettings (no magic numbers).
+_DEFAULT_MIN_PUBLISH_RATE_HZ = 10.0
+_DEFAULT_PUBLISH_FAILURE_TOLERANCE = 3
 
 _log = structlog.get_logger("jetson_yolo_gcs.pipeline")
 
@@ -54,6 +58,8 @@ class Pipeline:
         clock: Clock | None = None,
         liveness_timeout_s: float = _DEFAULT_LIVENESS_TIMEOUT_S,
         drop_log_every: int = _DEFAULT_DROP_LOG_EVERY,
+        min_publish_rate_hz: float = _DEFAULT_MIN_PUBLISH_RATE_HZ,
+        publish_failure_tolerance: int = _DEFAULT_PUBLISH_FAILURE_TOLERANCE,
     ) -> None:
         self._camera = camera
         self._detector = detector
@@ -64,6 +70,8 @@ class Pipeline:
         self._fps = fps or FpsCounter(clock=self._clock)
         self._liveness_timeout_s = liveness_timeout_s
         self._drop_log_every = drop_log_every
+        self._min_publish_rate_hz = min_publish_rate_hz
+        self._publish_failure_tolerance = publish_failure_tolerance
         self._stop = threading.Event()
 
         #: Frames dropped because detection failed recoverably (malformed output).
@@ -72,6 +80,17 @@ class Pipeline:
         self.dropped_stream = 0
         #: LANDING_TARGET messages successfully published.
         self.landing_target_published = 0
+        #: LANDING_TARGET sends suppressed by the fail-closed heartbeat gate.
+        self.landing_target_suppressed = 0
+        #: Successful publishes whose gap since the previous one fell below the cadence floor
+        #: (observability only — the loop cannot publish faster than detections arrive).
+        self.landing_target_cadence_violations = 0
+        #: LANDING_TARGET publish attempts that raised (counted; escalates past tolerance).
+        self.landing_target_publish_failures = 0
+        #: Consecutive publish failures since the last success (drives the escalation gate).
+        self._consecutive_publish_failures = 0
+        #: Clock time of the most recent successful publish (``None`` until the first).
+        self._last_publish_t: float | None = None
         #: Clock time of the most recent frame read (``None`` until the first frame).
         #: Drives liveness — ``fps`` alone cannot detect a stall (it only ticks on
         #: successful frames, so it reports the last good rate during an outage).
@@ -99,6 +118,9 @@ class Pipeline:
             "dropped_detections": self.dropped_detections,
             "dropped_stream": self.dropped_stream,
             "landing_target_published": self.landing_target_published,
+            "landing_target_suppressed": self.landing_target_suppressed,
+            "landing_target_cadence_violations": self.landing_target_cadence_violations,
+            "landing_target_publish_failures": self.landing_target_publish_failures,
             "last_frame_age_s": None if last_age is None else round(last_age, 3),
             "live": live,
         }
@@ -111,10 +133,12 @@ class Pipeline:
         """Process one frame. Returns ``True`` iff a frame was read.
 
         Error handling is **path-specific**: a recoverable :class:`DetectionError` drops
-        the frame and continues; a stream-egress failure is best-effort (dropped); but a
-        ``bridge.publish`` failure is **not** swallowed — it propagates so a broken
-        LANDING_TARGET (safety) feed fails loudly rather than looking healthy. Unexpected
-        detector errors (e.g. CUDA OOM, bugs) also propagate.
+        the frame and continues; a stream-egress failure is best-effort (dropped). A
+        ``bridge.publish`` failure is **tolerated then escalated**: consecutive failures are
+        counted and rate-limited-logged, but once they reach ``publish_failure_tolerance``
+        the exception re-raises so a persistently broken LANDING_TARGET (safety) feed fails
+        loudly rather than looking healthy. A single transient blip no longer kills the
+        camera+stream loop. Unexpected detector errors (e.g. CUDA OOM, bugs) still propagate.
         """
         frame = self._camera.read_frame()
         if frame is None:
@@ -139,12 +163,63 @@ class Pipeline:
                     _log.warning("stream write failed; dropping", dropped=self.dropped_stream)
 
         if self._bridge is not None:
+            # Drain any pending autopilot heartbeat into the bridge's fail-closed gate first,
+            # so the publish below sees the freshest link state.
+            self._bridge.poll_heartbeat()
             target = self._select_target(result)
             if target is not None:
-                # Deliberately unguarded: a failed safety-path publish must surface.
-                self._bridge.publish(target, result)
-                self.landing_target_published += 1
+                self._publish_target(target, result)
         return True
+
+    def _publish_target(self, target: Detection, result: DetectionResult) -> None:
+        """Publish one target through the bridge, applying the failure/cadence policy.
+
+        A failed publish is counted and rate-limited-logged; it re-raises only once
+        ``publish_failure_tolerance`` *consecutive* failures accrue (escalation). A send that
+        the bridge suppresses (heartbeat gate) is counted separately and is never an error.
+        """
+        assert self._bridge is not None  # guarded by the caller
+        try:
+            sent = self._bridge.publish(target, result)
+        except Exception:
+            self.landing_target_publish_failures += 1
+            self._consecutive_publish_failures += 1
+            if _should_log_drop(self.landing_target_publish_failures, self._drop_log_every):
+                _log.warning(
+                    "LANDING_TARGET publish failed",
+                    failures=self.landing_target_publish_failures,
+                    consecutive=self._consecutive_publish_failures,
+                )
+            if self._consecutive_publish_failures >= self._publish_failure_tolerance:
+                _log.error(
+                    "LANDING_TARGET publish failing persistently; escalating",
+                    consecutive=self._consecutive_publish_failures,
+                    tolerance=self._publish_failure_tolerance,
+                )
+                raise
+            return
+        self._consecutive_publish_failures = 0
+        if not sent:
+            self.landing_target_suppressed += 1
+            return
+        self.landing_target_published += 1
+        self._note_publish_cadence()
+
+    def _note_publish_cadence(self) -> None:
+        """Count a cadence violation when the gap since the last publish underran the floor."""
+        now = self._clock.now()
+        if self._last_publish_t is not None and self._min_publish_rate_hz > 0:
+            max_gap_s = 1.0 / self._min_publish_rate_hz
+            if (now - self._last_publish_t) > max_gap_s:
+                self.landing_target_cadence_violations += 1
+                if _should_log_drop(self.landing_target_cadence_violations, self._drop_log_every):
+                    _log.warning(
+                        "LANDING_TARGET publish cadence below floor",
+                        gap_s=round(now - self._last_publish_t, 3),
+                        min_rate_hz=self._min_publish_rate_hz,
+                        violations=self.landing_target_cadence_violations,
+                    )
+        self._last_publish_t = now
 
     def _select_target(self, result: DetectionResult) -> Detection | None:
         if self._target_classes is None:
@@ -224,4 +299,6 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
         target_classes=settings.mavlink.target_class_set,
         liveness_timeout_s=settings.pipeline.liveness_timeout_s,
         drop_log_every=settings.pipeline.drop_log_every,
+        min_publish_rate_hz=settings.mavlink.min_publish_rate_hz,
+        publish_failure_tolerance=settings.pipeline.publish_failure_tolerance,
     )

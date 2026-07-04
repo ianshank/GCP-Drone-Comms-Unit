@@ -97,15 +97,19 @@ Each item keeps a falsifiable done-criterion. Baseline: head of this branch, 202
 
 ### Stage 1 — Safety write-path gaps (headline; unchanged in priority)
 
-1. **[SW] Harden the landing-target publisher by mirroring the commander's interlock.** Reuse
-   the `HeartbeatHealth` + freshness-predicate pattern from `meshsa.command` (see NEXTSTEPS
-   "Precision-landing safety hardening"): fail-closed autopilot-heartbeat gate, ≥10 Hz cadence
-   floor with stale-target suppression (`MAVLINK_MIN_RATE_HZ`, `MAVLINK_TARGET_STALE_S`, real
-   config fields, no magic numbers), and change the in-flight publish-failure policy from
-   crash-the-loop to count/escalate (crash is correct pre-arm, wrong mid-approach — decide and
-   document). Keep `MAVLINK_ENABLE_LANDING_TARGET=false`. *Done when:* fakes-only tests prove
-   no publish on missing/stale heartbeat, cadence floor enforced, stale targets suppressed,
-   and patch coverage on `pipeline.py`/`mavlink/bridge.py` is tightened.
+1. **[SW] Harden the landing-target publisher by mirroring the commander's interlock.**
+   ✅ **Software shipped (2026-07-04); on-vehicle [HW] validation still open.** A self-contained
+   `jetson_yolo_gcs/mavlink/heartbeat.py::HeartbeatMonitor` mirrors `meshsa.command.health.HeartbeatHealth`
+   (fail-closed, clock-injected, no meshsa import). `LandingTargetBridge.publish` now returns
+   `bool` and **suppresses** (no send) until a fresh autopilot HEARTBEAT is polled via
+   `poll_heartbeat` (filtered by `MAVLINK_TARGET_SYSTEM`/`_COMPONENT`, `0`=wildcard). The pipeline
+   **counts + escalates** publish failures (`PIPELINE_PUBLISH_FAILURE_TOLERANCE`, default 3)
+   instead of crashing the camera+stream loop, and counts **cadence-floor** violations against
+   `MAVLINK_MIN_PUBLISH_RATE_HZ` (default 10). New config (all defaulted, no magic numbers):
+   `MAVLINK_REQUIRE_HEARTBEAT` (default true), `MAVLINK_HEARTBEAT_TIMEOUT_S` (default 2 s).
+   `MAVLINK_ENABLE_LANDING_TARGET` stays **false**. Fakes-only tests prove no publish on
+   missing/stale heartbeat, escalation past tolerance, and cadence counting; the safety files
+   are covered ≥98%. *Remaining:* CHARTER wording + `PLND_STRICT` note, and the [HW] bench pass.
 2. **[SW] M2 transport/endpoint authentication audit doc** (prerequisite for any maintainer
    M2-gate clearance): enumerate every transport/surface and its actual auth posture — mutual
    TLS on `tak_tcp` (`_build_ssl_context`), bearer tokens on `meshsa.llm` and the commander,

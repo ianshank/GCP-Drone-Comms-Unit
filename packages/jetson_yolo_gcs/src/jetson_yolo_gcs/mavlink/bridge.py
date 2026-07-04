@@ -10,6 +10,13 @@ The bridge converts a detection's bounding-box centre into the angular offsets
 config. It is **advisory** precision-landing guidance and is gated by
 ``MavlinkSettings.enable_landing_target`` (off by default per the charter carve-out);
 it never arms, sets modes, or otherwise flies the aircraft.
+
+**Fail-closed heartbeat gate (safety hardening).** When ``require_heartbeat`` is set (the
+default once landing-target is enabled), :meth:`LandingTargetBridge.publish` suppresses the
+send until a *fresh* autopilot HEARTBEAT has been observed via :meth:`poll_heartbeat`. This
+mirrors the commander-side ``HeartbeatHealth`` interlock. Because the gate needs to *receive*
+heartbeats, the configured ``endpoint`` must be bidirectional (e.g. ``udp:``/``udpin:``); a
+send-only ``udpout:`` can never receive a beat and would suppress every publish.
 """
 
 from __future__ import annotations
@@ -23,6 +30,7 @@ from ..core.clock import Clock, SystemClock
 from ..core.config import MavlinkSettings
 from ..core.errors import MavlinkError
 from ..detection.base import Detection, DetectionResult
+from .heartbeat import HeartbeatMonitor
 
 ConnectionFactory = Callable[[], Any]
 
@@ -30,6 +38,15 @@ _log = structlog.get_logger("jetson_yolo_gcs.mavlink.bridge")
 
 #: MAV_FRAME_BODY_FRD — angles are relative to the vehicle body (forward-right-down).
 _MAV_FRAME_BODY_FRD = 12
+
+#: Emit the "suppressed; no fresh heartbeat" warning on the 1st suppression and every Nth
+#: thereafter, so a persistently silent autopilot link never floods the log at detection rate.
+_SUPPRESSED_LOG_EVERY = 100
+
+
+def _should_log_suppressed(count: int) -> bool:
+    """True on the 1st suppression and every :data:`_SUPPRESSED_LOG_EVERY` thereafter."""
+    return count == 1 or count % _SUPPRESSED_LOG_EVERY == 0
 
 
 def compute_angles(
@@ -69,21 +86,77 @@ class LandingTargetBridge:
         connection: Any | None = None,
         connection_factory: ConnectionFactory | None = None,
         clock: Clock | None = None,
+        heartbeat: HeartbeatMonitor | None = None,
     ) -> None:
         self._settings = settings
         self._conn = connection
         self._factory = connection_factory or _default_connection_factory(settings)
         self._clock: Clock = clock or SystemClock()
+        #: Fail-closed heartbeat gate. ``None`` disables the gate (``require_heartbeat``
+        #: off); otherwise a monotonic-timebase freshness monitor sized by config.
+        self._heartbeat: HeartbeatMonitor | None
+        if heartbeat is not None:
+            self._heartbeat = heartbeat
+        elif settings.require_heartbeat:
+            self._heartbeat = HeartbeatMonitor(max_age_s=settings.heartbeat_timeout_s)
+        else:
+            self._heartbeat = None
+        #: Rate-limit the "suppressed; no fresh heartbeat" warning so a silent link never
+        #: floods the log at detection rate (mirrors the pipeline's drop-log throttle).
+        self._suppressed_count = 0
 
     def start(self) -> None:
         """Open the MAVLink connection if one was not injected (idempotent)."""
         if self._conn is None:
             self._conn = self._factory()
 
-    def publish(self, detection: Detection, result: DetectionResult) -> None:
-        """Send one ``LANDING_TARGET`` for ``detection`` (no-op if disabled)."""
+    def poll_heartbeat(self) -> bool:
+        """Non-blocking drain of a pending autopilot HEARTBEAT into the freshness gate.
+
+        Returns ``True`` iff a heartbeat from the configured ``target_system``/
+        ``target_component`` (``0`` = wildcard) was consumed. A read error is swallowed (a
+        transient link fault must never kill the caller's loop); with the gate disabled or
+        no connection this is a no-op. Safe to call every pipeline step.
+        """
+        if self._heartbeat is None or self._conn is None:
+            return False
+        try:
+            msg = self._conn.recv_match(type="HEARTBEAT", blocking=False)
+        except Exception:  # noqa: BLE001 - a transient link read error must not kill the loop
+            _log.debug("heartbeat poll read error", exc_info=True)
+            return False
+        if msg is None or not self._is_target_heartbeat(msg):
+            return False
+        self._heartbeat.beat()
+        return True
+
+    def _is_target_heartbeat(self, msg: Any) -> bool:
+        """True when ``msg`` is a HEARTBEAT from the configured autopilot (``0`` = any)."""
+        want_sys = self._settings.target_system
+        want_comp = self._settings.target_component
+        return (want_sys == 0 or msg.get_srcSystem() == want_sys) and (
+            want_comp == 0 or msg.get_srcComponent() == want_comp
+        )
+
+    def publish(self, detection: Detection, result: DetectionResult) -> bool:
+        """Send one ``LANDING_TARGET`` for ``detection``.
+
+        Returns ``True`` if a message was sent, ``False`` if the send was suppressed (feature
+        disabled, or the fail-closed heartbeat gate found no fresh autopilot heartbeat). A
+        missing/stale heartbeat is a *suppression*, not an error; a connection factory that
+        yields nothing is still a loud :class:`MavlinkError` (a real fault, not a gate miss).
+        """
         if not self._settings.enable_landing_target:
-            return
+            return False
+        if self._heartbeat is not None and not self._heartbeat.is_fresh():
+            self._suppressed_count += 1
+            if _should_log_suppressed(self._suppressed_count):
+                _log.warning(
+                    "LANDING_TARGET suppressed: no fresh autopilot heartbeat (fail-closed)",
+                    suppressed=self._suppressed_count,
+                    reasons=self._heartbeat.report().reasons,
+                )
+            return False
         if self._conn is None:
             self.start()
         angle_x, angle_y = compute_angles(
@@ -111,6 +184,8 @@ class LandingTargetBridge:
             float(size_x * self._settings.fov_x_rad),
             float(size_y * self._settings.fov_y_rad),
         )
+        self._suppressed_count = 0
+        return True
 
     def close(self) -> None:
         """Close the MAVLink connection if we own one (idempotent, best-effort)."""
