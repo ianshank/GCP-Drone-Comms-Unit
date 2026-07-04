@@ -28,11 +28,18 @@ def test_health_report_resolves_plan() -> None:
     assert "v4l2src" in report["camera"]["pipeline"]
     assert "x264enc" in report["stream"]["pipeline"]
     assert report["mavlink"]["landing_target_enabled"] is False
+    # The fail-closed safety gate is surfaced for pre-flight validation.
+    assert report["mavlink"]["require_heartbeat"] is True
+    assert report["mavlink"]["heartbeat_timeout_s"] == 2.0
+    assert report["mavlink"]["min_publish_rate_hz"] == 10.0
+    assert report["mavlink"]["target_system"] == 1
+    assert report["mavlink"]["target_component"] == 1
     # Loop policy is surfaced for pre-flight validation.
     assert report["pipeline"]["idle_poll_s"] == 0.01
     assert report["pipeline"]["max_consecutive_empty"] is None
     assert report["pipeline"]["liveness_timeout_s"] == 2.0
     assert report["pipeline"]["drop_log_every"] == 100
+    assert report["pipeline"]["publish_failure_tolerance"] == 3
 
 
 def test_main_health_check_prints_json(capsys: pytest.CaptureFixture[str]) -> None:

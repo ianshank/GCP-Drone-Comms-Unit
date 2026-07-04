@@ -26,11 +26,25 @@ class _RecordingMav:
 
 
 class _RecordingConn:
-    def __init__(self) -> None:
+    def __init__(self, heartbeats: list[object] | None = None) -> None:
         self.mav = _RecordingMav()
+        self._inbox: list[object] = list(heartbeats or [])
+
+    def recv_match(self, *, type: str, blocking: bool) -> object | None:  # noqa: A002
+        return self._inbox.pop(0) if self._inbox else None
 
     def close(self) -> None:
         pass
+
+
+class _Heartbeat:
+    """Duck-typed HEARTBEAT from system/component 1 (the default target autopilot)."""
+
+    def get_srcSystem(self) -> int:  # noqa: N802 - pymavlink accessor name
+        return 1
+
+    def get_srcComponent(self) -> int:  # noqa: N802 - pymavlink accessor name
+        return 1
 
 
 class _ScriptedCamera:
@@ -64,8 +78,15 @@ def _frames(n: int) -> list[Frame]:
     return [Frame(idx=i, t=0.0, data=f"frame-{i}") for i in range(n)]
 
 
-def _bridge(conn: object) -> LandingTargetBridge:
-    return LandingTargetBridge(MavlinkSettings(enable_landing_target=True), connection=conn)
+def _bridge(conn: object, *, require_heartbeat: bool = False) -> LandingTargetBridge:
+    """Bridge for pipeline tests. The fail-closed gate defaults *off* here — it is covered
+    in ``test_mavlink_bridge.py``; most pipeline tests exercise the publish/count paths and
+    want the gate open. Pass ``require_heartbeat=True`` for the gated integration cases.
+    """
+    return LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, require_heartbeat=require_heartbeat),
+        connection=conn,
+    )
 
 
 def test_full_step_streams_and_publishes_best() -> None:
@@ -160,25 +181,210 @@ def test_step_drops_stream_error_best_effort() -> None:
     assert pipeline.dropped_stream == 1
 
 
-def test_step_propagates_publish_error_loudly() -> None:
-    class _RaisingMav:
-        def landing_target_send(self, *args: object) -> None:
-            raise RuntimeError("link down")
+class _RaisingMav:
+    def landing_target_send(self, *args: object) -> None:
+        raise RuntimeError("link down")
 
-    class _Conn:
-        def __init__(self) -> None:
-            self.mav = _RaisingMav()
 
-        def close(self) -> None:
-            pass
+class _RaisingConn:
+    def __init__(self) -> None:
+        self.mav = _RaisingMav()
 
+    def recv_match(self, *, type: str, blocking: bool) -> object | None:  # noqa: A002
+        return None
+
+    def close(self) -> None:
+        pass
+
+
+def test_publish_failure_tolerated_below_threshold() -> None:
+    # A single transient publish failure is counted and logged, but does NOT crash the loop
+    # (tolerance defaults to 3): step() still returns True and the camera+stream loop survives.
     pipeline = Pipeline(
         camera=FakeCamera(_frames(1)),
         detector=FakeDetector(_sample()),
-        bridge=_bridge(_Conn()),
+        bridge=_bridge(_RaisingConn()),
+    )
+    assert pipeline.step() is True
+    assert pipeline.landing_target_publish_failures == 1
+    assert pipeline.landing_target_published == 0
+
+
+def test_publish_failure_escalates_on_first_when_tolerance_zero() -> None:
+    # tolerance=0 = fail loud on the first failure (the tightest setting preserves the old
+    # crash-on-broken-safety-feed contract).
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(_RaisingConn()),
+        publish_failure_tolerance=0,
     )
     with pytest.raises(RuntimeError):
         pipeline.step()
+    assert pipeline.landing_target_publish_failures == 1
+
+
+def test_publish_failures_escalate_past_tolerance() -> None:
+    # tolerance=2: failures 1 and 2 are tolerated; the 3rd consecutive (> tolerance) escalates.
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(3)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(_RaisingConn()),
+        publish_failure_tolerance=2,
+    )
+    assert pipeline.step() is True  # failure 1 tolerated
+    assert pipeline.step() is True  # failure 2 tolerated
+    with pytest.raises(RuntimeError):
+        pipeline.step()  # failure 3 (> 2) -> escalate
+    assert pipeline.landing_target_publish_failures == 3
+
+
+def test_consecutive_failures_reset_on_success() -> None:
+    # A successful send between failures resets the consecutive streak (so escalation only
+    # fires on a *persistent* run of failures, not a scattered few).
+    conn = _RaisingConn()
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(3)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn),
+        publish_failure_tolerance=5,  # high so nothing escalates during this test
+    )
+    assert pipeline.step() is True  # failure 1
+    assert pipeline.step() is True  # failure 2
+    assert pipeline._consecutive_publish_failures == 2
+    conn.mav = _RecordingMav()  # link recovers -> next send succeeds
+    assert pipeline.step() is True
+    assert pipeline._consecutive_publish_failures == 0  # reset on the successful send
+    assert pipeline.landing_target_published == 1
+    assert pipeline.landing_target_publish_failures == 2
+
+
+def test_suppression_does_not_reset_failure_streak() -> None:
+    # A gate suppression between two failures must NOT clear the streak — otherwise an
+    # intermittently-fresh link with a persistently broken send would never escalate.
+    outcomes: list[str] = ["raise", "suppress", "raise"]
+
+    class _ScriptedBridge(LandingTargetBridge):
+        def publish(self, detection: Detection, result: DetectionResult) -> bool:
+            outcome = outcomes.pop(0)
+            if outcome == "raise":
+                raise RuntimeError("link down")
+            return False  # suppressed (gate closed)
+
+        def poll_heartbeat(self) -> bool:
+            return False
+
+    bridge = _ScriptedBridge(
+        MavlinkSettings(enable_landing_target=True, require_heartbeat=False),
+        connection=_RecordingConn(),
+    )
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(3)),
+        detector=FakeDetector(_sample()),
+        bridge=bridge,
+        publish_failure_tolerance=1,
+    )
+    assert pipeline.step() is True  # raise -> consecutive=1 (tolerated, 1 not > 1)
+    assert pipeline.step() is True  # suppress -> streak preserved, not reset
+    assert pipeline.landing_target_suppressed == 1
+    with pytest.raises(RuntimeError):
+        pipeline.step()  # raise -> consecutive=2 (> 1) -> escalate despite the suppression
+    assert pipeline.landing_target_publish_failures == 2
+
+
+def test_step_polls_heartbeat_then_publishes_when_fresh() -> None:
+    conn = _RecordingConn(heartbeats=[_Heartbeat()])
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn, require_heartbeat=True),
+    )
+    assert pipeline.step() is True
+    assert len(conn.mav.calls) == 1  # heartbeat polled -> gate open -> published
+    assert pipeline.landing_target_published == 1
+    assert pipeline.landing_target_suppressed == 0
+
+
+def test_step_suppresses_publish_without_heartbeat() -> None:
+    conn = _RecordingConn()  # no heartbeat available to poll
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn, require_heartbeat=True),
+    )
+    assert pipeline.step() is True  # loop survives the fail-closed suppression
+    assert conn.mav.calls == []
+    assert pipeline.landing_target_published == 0
+    assert pipeline.landing_target_suppressed == 1
+
+
+def test_cadence_violation_counted_when_gap_exceeds_floor() -> None:
+    # min_publish_rate_hz=10 -> a >0.1 s gap between publishes is a cadence violation.
+    conn = _RecordingConn()
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(2)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn),
+        # Two clock reads per publishing step (frame stamp, then cadence stamp):
+        clock=FakeClock(times=[100.0, 100.0, 101.0, 101.0]),
+        fps=FpsCounter(clock=FakeClock()),
+        min_publish_rate_hz=10.0,
+    )
+    assert pipeline.step() is True  # 1st publish: no prior -> no violation
+    assert pipeline.step() is True  # 2nd publish: 1.0 s gap > 0.1 s floor -> violation
+    assert pipeline.landing_target_published == 2
+    assert pipeline.landing_target_cadence_violations == 1
+
+
+def test_cadence_exactly_at_floor_is_not_a_violation() -> None:
+    # A gap exactly equal to 1/min_rate is on-cadence (strict `>`), not a violation.
+    conn = _RecordingConn()
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(2)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn),
+        # 2nd publish cadence stamp is exactly 0.1 s after the 1st (100.0 -> 100.1).
+        clock=FakeClock(times=[100.0, 100.0, 100.0, 100.1]),
+        fps=FpsCounter(clock=FakeClock()),
+        min_publish_rate_hz=10.0,  # floor = exactly 0.1 s
+    )
+    assert pipeline.step() is True
+    assert pipeline.step() is True
+    assert pipeline.landing_target_published == 2
+    assert pipeline.landing_target_cadence_violations == 0
+
+
+def test_snapshot_reports_heartbeat_freshness() -> None:
+    # Gate on, no beat -> heartbeat_fresh False (the observable "silent suppression" signal);
+    # after a fresh beat is polled -> True. No bridge / gate off -> None.
+    conn = _RecordingConn(heartbeats=[_Heartbeat()])
+    gated = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn, require_heartbeat=True),
+    )
+    assert gated.snapshot()["landing_target_heartbeat_fresh"] is False  # no beat yet
+    assert gated.step() is True  # polls the heartbeat -> gate opens
+    assert gated.snapshot()["landing_target_heartbeat_fresh"] is True
+
+    no_gate = Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()))
+    assert no_gate.snapshot()["landing_target_heartbeat_fresh"] is None  # no bridge
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"liveness_timeout_s": 0.0},
+        {"drop_log_every": 0},
+        {"min_publish_rate_hz": 0.0},
+        {"publish_failure_tolerance": -1},
+    ],
+)
+def test_pipeline_rejects_out_of_range_invariants(kwargs: dict[str, float]) -> None:
+    # The class enforces its own contract independent of config Field bounds, so a direct
+    # construction can't build a self-inconsistent loop (e.g. drop_log_every=0 -> ZeroDivision).
+    with pytest.raises(ValueError):
+        Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()), **kwargs)
 
 
 def test_no_target_match_skips_publish() -> None:
@@ -197,11 +403,13 @@ def test_target_class_filter_selects_named_class() -> None:
     captured: list[Detection] = []
 
     class _CapturingBridge(LandingTargetBridge):
-        def publish(self, detection: Detection, result: DetectionResult) -> None:
+        def publish(self, detection: Detection, result: DetectionResult) -> bool:
             captured.append(detection)
+            return True
 
     bridge = _CapturingBridge(
-        MavlinkSettings(enable_landing_target=True), connection=_RecordingConn()
+        MavlinkSettings(enable_landing_target=True, require_heartbeat=False),
+        connection=_RecordingConn(),
     )
     pipeline = Pipeline(
         camera=FakeCamera(_frames(1)),
@@ -229,12 +437,16 @@ def test_snapshot_counts_and_reports_live() -> None:
         camera=FakeCamera(_frames(1)),
         detector=FakeDetector(_sample()),
         bridge=_bridge(conn),
-        clock=FakeClock(times=[100.0, 101.0]),  # last-frame=100, snapshot now=101
+        # Reads per step: frame stamp (100.0), publish-cadence stamp (100.5); then snapshot (101.0).
+        clock=FakeClock(times=[100.0, 100.5, 101.0]),
         fps=FpsCounter(clock=FakeClock()),  # isolated so the pipeline clock only times frames
     )
     assert pipeline.step() is True
     snap = pipeline.snapshot(max_age_s=2.0)
     assert snap["landing_target_published"] == 1
+    assert snap["landing_target_suppressed"] == 0
+    assert snap["landing_target_cadence_violations"] == 0
+    assert snap["landing_target_publish_failures"] == 0
     assert snap["last_frame_age_s"] == 1.0
     assert snap["live"] is True
 

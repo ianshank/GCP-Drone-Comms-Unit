@@ -80,12 +80,18 @@ def health_report(settings: Settings) -> dict[str, Any]:
         "mavlink": {
             "endpoint": settings.mavlink.endpoint,
             "landing_target_enabled": settings.mavlink.enable_landing_target,
+            "require_heartbeat": settings.mavlink.require_heartbeat,
+            "heartbeat_timeout_s": settings.mavlink.heartbeat_timeout_s,
+            "min_publish_rate_hz": settings.mavlink.min_publish_rate_hz,
+            "target_system": settings.mavlink.target_system,
+            "target_component": settings.mavlink.target_component,
         },
         "pipeline": {
             "idle_poll_s": settings.pipeline.idle_poll_s,
             "max_consecutive_empty": settings.pipeline.max_consecutive_empty,
             "liveness_timeout_s": settings.pipeline.liveness_timeout_s,
             "drop_log_every": settings.pipeline.drop_log_every,
+            "publish_failure_tolerance": settings.pipeline.publish_failure_tolerance,
         },
     }
 

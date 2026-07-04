@@ -65,12 +65,65 @@ def test_mavlink_source_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.mavlink.source_component == 7
 
 
+def test_mavlink_safety_gate_defaults() -> None:
+    m = Settings().mavlink
+    assert m.require_heartbeat is True  # fail-closed by default
+    assert m.heartbeat_timeout_s == 2.0
+    assert m.min_publish_rate_hz == 10.0
+    assert m.target_system == 1
+    assert m.target_component == 1
+
+
+def test_mavlink_safety_gate_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAVLINK_REQUIRE_HEARTBEAT", "false")
+    monkeypatch.setenv("MAVLINK_HEARTBEAT_TIMEOUT_S", "1.5")
+    monkeypatch.setenv("MAVLINK_MIN_PUBLISH_RATE_HZ", "20")
+    monkeypatch.setenv("MAVLINK_TARGET_SYSTEM", "3")
+    monkeypatch.setenv("MAVLINK_TARGET_COMPONENT", "0")
+    m = get_settings().mavlink
+    assert m.require_heartbeat is False
+    assert m.heartbeat_timeout_s == 1.5
+    assert m.min_publish_rate_hz == 20.0
+    assert m.target_system == 3
+    assert m.target_component == 0  # wildcard
+
+
+def test_heartbeat_timeout_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAVLINK_HEARTBEAT_TIMEOUT_S", "0")
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
+def test_target_system_out_of_range_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAVLINK_TARGET_SYSTEM", "999")
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
 def test_pipeline_defaults_run_forever() -> None:
     s = Settings()
     assert s.pipeline.idle_poll_s == 0.01
     assert s.pipeline.max_consecutive_empty is None  # tolerate transient empties
     assert s.pipeline.liveness_timeout_s == 2.0
     assert s.pipeline.drop_log_every == 100
+    assert s.pipeline.publish_failure_tolerance == 3
+
+
+def test_publish_failure_tolerance_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_PUBLISH_FAILURE_TOLERANCE", "5")
+    assert get_settings().pipeline.publish_failure_tolerance == 5
+
+
+def test_publish_failure_tolerance_zero_is_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 0 = fail loud on the first failure (tolerate none); it is a valid, meaningful setting.
+    monkeypatch.setenv("PIPELINE_PUBLISH_FAILURE_TOLERANCE", "0")
+    assert get_settings().pipeline.publish_failure_tolerance == 0
+
+
+def test_publish_failure_tolerance_rejects_negative(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_PUBLISH_FAILURE_TOLERANCE", "-1")
+    with pytest.raises(ValidationError):
+        get_settings()
 
 
 def test_drop_log_every_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:

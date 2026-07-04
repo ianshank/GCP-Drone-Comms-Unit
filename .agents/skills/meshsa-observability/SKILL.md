@@ -27,8 +27,8 @@ Prometheus exposition is hand-rolled in `metrics.py`.
    explicit defaults — no literals.
 3. **Golden signals (SRE):** map latency / traffic / errors / saturation onto the existing
    `rx/tx/forwarded/dropped/reconnects` + per-transport counters. The Grafana dashboard
-   (`ops/observability/grafana/`) is a templated JSON artifact — datasource/job/interval are
-   dashboard variables, not baked values.
+   (`ops/observability/grafana-meshsa-dashboard.json`) is a templated JSON artifact —
+   datasource/job/interval are dashboard variables, not baked values.
 4. **Guard exporter/dashboard drift:** add a pure test asserting every `meshsa_*` series a
    dashboard references is actually produced by `render_prometheus`.
 5. If the gateway is ever run multi-process, set **and wipe** `PROMETHEUS_MULTIPROC_DIR`

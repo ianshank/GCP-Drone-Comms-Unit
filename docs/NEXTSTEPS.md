@@ -74,17 +74,28 @@
 - [ ] **TIMESYNC + capture-time `time_usec`:** align to the vehicle clock, *then* stamp frame
       capture time. Until then keep publish-time or send `0` (ArduPilot ignores the field; raw
       unsynced monotonic is a fusion hazard). ([TIMESYNC](https://mavlink.io/en/services/timesync.html))
-- [ ] **Precision-landing safety hardening:** autopilot-**heartbeat** gate (reuse the
-      `meshsa.command.health.HeartbeatHealth` pattern, fail-closed); **≥10 Hz cadence floor +
-      stale-target suppression**; reconsider in-flight publish-failure policy (count/escalate, do
-      not crash the camera+stream loop); CHARTER wording (advisory hint, but **authoritative for
-      final approach** once the operator enables precision landing) + `PLND_STRICT` failsafe note.
+- [x] **Precision-landing safety hardening (software; HW validation still pending):**
+      autopilot-**heartbeat** gate shipped — a self-contained `mavlink/heartbeat.py`
+      `HeartbeatMonitor` mirrors the `meshsa.command.health.HeartbeatHealth` fail-closed pattern;
+      `LandingTargetBridge.publish` suppresses (returns `False`, no send) until a fresh autopilot
+      HEARTBEAT is polled (`poll_heartbeat`, filtered by `target_system`/`target_component`). The
+      pipeline now **counts + escalates** publish failures (`PIPELINE_PUBLISH_FAILURE_TOLERANCE`,
+      default 3) instead of crashing the camera+stream loop, and counts **cadence-floor**
+      violations against `MAVLINK_MIN_PUBLISH_RATE_HZ` (default 10). Config: `MAVLINK_REQUIRE_HEARTBEAT`
+      (default true), `MAVLINK_HEARTBEAT_TIMEOUT_S` (default 2 s = ArduPilot `LANDING_TARGET_TIMEOUT_MS`).
+      **Remaining:** CHARTER wording (advisory hint, but **authoritative for final approach** once
+      the operator enables precision landing) + `PLND_STRICT` failsafe note; and on-vehicle HW
+      validation of the gate. Note: the gate needs a **bidirectional** endpoint (`udp:`/`udpin:`),
+      not the send-only `udpout:` default.
 - [ ] **On-device runbook:** TensorRT `.engine` export (FP16; INT8 `imgsz=320,batch=1,workspace=1`
       on JetPack 6); realistic **~30–40 FPS YOLOv8n FP16 @640 on Orin Nano** (60 FPS is NX/INT8);
       `nvv4l2` NVMM-caps smoke (NX/AGX); QGroundControl RTP smoke (`udp:5600`, `pt=96`).
 - [ ] **Live `/healthz` + watchdog:** optional `[health]` aiohttp listener (lazy in-function
       import, mirroring `meshsa.health`); wire liveness → systemd `WatchdogSec`/`sd_notify`.
-- [ ] **Tighten coverage** (patch/per-file) on the safety files `pipeline.py` + `mavlink/bridge.py`.
+- [x] **Tighten coverage** on the safety files `pipeline.py` + `mavlink/bridge.py` +
+      `mavlink/heartbeat.py` — the heartbeat gate, suppression, poll accept/ignore/wildcard/read-error,
+      failure-tolerance escalation, and cadence-violation paths are all covered fakes-only
+      (`tests/unit/test_mavlink_heartbeat.py`, `test_mavlink_bridge.py`, `tests/integration/test_pipeline_mock.py`).
 - [ ] **(Longer, M3)** detections → `cot` codec sensor PoI/FoV (needs pixel→geo / camera pose).
 
 ## GCS commanding (initiative — **CHARTER carve-out ratified 2026-06-16**)
@@ -131,17 +142,22 @@
 - [x] **Transport observability:** shipped — per-transport `rx_frames` + throttled `"source rx"`
       link-state log on `PollingSourceTransport`; `dropped_inbox_full` surfaced per transport;
       `RouterMetrics.as_dict()` + `meshsa.render_prometheus` export (Prometheus/JSON) on an
-      opt-in `/metrics` route. **Remaining:** the **Grafana golden-signal dashboard** artifact
-      (`ops/observability/grafana/`, plan Track A.1) mapping `rx/tx/forwarded/dropped/reconnects`
-      to the four signals ([Google SRE](https://sre.google/sre-book/monitoring-distributed-systems/));
-      if ever multi-process, set & **wipe `PROMETHEUS_MULTIPROC_DIR` between runs**
+      opt-in `/metrics` route. The **Grafana golden-signal dashboard** (plan Track A.1) also
+      shipped — `ops/observability/grafana-meshsa-dashboard.json` + README map
+      `rx/tx/forwarded/dropped/reconnects` to the four signals
+      ([Google SRE](https://sre.google/sre-book/monitoring-distributed-systems/)), with a
+      series-drift guard in `test_metrics.py::test_render_prometheus_emits_all_dashboard_metric_names`.
+      **Remaining:** if ever multi-process, set & **wipe `PROMETHEUS_MULTIPROC_DIR` between runs**
       ([client_python](http://prometheus.github.io/client_python/multiprocess/)).
 - [x] **Pin FTS deps** in a constraints file (`flightctl/constraints/fts-constraints.txt`:
       `setuptools<81`, `requests`, `opentelemetry==1.20.0`) so `setup_fts.sh` is reproducible.
 
 ## Mid-term (M3 richer tracks)
-- [ ] Course/speed/battery/attitude as **additive `payload` keys** + a CoT detail-aware
-      codec (no `MessageKind` change; bump `schema_version` only if the envelope shape changes).
+- [x] Course/speed/battery/attitude as **additive `payload` keys** + a CoT detail-aware
+      codec (no `MessageKind` change; `schema_version` unchanged). Shipped (M3.1):
+      `Position.course_deg/speed_ms`, `Attitude`, `Telemetry.battery_v/attitude` in
+      `models.py`; `CotCodec` `_emit_richer_detail` (track/status/vendor/attitude children,
+      `emit_detail` opt-out) with round-trip decode in `cot.py`.
 - [ ] Sensor Point-of-Interest / field-of-view CoT; multiple simultaneous UAS with stable UIDs.
       Implement SPI/FOV **natively in the `cot` codec** — do not depend on FreeTAKUAS
       ([abandoned since 2022](https://github.com/FreeTAKTeam/FreeTAKUAS)).

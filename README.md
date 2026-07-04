@@ -9,6 +9,9 @@ real time.
 > The importable Python framework is published as the **`meshsa`** package (mesh
 > situational awareness). This repository, **GCP-Drone-Comms-Unit**, is the framework
 > plus the deployment/ops layer (`flightctl/`) that wires it into a real comms unit.
+> Despite the name, **"GCP" here is not Google Cloud Platform** — there is no cloud
+> backend or GCP dependency; everything (including the TAK server) is self-hosted on
+> the edge device.
 
 ## What it does
 - **Telemetry → CoT:** a MAVLink autopilot (`mavlink_source`), a Betaflight FC over MSP
@@ -57,7 +60,7 @@ real time.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e "packages/meshsa[dev]"
-cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (currently 780 tests, ~99.5%)
+cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (currently 791 tests, ~99.1%)
 ```
 
 Drone/FC telemetry → CoT (no hardware needed — uses the bundled simulator):

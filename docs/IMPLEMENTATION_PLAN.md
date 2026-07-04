@@ -123,10 +123,9 @@ docs) and goes first.
   enumerating every transport/surface and its actual auth posture — is itself a prerequisite
   task here, **before** any maintainer gate-clearance decision. This plan does **not** clear the
   gate unilaterally and does **not** assert transport-wide auth exists.
-- **Redundant backlog file:** `docs/NEXT_STEPS.md` (with the underscore) is a separate, small,
-  stale file that duplicates the canonical `docs/NEXTSTEPS.md` and still claims "NVIDIA Nemotron
-  Ultra integration complete." Consolidate it into `docs/NEXTSTEPS.md` (or delete it) so there is
-  a single canonical backlog.
+- **Redundant backlog file:** ✅ resolved 2026-07-04 — `docs/NEXT_STEPS.md` (with the
+  underscore) was a separate, small, stale duplicate of the canonical `docs/NEXTSTEPS.md`;
+  it has been deleted so there is a single canonical backlog.
 
 *Exit:* `pytest` green (0 failed), NEXTSTEPS reflects reality, no agent is misled by a stale
 "NOT IMPLEMENTED" header.
@@ -138,10 +137,12 @@ docs) and goes first.
 The big pieces (TLS, pacing, metrics) shipped. What remains is field/CI validation and the
 operator-facing observability surface.
 
-**A.1 Grafana golden-signal dashboard (config artifact, not code).**
+**A.1 Grafana golden-signal dashboard (config artifact, not code).** ✅ shipped — see
+`ops/observability/grafana-meshsa-dashboard.json` + `ops/observability/README.md`, with the
+drift test in `tests/test_metrics.py::test_render_prometheus_emits_all_dashboard_metric_names`.
 - *Spec:* observability retro-spec (0.2) gains a "dashboards" section mapping the existing
   `rx/tx/forwarded/dropped/reconnects` + per-transport series to the four golden signals.
-- *Deliverable:* `ops/observability/grafana/meshsa-golden-signals.json` (importable) + README.
+- *Deliverable:* `ops/observability/grafana-meshsa-dashboard.json` (importable) + README.
 - *No magic numbers:* dashboard variables (datasource, job, interval) are templated, not baked.
 - *Invariants:* no new runtime dep; metrics names already stable in `metrics.py`.
 - *Tests:* a sanity test asserting every `meshsa_*` series the dashboard references exists in
@@ -168,7 +169,7 @@ operator-facing observability surface.
 ### Track B — Initiative E: inference hardening
 
 Spec: **author `docs/specs/initiative-e-inference.md`** (back-fills the MVP + the 4 backlog
-items). Active backlog from NEXTSTEPS/NEXT_STEPS:
+items). Active backlog from NEXTSTEPS:
 
 **B.1 Local rate limiting** — add `min_interval_s` / `max_concurrent_requests` to
 `NemotronConfig` (+ `MESHSA_INFERENCE_*` env bindings) so a burst of mesh traffic can't spike
