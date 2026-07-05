@@ -75,6 +75,40 @@ class HealthConfig(BaseModel):
     metrics_format: Literal["prometheus", "json"] = "prometheus"
 
 
+class ScoutConfig(BaseModel):
+    """Vineyard scouting tunables (``meshsa.scout``; spec §5).
+
+    Every operational value is a field with an explicit default — there are no
+    magic numbers in the scout pipeline. ``rtk_enabled`` selects the A1 vine-level
+    tier (per-vine pins, cm-level ``pos_cep_m``) vs A2 zone-level.
+    """
+
+    enabled: bool = False
+    rtk_enabled: bool = True
+    vine_spacing_m: float = Field(default=2.0, gt=0.0)
+    row_spacing_m: float = Field(default=2.4, gt=0.0)
+    dedup_radius_m: float = Field(default=1.0, gt=0.0)
+    sync_max_skew_s: float = Field(default=0.05, ge=0.0)
+    attitude_sigma_deg: float = Field(default=1.0, ge=0.0)
+    pos_cep_m: float = Field(default=0.05, ge=0.0)
+    marker_stale_s: float = Field(default=86_400.0, gt=0.0)
+    forward_overlap: float = Field(default=0.75, ge=0.0, lt=1.0)
+    side_overlap: float = Field(default=0.65, ge=0.0, lt=1.0)
+    survey_alt_agl_m: float = Field(default=60.0, gt=0.0)
+    survey_cruise_speed_ms: float = Field(default=10.0, gt=0.0)
+    survey_hover_speed_ms: float = Field(default=5.0, gt=0.0)
+    # Camera intrinsics (field-varying; real values come from calibration, Track H1).
+    camera_img_w: int = Field(default=1920, gt=0)
+    camera_img_h: int = Field(default=1080, gt=0)
+    camera_h_fov_deg: float = Field(default=70.0, gt=0.0, lt=180.0)
+    camera_v_fov_deg: float = Field(default=42.0, gt=0.0, lt=180.0)
+    dem_path: str | None = None
+    store_path: str = ":memory:"
+    station_host: str = "127.0.0.1"
+    station_port: int = 8099
+    station_token: str = ""
+
+
 class NodeConfig(BaseModel):
     uid: str
     callsign: str
@@ -86,6 +120,7 @@ class NodeConfig(BaseModel):
     health: HealthConfig = Field(default_factory=HealthConfig)
     transports: list[TransportConfig] = Field(default_factory=list)
     inference: NemotronConfig = Field(default_factory=NemotronConfig)
+    scout: ScoutConfig = Field(default_factory=ScoutConfig)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> NodeConfig:
@@ -185,5 +220,38 @@ class NodeConfig(BaseModel):
                 inference[field] = caster(env_key, env[env_key])
         if inference:
             data["inference"] = inference
+
+        # --- scout (ScoutConfig) env-var bindings ---
+        scout: dict[str, Any] = dict(data.get("scout", {}))
+        scout_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+            f"{prefix}SCOUT_ENABLED": ("enabled", _parse_bool),
+            f"{prefix}SCOUT_RTK_ENABLED": ("rtk_enabled", _parse_bool),
+            f"{prefix}SCOUT_VINE_SPACING_M": ("vine_spacing_m", parse_float),
+            f"{prefix}SCOUT_ROW_SPACING_M": ("row_spacing_m", parse_float),
+            f"{prefix}SCOUT_DEDUP_RADIUS_M": ("dedup_radius_m", parse_float),
+            f"{prefix}SCOUT_SYNC_MAX_SKEW_S": ("sync_max_skew_s", parse_float),
+            f"{prefix}SCOUT_ATTITUDE_SIGMA_DEG": ("attitude_sigma_deg", parse_float),
+            f"{prefix}SCOUT_POS_CEP_M": ("pos_cep_m", parse_float),
+            f"{prefix}SCOUT_MARKER_STALE_S": ("marker_stale_s", parse_float),
+            f"{prefix}SCOUT_FORWARD_OVERLAP": ("forward_overlap", parse_float),
+            f"{prefix}SCOUT_SIDE_OVERLAP": ("side_overlap", parse_float),
+            f"{prefix}SCOUT_SURVEY_ALT_AGL_M": ("survey_alt_agl_m", parse_float),
+            f"{prefix}SCOUT_SURVEY_CRUISE_SPEED_MS": ("survey_cruise_speed_ms", parse_float),
+            f"{prefix}SCOUT_SURVEY_HOVER_SPEED_MS": ("survey_hover_speed_ms", parse_float),
+            f"{prefix}SCOUT_CAMERA_IMG_W": ("camera_img_w", parse_int),
+            f"{prefix}SCOUT_CAMERA_IMG_H": ("camera_img_h", parse_int),
+            f"{prefix}SCOUT_CAMERA_H_FOV_DEG": ("camera_h_fov_deg", parse_float),
+            f"{prefix}SCOUT_CAMERA_V_FOV_DEG": ("camera_v_fov_deg", parse_float),
+            f"{prefix}SCOUT_DEM_PATH": ("dem_path", _str),
+            f"{prefix}SCOUT_STORE_PATH": ("store_path", _str),
+            f"{prefix}SCOUT_STATION_HOST": ("station_host", _str),
+            f"{prefix}SCOUT_STATION_PORT": ("station_port", parse_int),
+            f"{prefix}SCOUT_STATION_TOKEN": ("station_token", _str),
+        }
+        for env_key, (field, caster) in scout_scalars.items():
+            if env_key in env:
+                scout[field] = caster(env_key, env[env_key])
+        if scout:
+            data["scout"] = scout
 
         return cls.model_validate(data)

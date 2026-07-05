@@ -37,6 +37,14 @@ real time.
   Install with `pip install meshsa[inference]`; configure via `MESHSA_INFERENCE_*`
   environment variables (12 fields incl. backoff tuning). Thread-safe, feedback-loop
   safe (insight messages are never re-analyzed), with configurable retry backoff.
+- **Vineyard structural-anomaly scouting (`meshsa.scout`):** an offline, **hardware-free**
+  pipeline that turns a mapping survey (RGB detections + autopilot pose) into a georeferenced,
+  deduplicated **anomaly map** — rendered on the existing TAK/CoT field map and an optional thin
+  `aiohttp`+MapLibre operator view. Reuses `cv.geo` georeferencing and the detection→MARKER→CoT
+  path; adds DEM-terrain projection, pose/AGL fusion, and offline survey/mission export
+  (QGC `.plan` / ArduPilot `.waypoints` for a human to load, under a CHARTER §3 carve-out —
+  no autonomy). `meshsa-scout` CLI (`replay`/`gen-mission`/`run-station`/`--health-check`);
+  install `pip install "meshsa[scout]"`; config via `MESHSA_SCOUT_*`.
 - **Modular & backward-compatible by construction:** new transports/codecs register via an
   open/closed registry; every wire envelope is `schema_version`-gated; a node tolerates
   configs written for newer/older builds.
@@ -45,7 +53,7 @@ real time.
 
 | Path | What lives here |
 | ---- | --------------- |
-| [packages/meshsa](packages/meshsa) | `meshsa` Python framework (registry-based codecs + transports, src layout) |
+| [packages/meshsa](packages/meshsa) | `meshsa` Python framework (registry-based codecs + transports, src layout; includes `meshsa.scout` vineyard scouting) |
 | [flightctl](flightctl) | Flight-control + TAK **ops layer**: gateway config, systemd units, SSD/relocation + FTS setup scripts, MAVLink simulator, udev |
 | [ops/pi5-node](ops/pi5-node) | Raspberry Pi 5 user-node provisioning (`mesh-up.sh`, `setup_pi5_node.sh`) |
 | [ops/base-service](ops/base-service) | Base-node systemd service unit + install guide |
@@ -60,7 +68,7 @@ real time.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e "packages/meshsa[dev]"
-cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (currently 791 tests, ~99.1%)
+cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (900+ tests, ~99%)
 ```
 
 Drone/FC telemetry → CoT (no hardware needed — uses the bundled simulator):

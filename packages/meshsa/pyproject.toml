@@ -57,6 +57,16 @@ llm = [
     "anthropic>=0.40",
     "aiohttp>=3.9",
 ]
+# Vineyard scouting (meshsa.scout): DEM terrain (rasterio) + the aiohttp station.
+# rasterio is used only by the DEM loader (pragma'd I/O glue); the interpolation
+# math is pure and needs no extra, so the test suite runs green under [dev] alone.
+geo = [
+    "rasterio>=1.3",
+]
+scout = [
+    "aiohttp>=3.9",
+    "meshsa[geo]",  # reuse the geo (rasterio DEM) stack rather than re-pinning it
+]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
@@ -78,6 +88,7 @@ fpv-telemetry-monitor = "meshsa.fpv.tools.monitor:main"
 fpv-log-replay = "meshsa.fpv.tools.replay:main"
 fpv-log-convert = "meshsa.fpv.tools.convert:main"
 meshsa-llm = "meshsa.llm.server:main"
+meshsa-scout = "meshsa.scout.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ianshank/GCP-Drone-Comms-Unit"
@@ -143,6 +154,7 @@ module = [
     "pyarrow.*",
     "cv2.*",
     "anthropic.*",
+    "rasterio.*",
 ]
 ignore_missing_imports = true
 

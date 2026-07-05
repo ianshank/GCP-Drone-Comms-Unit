@@ -98,6 +98,25 @@ TAK server.
 > This narrowly-scoped exception does not make the unit a general ground control station or a
 > mission/waypoint/autonomy platform; everything else in the non-goal above still stands.
 
+> **Carve-out (deliberate amendment — ratified by the maintainer on 2026-07-05 per §6):
+> offline survey generation & export only.** The `meshsa.scout` vineyard-scouting subsystem MAY
+> **generate and export** a coverage/lawnmower survey plan (QGC `.plan`, ArduPilot `.waypoints`)
+> as an **offline file for a human pilot to review and load** into their own GCS. This is a bounded
+> exception to the "mission/waypoint autonomy out of scope" non-goal, for *offline generation only*.
+> Constraints (all required):
+> - **No autonomy, no auto-upload, no in-flight action.** Scout never uploads a mission, never
+>   commands the vehicle, and issues **no** MAVLink writes (no `LANDING_TARGET`, no arm/mode/RC).
+>   The file is inert until a human loads it; BVLOS/swarm autonomy stay out of scope.
+> - **Read-only on the vehicle otherwise.** Scout consumes pose (read) and produces map markers via
+>   the existing detection→MARKER→CoT path; it does not lift the read-by-default stance for any
+>   command.
+> - **Same invariants as the rest of the repo.** Added behind `Protocol`/registry/config seams
+>   (`meshsa.scout`, `ScoutConfig`, `MESHSA_SCOUT_*`); every operational value is a config field with
+>   a default; unit tests use fakes and need no hardware; gates stay green at the ≥90% floor.
+>
+> This remains a bounded offline planning aid, not a general GCS or an autonomy platform; every
+> other §3 non-goal still stands.
+
 ## 4. Invariants (must not drift — enforce in review)
 1. **Open/closed extensibility.** New mediums and wire formats are added through
    `transport_registry` / `codec_registry`; the router, node, and models are not edited for

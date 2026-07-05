@@ -57,6 +57,13 @@ flight-logs/
 *.h264
 *.mkv
 
+# Scout runtime artifacts (generated missions / stores / exports)
+*.plan
+*.waypoints
+*.sqlite
+*.sqlite3
+scout-*.db
+
 # Inference cache
 .inference_cache/
 

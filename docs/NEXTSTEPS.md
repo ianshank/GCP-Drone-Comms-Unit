@@ -231,6 +231,50 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
 - [ ] **[cleanup] drop `# pragma: no cover` on pure logic** in `fpv/crsf/rc.py` (span==0 guards)
       and source the remaining magic numbers (`rc.py` pad=992, `monitor.py` interval) from config.
 
+## Vineyard SCOUT (initiative Scout — **Implemented (software); hardware validation pending**)
+> Structural-anomaly scouting for a vineyard block: a mapping survey (RGB + autopilot pose) →
+> georeferenced, deduplicated anomaly map on TAK/ATAK + a thin web triage view. `meshsa.scout`
+> subpackage. Precision **A1 vine-level + RTK**; **B1** (no control loop); detection via a
+> `Protocol` seam + synthetic replay now, IMX500 later. Peer review:
+> [PLAN_PEER_REVIEW_SCOUT.md](PLAN_PEER_REVIEW_SCOUT.md); spec:
+> [specs/initiative-scout.md](specs/initiative-scout.md). Gates green (871 tests, 98.7% cov).
+
+- [x] **GATE — CHARTER §3 carve-out:** ratified 2026-07-05 for *offline* survey/waypoint
+      **generation + export for a human to load** (no autonomy/auto-upload/BVLOS/MAVLink writes);
+      recorded in [CHARTER.md](CHARTER.md) §3.
+- [x] **Scout.0** contracts + replay: `GeoDetection`/`Block`/`PixelDetection` schemas (reuse
+      `models.Detection` on the wire); seeded boustrophedon replay at known ground truth with
+      M8N-vs-RTK noise (`scout/replay.py`).
+- [x] **Scout.1** georef + pose/AGL: extended `cv.geo` additively (`Terrain` seam + DEM loader via
+      `rasterio` extra, roll, covariance `ground_error`) **and** `PoseFuser` (`ATTITUDE`+position→AGL).
+- [x] **Scout.2** fusion: `TimeSync` (max-skew drop-and-count), `Deduplicator` (cluster
+      `vine_spacing/2`), `InMemory`/`Sqlite` store; M8N cross-vine-merge regression test kept.
+- [x] **Scout.4** ground station: emit `GeoDetection` via `detection_codec`→MARKER→`cot`→ATAK
+      (`marker_stale_s` overrides the 120 s CoT default); `aiohttp`+MapLibre view for
+      tag/reject/inspect + GeoJSON/CSV export, loopback-default + fail-closed.
+- [x] **Scout.3** survey coverage analysis + `export_mission` `.plan`/`.waypoints` (carve-out
+      ratified; wired into `meshsa-scout gen-mission`).
+- [ ] **Scout.5** `[HW]` companion glue: real MAVLink `PoseSource` fusion + IMX500 `DetectionSource`
+      over ArduPilot SITL; on-device, not in CI (contracts + fakes in place).
+- [x] **Config/deps:** `ScoutConfig` (`MESHSA_SCOUT_*`) in `NodeConfig.from_env`; `geo`/`scout`
+      extras (`rasterio`) + mypy `ignore_missing_imports` in pyproject **and** root `mypy.ini`;
+      `meshsa-scout` console script; web = `aiohttp`. DEM file-open + JS pragma/omit pre-declared.
+- [ ] **[HW] validation (→ Validated):** camera calibration (H1), RTK (H2), DEM tile (H3),
+      IMX500 model (H4), one-block field accuracy pass (H5).
+
+### Scout code-quality backlog (2026-07-05 gap scan — see [GAP_ANALYSIS_SCOUT.md](GAP_ANALYSIS_SCOUT.md))
+- [x] **[config]** Wire dead config to behaviour: `dem_path`→`build_terrain`, `store_path`→
+      `build_store`, `marker_stale_s`→`make_marker_codec`; add `camera_*` intrinsics fields
+      (retire the hardcoded default camera on `replay`/`gen-mission`).
+- [x] **[security]** Station operator page hardened against an XSS sink (`textContent`/
+      `createElement`, no `innerHTML`).
+- [x] **[efficiency]** `TimeSync.align` O(log n) via a sorted index; `coverage_fraction` bands
+      transects by `v` (binary search) instead of a full scan.
+- [x] **[docs]** Reconcile CHANGELOG (reflect-not-reject) and spec §5/§7/§9 (config table, DEM
+      pragma posture, legacy-fallback wording).
+- [x] **[test]** Cover health-check failures, station auth-denials + malformed body, gen-mission
+      single-output, and the new wiring helpers (scout ~100%, global 99.14%).
+
 ## Known risks / watch-items
 - FreeTAKServer dependency conflicts on aarch64 (opentelemetry/greenlet/eventlet) — pinned
   for now; re-verify on FTS upgrades.

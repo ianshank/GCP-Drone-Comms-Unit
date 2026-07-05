@@ -35,6 +35,7 @@ Reading order for an agent picking up work:
 | [PHASE1_SPEC_v1_1.md](PHASE1_SPEC_v1_1.md) | FPV telemetry ingest, link health, flight logger | Implemented (bench §8 pending → Validated) |
 | [initiative-c-commanding-design.md](initiative-c-commanding-design.md) | Supervised two-way commanding (safety/auth/audit/health) | **Implemented** (code shipped; M2-gate clearance is a maintainer decision — see banner) |
 | [initiative-e-inference.md](initiative-e-inference.md) | AI inference bridge (`meshsa.inference`) — Nemotron NIM + injectable HTTP-transport seam | **Implemented** (MVP + transport seam; Track-B hardening is Definition) |
+| [initiative-scout.md](initiative-scout.md) | Vineyard structural-anomaly scouting: georef fusion + field map + offline survey export (`meshsa.scout`) | **Implemented** (fakes-first; §3 offline-export carve-out ratified 2026-07-05; hardware validation pending) |
 
 ## Specs to author (tracked in the implementation plan)
 

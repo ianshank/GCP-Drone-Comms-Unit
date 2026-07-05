@@ -13,7 +13,6 @@ requires the ``[llm]`` extra.
 
 from __future__ import annotations
 
-import hmac
 import os
 from collections.abc import Mapping
 from typing import Any, Protocol
@@ -22,6 +21,12 @@ import structlog
 from pydantic import BaseModel
 
 from .._parsing import parse_int
+
+# ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
+# ``as`` alias makes the re-export visible to mypy's ``no_implicit_reexport``.
+from ..netauth import authorize as authorize
+from ..netauth import is_loopback as is_loopback
+from ..netauth import validate_bind as _validate_bind
 from .agent import AgentReply
 from .sources import (
     DEFAULT_DRONE_UID,
@@ -55,9 +60,6 @@ ENV_TOKEN = "MESHSA_LLM_TOKEN"
 ENV_MAVLINK2REST_URL = "MESHSA_MAVLINK2REST_URL"
 ENV_DRONE_UID = "MESHSA_DRONE_UID"
 ENV_FTS_TRACKS_URL = "MESHSA_FTS_TRACKS_URL"
-
-#: Hosts treated as loopback-only (safe to serve without a bearer token).
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
 class ServerConfig(BaseModel):
@@ -98,45 +100,21 @@ def resolve_config(env: Mapping[str, str]) -> ServerConfig:
     )
 
 
-def is_loopback(host: str) -> bool:
-    """True when ``host`` is a loopback bind that needs no network auth."""
-    return host.strip().lower() in _LOOPBACK_HOSTS
-
-
-def authorize(token: str | None, auth_header: str | None) -> bool:
-    """Return whether a request may proceed (pure; no web framework).
-
-    When no ``token`` is configured the endpoint is open (loopback is enforced
-    separately by :func:`validate_bind`). When a token is set, require a
-    constant-time-matching ``Authorization: Bearer <token>`` header.
-
-    The comparison runs on UTF-8 bytes, not ``str``: ``hmac.compare_digest``
-    raises ``TypeError`` on non-ASCII ``str`` operands, so a client-supplied
-    (or operator-configured) non-ASCII token would otherwise crash the auth
-    check into a 500 instead of yielding a clean ``False``.
-    """
-    if token is None:
-        return True
-    if not auth_header:
-        return False
-    scheme, _, presented = auth_header.partition(" ")
-    if scheme.lower() != "bearer" or not presented:
-        return False
-    return hmac.compare_digest(presented.strip().encode("utf-8"), token.encode("utf-8"))
-
-
 def validate_bind(host: str, token: str | None) -> None:
     """Fail closed: a non-loopback bind without a token is a misconfiguration.
 
     Raises :class:`ValueError` so the entry point can refuse to start rather than
     silently exposing an unauthenticated assistant to the network.
     """
-    if not is_loopback(host) and token is None:
-        raise ValueError(
-            f"refusing to bind meshsa-llm to {host!r} without {ENV_TOKEN} set: the "
-            "assistant discloses live positions and spends model tokens. Set "
+    _validate_bind(
+        host,
+        token,
+        service="meshsa-llm",
+        remedy=(
+            f"the assistant discloses live positions and spends model tokens. Set "
             f"{ENV_TOKEN} to a strong secret, or bind to 127.0.0.1."
-        )
+        ),
+    )
 
 
 class _Agent(Protocol):
