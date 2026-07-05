@@ -113,6 +113,15 @@ def test_block_validation() -> None:
             vine_spacing_m=1.0,
             row_spacing_m=1.0,
         )
+    with pytest.raises(ValidationError):  # polygon lon out of range
+        Block(
+            block_id="b",
+            polygon=[(0.0, 200.0), (0.0, 0.0), (1.0, 1.0)],
+            row_azimuth_deg=0.0,
+            mean_elev_m=0.0,
+            vine_spacing_m=1.0,
+            row_spacing_m=1.0,
+        )
 
 
 def test_waypoint_validation() -> None:
@@ -122,3 +131,5 @@ def test_waypoint_validation() -> None:
         Waypoint(seq=1, lat=0.0, lon=0.0, alt_agl_m=0.0)
     with pytest.raises(ValidationError):  # lat range
         Waypoint(seq=1, lat=91.0, lon=0.0, alt_agl_m=10.0)
+    with pytest.raises(ValidationError):  # lon range
+        Waypoint(seq=1, lat=0.0, lon=181.0, alt_agl_m=10.0)

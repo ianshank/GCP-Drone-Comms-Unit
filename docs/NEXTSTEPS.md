@@ -262,6 +262,19 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
 - [ ] **[HW] validation (→ Validated):** camera calibration (H1), RTK (H2), DEM tile (H3),
       IMX500 model (H4), one-block field accuracy pass (H5).
 
+### Scout code-quality backlog (2026-07-05 gap scan — see [GAP_ANALYSIS_SCOUT.md](GAP_ANALYSIS_SCOUT.md))
+- [x] **[config]** Wire dead config to behaviour: `dem_path`→`build_terrain`, `store_path`→
+      `build_store`, `marker_stale_s`→`make_marker_codec`; add `camera_*` intrinsics fields
+      (retire the hardcoded default camera on `replay`/`gen-mission`).
+- [x] **[security]** Station operator page hardened against an XSS sink (`textContent`/
+      `createElement`, no `innerHTML`).
+- [x] **[efficiency]** `TimeSync.align` O(log n) via a sorted index; `coverage_fraction` bands
+      transects by `v` (binary search) instead of a full scan.
+- [x] **[docs]** Reconcile CHANGELOG (reflect-not-reject) and spec §5/§7/§9 (config table, DEM
+      pragma posture, legacy-fallback wording).
+- [x] **[test]** Cover health-check failures, station auth-denials + malformed body, gen-mission
+      single-output, and the new wiring helpers (scout ~100%, global 99.14%).
+
 ## Known risks / watch-items
 - FreeTAKServer dependency conflicts on aarch64 (opentelemetry/greenlet/eventlet) — pinned
   for now; re-verify on FTS upgrades.

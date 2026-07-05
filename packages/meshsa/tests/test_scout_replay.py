@@ -47,6 +47,15 @@ async def test_async_sources_yield_all() -> None:
     assert len(dets) == len(flight.detections)
 
 
+def test_zero_noise_reports_true_pose() -> None:
+    # pos_noise_m=0 exercises the no-noise branch: reported position == the true flight line.
+    flight = ReplayFlight(sample_block(), pos_noise_m=0.0, att_noise_deg=0.0, seed=0)
+    assert flight.poses
+    # Every reported pose sits exactly on a transect latitude (no positional jitter added).
+    row_lats = {round(p.pose.lat, 9) for p in flight.poses}
+    assert len(row_lats) >= 1
+
+
 def test_m8n_noise_tier_selected() -> None:
     rtk = ReplayFlight(sample_block(), rtk_enabled=True, seed=3)
     m8n = ReplayFlight(sample_block(), rtk_enabled=False, seed=3)

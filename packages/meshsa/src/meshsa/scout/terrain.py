@@ -20,6 +20,8 @@ from typing import Any
 
 import structlog
 
+from ..cv.geo import Terrain
+
 _log = structlog.get_logger("meshsa.scout.terrain")
 
 
@@ -81,21 +83,46 @@ class GriddedTerrain:
         return top * (1 - fr) + bot * fr
 
 
+def grid_from_band(band: Any, width: int, height: int) -> list[list[float]]:
+    """Convert an indexable ``band[r][c]`` raster into a plain float grid (pure, tested).
+
+    Extracted from :func:`load_dem` so the array-shaping logic is exercised by tests with an
+    in-memory band, leaving only the ``rasterio`` file open itself as ``# pragma: no cover``.
+    """
+    return [[float(band[r][c]) for c in range(width)] for r in range(height)]
+
+
 def load_dem(path: str) -> GriddedTerrain:
     """Load a GeoTIFF DEM into a :class:`GriddedTerrain` (lazy ``rasterio`` import).
 
-    Only the file read is hardware/I/O glue; the returned object's math is the pure,
-    tested :class:`GriddedTerrain`. Install with the ``geo`` extra:
-    ``pip install "meshsa[geo]"``.
+    Only the file read is hardware/I/O glue; the grid-shaping (:func:`grid_from_band`) and the
+    returned object's math (:class:`GriddedTerrain`) are pure and tested. Install with the
+    ``geo`` extra: ``pip install "meshsa[geo]"``. Raises :class:`ImportError` with an install
+    hint when the extra is absent.
     """
-    try:  # pragma: no cover - import glue
+    try:
         import rasterio
-    except ImportError as exc:  # pragma: no cover - import glue
+    except ImportError as exc:
         raise ImportError("load_dem requires the 'geo' extra: pip install 'meshsa[geo]'") from exc
-    with rasterio.open(path) as ds:  # pragma: no cover - file I/O glue
+    with rasterio.open(path) as ds:  # pragma: no cover - file I/O glue (whole block)
         band: Any = ds.read(1)
         t = ds.transform
-        grid = [[float(band[r][c]) for c in range(ds.width)] for r in range(ds.height)]
+        grid = grid_from_band(band, ds.width, ds.height)
         transform = GridTransform(x0=float(t.c), y0=float(t.f), dx=float(t.a), dy=float(-t.e))
-    _log.info("dem_loaded", path=path, rows=len(grid), cols=len(grid[0]))
-    return GriddedTerrain(grid, transform)
+        _log.info("dem_loaded", path=path, rows=len(grid), cols=len(grid[0]))
+        return GriddedTerrain(grid, transform)
+
+
+def build_terrain(dem_path: str | None, mean_elev_m: float) -> Terrain:
+    """Select a terrain model from config: a DEM raster when ``dem_path`` is set, else a flat
+    plane at ``mean_elev_m``.
+
+    If the ``geo`` extra (rasterio) is not installed, log a structured warning and fall back to
+    the flat plane rather than crash — the pipeline stays runnable without the optional dep.
+    """
+    if dem_path:
+        try:
+            return load_dem(dem_path)
+        except ImportError as exc:
+            _log.warning("dem_unavailable_fallback_flat", dem_path=dem_path, error=str(exc))
+    return FlatTerrain(mean_elev_m)

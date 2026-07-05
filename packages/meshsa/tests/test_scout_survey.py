@@ -52,6 +52,21 @@ def test_coverage_empty_path_is_zero() -> None:
     assert coverage_fraction(block, [], h_fov_deg=70, v_fov_deg=42, alt_agl_m=60) == 0.0
 
 
+def test_coverage_sparse_path_is_partial() -> None:
+    # A single transect (first two waypoints of a full plan) covers only its own swath band,
+    # not the whole block -> a fraction strictly between 0 and 1.
+    block, full = _plan(side_overlap=0.65)
+    one_transect = full[:2]
+    frac = coverage_fraction(
+        block,
+        one_transect,
+        h_fov_deg=DEFAULT_CAMERA.h_fov_deg,
+        v_fov_deg=DEFAULT_CAMERA.v_fov_deg,
+        alt_agl_m=60.0,
+    )
+    assert 0.0 < frac < 1.0
+
+
 def test_qgc_plan_structure() -> None:
     _block, path = _plan()
     plan = to_qgc_plan(path)

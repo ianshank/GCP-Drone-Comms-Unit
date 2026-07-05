@@ -38,6 +38,23 @@ def test_align_empty_buffer_drops() -> None:
     assert sync.dropped == 1
 
 
+def test_align_handles_out_of_order_inserts() -> None:
+    # The lazy sort must give the correct nearest even when poses arrive out of ts order.
+    sync = TimeSync(max_skew_s=0.5)
+    for t in (3.0, 1.0, 2.0):
+        sync.add_pose(_fp(t))
+    assert sync.align(1.1).ts == 1.0  # type: ignore[union-attr]
+    assert sync.align(2.9).ts == 3.0  # type: ignore[union-attr]
+
+
+def test_add_pose_invalidates_sorted_index() -> None:
+    sync = TimeSync(max_skew_s=0.5)
+    sync.add_pose(_fp(1.0))
+    assert sync.align(1.0) is not None  # builds the sorted index
+    sync.add_pose(_fp(5.0))  # must invalidate so the new pose is findable
+    assert sync.align(5.0).ts == 5.0  # type: ignore[union-attr]
+
+
 def test_buffer_is_bounded() -> None:
     sync = TimeSync(max_skew_s=100.0, buffer_size=2)
     for t in (1.0, 2.0, 3.0):

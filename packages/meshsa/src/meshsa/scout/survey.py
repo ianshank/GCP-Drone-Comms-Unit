@@ -11,6 +11,7 @@ rotated so ``u`` runs along the rows and ``v`` is cross-track.
 
 from __future__ import annotations
 
+import bisect
 import math
 from collections.abc import Sequence
 
@@ -135,8 +136,15 @@ def coverage_fraction(
     path_uv = [frame.to_uv(w.lat, w.lon) for w in path]
     cross_m, _ = footprints_m(h_fov_deg, v_fov_deg, alt_agl_m)
     half = cross_m / 2.0
-    # Transects are consecutive waypoint pairs sharing a (near-)constant v.
-    transects = [(path_uv[i], path_uv[i + 1]) for i in range(0, len(path_uv) - 1, 2)]
+    # Transects are consecutive waypoint pairs sharing a (near-)constant v. Index them by v so
+    # each sample only tests the transects whose swath band can reach it (binary search on v),
+    # instead of scanning every transect — O(samples · log T) rather than O(samples · T).
+    bands: list[tuple[float, float, float]] = []  # (v0, u_lo, u_hi)
+    for i in range(0, len(path_uv) - 1, 2):
+        (u0, v0), (u1, _v1) = path_uv[i], path_uv[i + 1]
+        bands.append((v0, min(u0, u1), max(u0, u1)))
+    bands.sort()
+    band_v = [b[0] for b in bands]
     umin = min(p[0] for p in poly_uv)
     umax = max(p[0] for p in poly_uv)
     vmin = min(p[1] for p in poly_uv)
@@ -149,9 +157,11 @@ def coverage_fraction(
         while v <= vmax:
             if _point_in_polygon(u, v, poly_uv):
                 total += 1
-                for (u0, v0), (u1, _v1) in transects:
-                    lo, hi = (u0, u1) if u0 <= u1 else (u1, u0)
-                    if abs(v - v0) <= half and lo - half <= u <= hi + half:
+                lo_i = bisect.bisect_left(band_v, v - half)
+                hi_i = bisect.bisect_right(band_v, v + half)
+                for k in range(lo_i, hi_i):  # |v - v0| <= half guaranteed by the band bounds
+                    _v0, u_lo, u_hi = bands[k]
+                    if u_lo - half <= u <= u_hi + half:
                         covered += 1
                         break
             v += sample_m

@@ -143,10 +143,12 @@ stay pure functions.
 ## 5. Module specifications
 
 `meshsa/scout/`: `schemas.py` (`GeoDetection`, `Block`), `sync.py`, `dedup.py`, `store.py`,
-`survey.py` (coverage analysis; gated `export_mission.py`), `replay.py`, `sources.py`
-(`PoseSource`/`DetectionSource` Protocols + replay impls), and a `pose.py` attitude/AGL fusion
-helper. `meshsa/cv/geo.py` gains a `Terrain` seam + roll + covariance error, all additive.
-Web view under `meshsa/scout/station/` (thin `aiohttp` handlers + static MapLibre).
+`survey.py` (coverage analysis + `export_mission.py`), `replay.py`, `protocols.py`
+(`PoseSource`/`DetectionSource`/`Store` Protocols), and `pose.py` (attitude/AGL fusion).
+Config→behaviour wiring helpers: `terrain.build_terrain`, `store.build_store`,
+`pipeline.make_marker_codec`, and `cli.camera_from_config`. `meshsa/cv/geo.py` gains a `Terrain`
+seam + roll + covariance error, all additive. Web view under `meshsa/scout/station/` (thin
+`aiohttp` handlers + an embedded MapLibre page built with DOM-safe `textContent`, no `innerHTML`).
 
 > **No magic numbers (CHARTER §4.5).** New `ScoutConfig` Pydantic sub-model composed into
 > `NodeConfig` (mirroring `HealthConfig`/`NemotronConfig`), wired through `NodeConfig.from_env`.
@@ -164,11 +166,19 @@ Web view under `meshsa/scout/station/` (thin `aiohttp` handlers + static MapLibr
 | `forward_overlap` | float | `0.75` | `MESHSA_SCOUT_FORWARD_OVERLAP` | survey forward overlap |
 | `side_overlap` | float | `0.65` | `MESHSA_SCOUT_SIDE_OVERLAP` | survey side overlap |
 | `survey_alt_agl_m` | float | `60.0` | `MESHSA_SCOUT_SURVEY_ALT_AGL_M` | planned survey altitude |
-| `dem_path` | str \| None | `None` | `MESHSA_SCOUT_DEM_PATH` | DEM GeoTIFF; `None` ⇒ flat-plane terrain |
-| `store_path` | str | `":memory:"` | `MESHSA_SCOUT_STORE_PATH` | SQLite/GeoJSON store location |
+| `survey_cruise_speed_ms` | float | `10.0` | `MESHSA_SCOUT_SURVEY_CRUISE_SPEED_MS` | QGC `.plan` cruise speed |
+| `survey_hover_speed_ms` | float | `5.0` | `MESHSA_SCOUT_SURVEY_HOVER_SPEED_MS` | QGC `.plan` hover speed |
+| `camera_img_w` / `camera_img_h` | int | `1920` / `1080` | `MESHSA_SCOUT_CAMERA_IMG_W` / `_H` | image size (calibration H1) |
+| `camera_h_fov_deg` / `camera_v_fov_deg` | float | `70.0` / `42.0` | `MESHSA_SCOUT_CAMERA_H_FOV_DEG` / `_V_FOV_DEG` | camera FOV (calibration H1) |
+| `dem_path` | str \| None | `None` | `MESHSA_SCOUT_DEM_PATH` | DEM GeoTIFF (via `build_terrain`); `None` ⇒ flat plane |
+| `store_path` | str | `":memory:"` | `MESHSA_SCOUT_STORE_PATH` | SQLite store path (via `build_store`); `":memory:"` ⇒ in-memory |
+| `station_host` / `station_port` / `station_token` | str/int/str | `127.0.0.1` / `8099` / `""` | `MESHSA_SCOUT_STATION_*` | operator-station bind + bearer token |
+| `enabled` | bool | `false` | `MESHSA_SCOUT_ENABLED` | opt-in flag for a node-hosted scout |
 
-The hardcoded `_POINTING_UNCERTAINTY_DEG = 1.0` and `+ 5.0` floor in `cv/geo.py` are folded into
-this config as `attitude_sigma_deg`/`pos_cep_m` when the covariance error model replaces them.
+`cv/geo.py`'s `_POINTING_UNCERTAINTY_DEG = 1.0` and the named `_LEGACY_ERROR_FLOOR_M = 5.0` are
+**retained as a legacy fallback**: `project_to_ground` uses the covariance model
+(`ground_error(range, pos_cep_m, att_sigma_deg)`) when scout supplies `pos_cep_m`/`attitude_sigma_deg`,
+and falls back to the legacy estimate only when neither is given (preserving existing callers).
 
 ---
 
@@ -189,11 +199,15 @@ this config as `attitude_sigma_deg`/`pos_cep_m` when the covariance error model 
 ## 7. Test plan (by category)
 
 Fakes-first, no hardware in unit tests. **Coverage floor: meshsa ≥90% total** (this repo enforces
-`--cov-fail-under=90` repo-wide). Pre-declared exempt surface: `rasterio` DEM sampling is tested
-against a **committed fixture GeoTIFF** under `tests/data/`; the MapLibre **JS frontend** is kept
-thin and `omit`-ed from coverage with all logic in testable `aiohttp` handlers (precedent:
-`meshsa.llm.server`). Any web-socket glue `# pragma: no cover` is an explicit Invariant-6 stretch
-flagged for maintainer sign-off.
+`--cov-fail-under=90` repo-wide; scout ships at ~100%). Pre-declared exempt surface: only the
+`rasterio.open(...)` **file read** in `load_dem` is `# pragma: no cover` (I/O glue, Invariant 6) —
+the CI `test` job installs `[dev,inference]`, not the `geo` extra, so rasterio is absent. The
+DEM's *data-shaping* logic is a pure `grid_from_band` function tested with an in-memory band, the
+bilinear math is `GriddedTerrain` (fully tested), the `build_terrain` selection + no-rasterio
+fallback are tested, and `load_dem`'s "geo extra missing" `ImportError` is asserted. The MapLibre
+**JS frontend** is an embedded page (no `.py` logic to cover); all station behaviour lives in
+testable `aiohttp` handlers (precedent: `meshsa.llm.server`). The `run-station` serve loop and the
+process/module entry points are the only other pragmas — legitimate socket/entry glue.
 
 - **Unit** — georef (extended `cv.geo`), pose/AGL fusion, sync, dedup, survey geometry, store,
   `.plan`/`.waypoints` emit — each with fakes / `FakeClock`.
@@ -229,6 +243,6 @@ flagged for maintainer sign-off.
 | 2 | Versioned, backward-compatible wire | §6: minimal marker additive/no-bump; richer attrs additive-optional + a scoped `cot.py` extension; envelope-shape changes take the full bump ritual. |
 | 3 | DI via `Protocol`, tests need no hardware | `PoseSource`/`DetectionSource`/`Terrain`/`Store` injected; replay + fakes reach every module; no radios/GPU/autopilot in unit tests. |
 | 4 | Stateful I/O in transports/services, not codecs | I/O in sources + store; georef and geometry are pure functions; codecs stay per-frame maps. |
-| 5 | Config-driven, no magic numbers | §5 `ScoutConfig` table; `cv.geo`'s residual literals folded into config. |
-| 6 | Gates green; hardware glue is the only `# pragma: no cover` | ≥90% floor; DEM tested via committed fixture; JS omitted with logic in testable handlers; any socket-glue pragma flagged for sign-off. |
-| 7 | No secrets / machine fingerprints in repo | No credentials; DEM path / store path / block geometry are runtime config; sample `block.geojson` + DEM tile carry no secrets. |
+| 5 | Config-driven, no magic numbers | §5 `ScoutConfig` table; camera intrinsics + survey speeds are config (not module constants); `cv.geo`'s residual literals are an explicit named legacy fallback. |
+| 6 | Gates green; hardware glue is the only `# pragma: no cover` | ~100% on scout; only the `rasterio.open` file read, the `run-station` serve loop, and process/module entry points are pragma'd (§7); `grid_from_band` + `build_terrain` fallback + the "geo extra missing" error are tested. |
+| 7 | No secrets / machine fingerprints in repo | No credentials; DEM path / store path / block geometry are runtime config; the built-in `sample_block()` and any operator DEM tile carry no secrets. |

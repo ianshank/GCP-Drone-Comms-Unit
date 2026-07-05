@@ -18,8 +18,9 @@ from ..cv.geo import Pose, Terrain
 
 _log = structlog.get_logger("meshsa.scout.pose")
 
-#: Default camera mount depression (deg): 90 = nadir (straight down) on a level airframe.
-_NADIR_DEPRESSION_DEG = 90.0
+#: Camera mount depression (deg) for a nadir (straight-down) camera on a level airframe.
+#: Single source of truth, imported by the replay harness so the two never drift.
+NADIR_DEPRESSION_DEG = 90.0
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class PoseFuser:
     """
 
     def __init__(
-        self, terrain: Terrain, *, mount_depression_deg: float = _NADIR_DEPRESSION_DEG
+        self, terrain: Terrain, *, mount_depression_deg: float = NADIR_DEPRESSION_DEG
     ) -> None:
         self._terrain = terrain
         self._mount_depression_deg = mount_depression_deg

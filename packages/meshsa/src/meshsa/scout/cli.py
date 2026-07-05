@@ -18,16 +18,26 @@ import structlog
 from ..config import ScoutConfig
 from ..cv.geo import Camera, ground_distance_m
 from .pipeline import ScoutPipeline
-from .replay import DEFAULT_CAMERA, ReplayFlight
+from .replay import ReplayFlight
 from .schemas import Block
-from .store import to_geojson
+from .store import build_store, to_geojson
 from .survey import plan_boustrophedon
-from .terrain import FlatTerrain
+from .terrain import build_terrain
 
 _log = structlog.get_logger("meshsa.scout.cli")
 
 #: Health-check acceptance: max geolocation error (m) for a known truth under RTK noise.
 _HEALTH_BUDGET_M = 3.0
+
+
+def camera_from_config(config: ScoutConfig) -> Camera:
+    """Build the survey :class:`Camera` from the configured intrinsics (Track H1 calibration)."""
+    return Camera(
+        img_w=config.camera_img_w,
+        img_h=config.camera_img_h,
+        h_fov_deg=config.camera_h_fov_deg,
+        v_fov_deg=config.camera_v_fov_deg,
+    )
 
 
 def sample_block() -> Block:
@@ -58,9 +68,10 @@ def load_block(path: str) -> Block:
 def _run_replay(
     block: Block, config: ScoutConfig, *, rtk: bool, seed: int
 ) -> tuple[ScoutPipeline, ReplayFlight]:
+    camera = camera_from_config(config)
     flight = ReplayFlight(
         block,
-        camera=DEFAULT_CAMERA,
+        camera=camera,
         alt_agl_m=config.survey_alt_agl_m,
         forward_overlap=config.forward_overlap,
         side_overlap=config.side_overlap,
@@ -68,9 +79,10 @@ def _run_replay(
         seed=seed,
     )
     pipe = ScoutPipeline(
-        camera=flight.camera,
-        terrain=FlatTerrain(block.mean_elev_m),
+        camera=camera,
+        terrain=build_terrain(config.dem_path, block.mean_elev_m),
         params=config,
+        store=build_store(config.store_path),
         block_id=block.block_id,
     )
     pipe.ingest(flight.poses, flight.detections)
@@ -116,7 +128,7 @@ def _cmd_gen_mission(args: argparse.Namespace, config: ScoutConfig) -> int:
     from .export_mission import to_ardupilot_waypoints, to_qgc_plan
 
     block = load_block(args.block) if args.block else sample_block()
-    camera: Camera = DEFAULT_CAMERA
+    camera = camera_from_config(config)
     waypoints = plan_boustrophedon(
         block,
         h_fov_deg=camera.h_fov_deg,

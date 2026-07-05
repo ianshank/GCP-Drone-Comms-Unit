@@ -21,6 +21,8 @@ _log = structlog.get_logger("meshsa.scout.store")
 
 #: Column order shared by the SQLite schema and the CSV export.
 _FIELDS = ("id", "lat", "lon", "cls", "conf", "error_m", "src_frame", "ts", "status", "block_id")
+#: ``store_path`` sentinel selecting the volatile in-memory backend.
+_MEMORY = ":memory:"
 
 
 class InMemoryStore:
@@ -111,6 +113,15 @@ class SqliteStore:
 
     def close(self) -> None:
         self._conn.close()
+
+
+def build_store(store_path: str) -> InMemoryStore | SqliteStore:
+    """Select a store from config: a file-backed :class:`SqliteStore` for a real path, else the
+    volatile :class:`InMemoryStore` (``":memory:"``, the default)."""
+    if store_path and store_path != _MEMORY:
+        _log.info("store_sqlite", path=store_path)
+        return SqliteStore(store_path)
+    return InMemoryStore()
 
 
 def to_geojson(detections: Iterable[GeoDetection]) -> dict[str, object]:

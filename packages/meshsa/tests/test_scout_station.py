@@ -89,6 +89,28 @@ async def test_status_transition_via_http() -> None:
         ).status == 404
 
 
+async def test_malformed_status_body_is_400() -> None:
+    async with TestClient(TestServer(build_app(_store()))) as client:
+        resp = await client.post(
+            "/detections/d1/status", data="not json", headers={"Content-Type": "application/json"}
+        )
+        assert resp.status == 400
+
+
+async def test_auth_gates_all_data_endpoints() -> None:
+    app = build_app(
+        _store(), token="sekret", block_geojson={"type": "FeatureCollection", "features": []}
+    )
+    async with TestClient(TestServer(app)) as client:
+        assert (await client.get("/healthz")).status == 200  # open
+        for path in ("/detections", "/export.geojson", "/export.csv", "/block"):
+            assert (await client.get(path)).status == 401, path
+        # …and each is reachable with the bearer token.
+        for path in ("/detections", "/export.geojson", "/export.csv", "/block"):
+            ok = await client.get(path, headers={"Authorization": "Bearer sekret"})
+            assert ok.status == 200, path
+
+
 async def test_auth_gates_data_endpoints() -> None:
     app = build_app(_store(), token="sekret")
     async with TestClient(TestServer(app)) as client:

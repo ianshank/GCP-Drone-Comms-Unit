@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import structlog
 
 from ..config import ScoutConfig
+from ..cot import CotCodec
 from ..cv.geo import Camera, Terrain, project_to_ground
 from ..detection_codec import DetectionCodec
 from ..models import Envelope
@@ -35,6 +36,16 @@ _log = structlog.get_logger("meshsa.scout.pipeline")
 _DEFAULT_SOURCE = "scout"
 
 EmitSink = Callable[[Envelope], None]
+
+
+def make_marker_codec(config: ScoutConfig) -> CotCodec:
+    """Build the CoT codec for scout MARKER emission with the configured stale window.
+
+    The existing :class:`~meshsa.cot.CotCodec` already accepts ``stale_s``; scout survey pins
+    must outlive the 120 s CoT default, so a scout→TAK deployment wires its MARKER leg through
+    this factory. Reuse, not a new encoder.
+    """
+    return CotCodec(stale_s=config.marker_stale_s)
 
 
 @dataclass

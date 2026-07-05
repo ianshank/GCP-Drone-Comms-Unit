@@ -54,10 +54,20 @@ async function refresh() {
       'circle-stroke-width': 1, 'circle-stroke-color': '#fff' } });
     map.on('click', 'dets', (e) => {
       const p = e.features[0].properties; selected = p.id;
-      document.getElementById('info').innerHTML =
-        `<b>${p.cls}</b> (${(+p.conf).toFixed(2)})<br/>id ${p.id}<br/>` +
-        ['tagged','rejected','inspected'].map(s =>
-          `<button onclick="setStatus('${s}')">${s}</button>`).join('');
+      // Build the panel with DOM nodes + textContent (never innerHTML) so class/id strings
+      // from feature properties can never be interpreted as HTML — no XSS sink.
+      const info = document.getElementById('info');
+      info.replaceChildren();
+      const title = document.createElement('b'); title.textContent = p.cls;
+      info.append(title, document.createTextNode(` (${(+p.conf).toFixed(2)})`),
+        document.createElement('br'), document.createTextNode('id ' + p.id),
+        document.createElement('br'));
+      ['tagged','rejected','inspected'].forEach(s => {
+        const btn = document.createElement('button');
+        btn.textContent = s;
+        btn.addEventListener('click', () => setStatus(s));
+        info.append(btn);
+      });
     });
   }
   if (fc.features.length && map.getZoom() < 10) {

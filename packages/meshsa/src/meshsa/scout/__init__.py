@@ -12,12 +12,13 @@ Spec: docs/specs/initiative-scout.md. Every operational value is a
 from __future__ import annotations
 
 from .dedup import Deduplicator
+from .pipeline import ScoutPipeline, make_marker_codec
 from .pose import PoseFuser
 from .protocols import DetectionSource, PoseSource, Store, Terrain
 from .schemas import BBox, Block, GeoDetection, PixelDetection, Waypoint
-from .store import InMemoryStore, SqliteStore, to_csv, to_geojson
+from .store import InMemoryStore, SqliteStore, build_store, to_csv, to_geojson
 from .sync import TimeSync
-from .terrain import FlatTerrain, GriddedTerrain, load_dem
+from .terrain import FlatTerrain, GriddedTerrain, build_terrain, grid_from_band, load_dem
 
 __all__ = [
     "BBox",
@@ -31,12 +32,17 @@ __all__ = [
     "Store",
     "FlatTerrain",
     "GriddedTerrain",
+    "build_terrain",
+    "grid_from_band",
     "load_dem",
     "PoseFuser",
     "TimeSync",
     "Deduplicator",
+    "ScoutPipeline",
+    "make_marker_codec",
     "InMemoryStore",
     "SqliteStore",
+    "build_store",
     "to_geojson",
     "to_csv",
 ]

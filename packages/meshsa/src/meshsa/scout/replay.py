@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import structlog
 
 from ..cv.geo import Camera, Pose, destination, ground_distance_m, initial_bearing
-from .pose import FusedPose
+from .pose import NADIR_DEPRESSION_DEG, FusedPose
 from .schemas import BBox, Block, PixelDetection
 from .survey import footprints_m
 
@@ -29,9 +29,9 @@ _log = structlog.get_logger("meshsa.scout.replay")
 
 #: Default synthetic pinhole camera (approx a 70°×42° RGB sensor at 1080p).
 DEFAULT_CAMERA = Camera(img_w=1920, img_h=1080, h_fov_deg=70.0, v_fov_deg=42.0)
-#: Nadir camera depression (deg) on a level airframe.
-_NADIR_DEPRESSION_DEG = 90.0
-#: Noise 1σ presets (position m, attitude deg) for the RTK vs stock-M8N tiers.
+#: Noise 1σ presets (position m, attitude deg) for the RTK vs stock-M8N tiers. The RTK
+#: position σ mirrors ``ScoutConfig.pos_cep_m`` (cm-level); kept local to this synthetic
+#: harness (not production config) but cross-referenced to avoid drift.
 _RTK_POS_SIGMA_M, _RTK_ATT_SIGMA_DEG = 0.05, 0.2
 _M8N_POS_SIGMA_M, _M8N_ATT_SIGMA_DEG = 2.5, 1.0
 
@@ -73,9 +73,7 @@ def _truth_to_pixel(
 ) -> tuple[float, float] | None:
     """Inverse projection: pixel a ground truth lands on, or ``None`` if outside the FOV."""
     rng = ground_distance_m(pose.lat, pose.lon, tlat, tlon)
-    depression = (
-        _NADIR_DEPRESSION_DEG if rng <= 0 else math.degrees(math.atan2(pose.alt_agl_m, rng))
-    )
+    depression = NADIR_DEPRESSION_DEG if rng <= 0 else math.degrees(math.atan2(pose.alt_agl_m, rng))
     pitch_off = depression - pose.pitch_deg
     brg = pose.heading_deg if rng <= 0 else initial_bearing(pose.lat, pose.lon, tlat, tlon)
     yaw_off = ((brg - pose.heading_deg + 180.0) % 360.0) - 180.0
@@ -180,7 +178,7 @@ class ReplayFlight:
                     lon=plon,
                     alt_agl_m=self.alt_agl_m,
                     heading_deg=heading,
-                    pitch_deg=_NADIR_DEPRESSION_DEG,
+                    pitch_deg=NADIR_DEPRESSION_DEG,
                 )
                 self._emit(true_pose, ts, frame, rng, pos_sigma, att_sigma)
                 ts += self.dt_s

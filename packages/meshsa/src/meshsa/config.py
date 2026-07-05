@@ -97,6 +97,11 @@ class ScoutConfig(BaseModel):
     survey_alt_agl_m: float = Field(default=60.0, gt=0.0)
     survey_cruise_speed_ms: float = Field(default=10.0, gt=0.0)
     survey_hover_speed_ms: float = Field(default=5.0, gt=0.0)
+    # Camera intrinsics (field-varying; real values come from calibration, Track H1).
+    camera_img_w: int = Field(default=1920, gt=0)
+    camera_img_h: int = Field(default=1080, gt=0)
+    camera_h_fov_deg: float = Field(default=70.0, gt=0.0, lt=180.0)
+    camera_v_fov_deg: float = Field(default=42.0, gt=0.0, lt=180.0)
     dem_path: str | None = None
     store_path: str = ":memory:"
     station_host: str = "127.0.0.1"
@@ -233,6 +238,10 @@ class NodeConfig(BaseModel):
             f"{prefix}SCOUT_SURVEY_ALT_AGL_M": ("survey_alt_agl_m", parse_float),
             f"{prefix}SCOUT_SURVEY_CRUISE_SPEED_MS": ("survey_cruise_speed_ms", parse_float),
             f"{prefix}SCOUT_SURVEY_HOVER_SPEED_MS": ("survey_hover_speed_ms", parse_float),
+            f"{prefix}SCOUT_CAMERA_IMG_W": ("camera_img_w", parse_int),
+            f"{prefix}SCOUT_CAMERA_IMG_H": ("camera_img_h", parse_int),
+            f"{prefix}SCOUT_CAMERA_H_FOV_DEG": ("camera_h_fov_deg", parse_float),
+            f"{prefix}SCOUT_CAMERA_V_FOV_DEG": ("camera_v_fov_deg", parse_float),
             f"{prefix}SCOUT_DEM_PATH": ("dem_path", _str),
             f"{prefix}SCOUT_STORE_PATH": ("store_path", _str),
             f"{prefix}SCOUT_STATION_HOST": ("station_host", _str),

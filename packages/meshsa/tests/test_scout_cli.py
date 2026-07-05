@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from meshsa.scout import cli as cli_mod
 from meshsa.scout.cli import load_block, run, sample_block
+from meshsa.scout.schemas import GeoDetection
 
 
 def test_sample_block_valid() -> None:
@@ -77,6 +79,51 @@ def test_replay_with_block_file(tmp_path: Path, capsys) -> None:  # type: ignore
         )
     )
     assert run(["replay", "--block", str(path)]) == 0
+    capsys.readouterr()
+
+
+def test_gen_mission_only_plan(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    plan = tmp_path / "s.plan"
+    assert run(["gen-mission", "--out-plan", str(plan)]) == 0
+    assert plan.exists()
+    capsys.readouterr()
+
+
+def test_gen_mission_only_waypoints(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    wp = tmp_path / "s.waypoints"
+    assert run(["gen-mission", "--out-waypoints", str(wp)]) == 0
+    assert wp.exists()
+    capsys.readouterr()
+
+
+def test_health_check_error_budget_failure(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    # A zero error budget makes every pin fail -> exit 1.
+    monkeypatch.setattr(cli_mod, "_HEALTH_BUDGET_M", 0.0)
+    assert run(["--health-check"]) == 1
+    capsys.readouterr()
+
+
+def test_health_check_pin_count_failure(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    real = cli_mod._run_replay
+
+    def fake(block, config, *, rtk, seed):  # noqa: ANN001, ANN202
+        pipe, flight = real(block, config, rtk=rtk, seed=seed)
+        pipe.store.add(
+            GeoDetection(
+                id="extra",
+                lat=38.5,
+                lon=-122.5,
+                cls="x",
+                conf=0.9,
+                error_m=0.1,
+                src_frame="f",
+                ts=0.0,
+            )
+        )
+        return pipe, flight
+
+    monkeypatch.setattr(cli_mod, "_run_replay", fake)
+    assert run(["--health-check"]) == 1
     capsys.readouterr()
 
 
