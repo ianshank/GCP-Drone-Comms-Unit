@@ -21,8 +21,11 @@ import structlog
 from pydantic import BaseModel
 
 from .._parsing import parse_int
-from ..netauth import authorize
-from ..netauth import is_loopback as is_loopback  # re-exported for callers/tests
+
+# ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
+# ``as`` alias makes the re-export visible to mypy's ``no_implicit_reexport``.
+from ..netauth import authorize as authorize
+from ..netauth import is_loopback as is_loopback
 from ..netauth import validate_bind as _validate_bind
 from .agent import AgentReply
 from .sources import (
