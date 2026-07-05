@@ -231,6 +231,37 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
 - [ ] **[cleanup] drop `# pragma: no cover` on pure logic** in `fpv/crsf/rc.py` (span==0 guards)
       and source the remaining magic numbers (`rc.py` pad=992, `monitor.py` interval) from config.
 
+## Vineyard SCOUT (initiative Scout — **Definition; spec-gated, not yet building**)
+> Structural-anomaly scouting for a vineyard block: a mapping survey (RGB + autopilot pose) →
+> georeferenced, deduplicated anomaly map on TAK/ATAK + a thin web triage view. New
+> `meshsa.scout` subpackage (may import `cv.geo`/`models`/`mavlink_source`/`cot`). Precision **A1
+> vine-level + RTK**; **B1** (no control loop); detection via a `Protocol` seam + synthetic
+> replay now, IMX500 later. Peer review + revised plan: [PLAN_PEER_REVIEW_SCOUT.md](PLAN_PEER_REVIEW_SCOUT.md);
+> spec: [specs/initiative-scout.md](specs/initiative-scout.md).
+
+- [ ] **⛔ GATE — CHARTER §3 carve-out (maintainer decision):** ratify *offline* survey/waypoint
+      **generation + export for a human to load** (no autonomy/auto-upload/BVLOS) before any
+      `export_mission` code. Proposed text in the peer-review doc, Part 3. All other scout work is
+      unblocked.
+- [ ] **Scout.0** contracts + replay: `GeoDetection`/`Block` schemas (reuse `models.Detection` on
+      the wire); boustrophedon replay over `tests/data/block.geojson` at known ground truth with
+      M8N-vs-RTK noise.
+- [ ] **Scout.1** georef + pose/AGL: extend `cv.geo` additively (DEM `Terrain` seam via `rasterio`
+      extra, roll, covariance error, undistort) **and** build the `ATTITUDE`+position→`Pose` fusion
+      with a true-AGL datum (`mavlink_source` is position-only, MSL not AGL).
+- [ ] **Scout.2** fusion: sync (max-skew drop-and-count), dedup (cluster `vine_spacing/2`), store;
+      keep the M8N cross-vine-merge regression test.
+- [ ] **Scout.4** ground station: emit `GeoDetection` via `detection_codec`→MARKER→`cot`→ATAK (set
+      `marker_stale_s`, the CoT default of 120 s expires survey pins); thin `aiohttp`+MapLibre view
+      for tag/reject/inspect + GeoJSON/CSV export.
+- [ ] **Scout.3** *(gated)* survey coverage analysis (ships) + `export_mission` `.plan`/`.waypoints`
+      (blocked on the carve-out).
+- [ ] **Scout.5** `[HW]` companion glue: `PoseSource`/`DetectionSource` over ArduPilot SITL + a fake
+      feeder; real IMX500 on-device, not in CI.
+- [ ] **Config/deps:** `ScoutConfig` (`MESHSA_SCOUT_*`) into `NodeConfig.from_env`; `rasterio` as an
+      optional extra + mypy `ignore_missing_imports` in pyproject **and** root `mypy.ini`; web =
+      `aiohttp`, **not** FastAPI. Pre-declare the DEM-fixture / JS-`omit` coverage surface (≥90% floor).
+
 ## Known risks / watch-items
 - FreeTAKServer dependency conflicts on aarch64 (opentelemetry/greenlet/eventlet) — pinned
   for now; re-verify on FTS upgrades.
