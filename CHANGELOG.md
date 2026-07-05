@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`meshsa.scout` — vineyard structural-anomaly scouting (spec `docs/specs/initiative-scout.md`;
+  CHARTER §3 offline-survey carve-out ratified 2026-07-05).** Turns a mapping survey (RGB
+  detections + autopilot pose) into a georeferenced, deduplicated anomaly map on the existing
+  TAK/CoT field map plus an optional thin `aiohttp`+MapLibre operator view. New subpackage with
+  `Protocol`/registry/config seams so it builds and tests green with **no hardware** against a
+  seeded synthetic replay harness. Modules: `schemas` (`GeoDetection`/`Block`/`PixelDetection`),
+  `pose` (`ATTITUDE`+position→AGL fusion), `terrain` (flat + DEM via the optional `geo`/`rasterio`
+  extra), `sync` (max-skew drop-and-count), `dedup` (spatial clustering; keeps the M8N cross-vine
+  merge regression proof that A1 needs RTK), `store` (in-memory + stdlib SQLite + GeoJSON/CSV),
+  `replay`, `survey` + `export_mission` (QGC `.plan` / ArduPilot `.waypoints`, **offline export
+  for a human to load — no autonomy, no auto-upload, no MAVLink writes**), `pipeline`, and a
+  loopback-default, fail-closed `station`. New `ScoutConfig` (all `MESHSA_SCOUT_*`, no magic
+  numbers) composed into `NodeConfig.from_env`; `meshsa-scout` console script
+  (`replay`/`gen-mission`/`run-station`/`--health-check`). Detections ride the **existing**
+  `DetectionCodec`→MARKER→`cot` path additively (no schema bump). `meshsa.cv.geo` gained
+  backwards-compatible extensions — `Terrain` seam, `roll_deg`, terrain-aware range refinement,
+  a covariance `ground_error`, and `initial_bearing`/`ground_distance_m` helpers (existing callers
+  and tests unaffected); a past-nadir guard now rejects `depression > 90°`.
 - **Injectable `HttpTransport` seam for the inference layer (CHARTER §4.3/§4.4).** `meshsa`
   now exports `HttpTransport` (a runtime-checkable `Protocol`), `HttpResponse`, the default
   socket-backed `AiohttpTransport`, and neutral errors `InferenceError` /

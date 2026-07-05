@@ -8,6 +8,7 @@ from .config import (
     NemotronConfig,
     NodeConfig,
     RouterConfig,
+    ScoutConfig,
     TransportConfig,
 )
 from .cot import CotCodec
@@ -73,6 +74,7 @@ __all__ = [
     "HealthConfig",
     "TransportConfig",
     "NemotronConfig",
+    "ScoutConfig",
     "Position",
     "Attitude",
     "Telemetry",

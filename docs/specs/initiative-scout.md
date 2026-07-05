@@ -1,22 +1,21 @@
 # Initiative Scout — Vineyard structural-anomaly scouting + georeferenced field map
 
-> **Status: Definition.** (Definition → Implemented → Validated; see
-> [README.md](README.md).) Pairs with [../CHARTER.md](../CHARTER.md) (scope + invariants),
-> [../ROADMAP.md](../ROADMAP.md) (milestone), and [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)
-> (track). Change deliberately; code docstrings cite this spec's `§` numbers.
+> **Status: Implemented.** (Definition → Implemented → Validated; see
+> [README.md](README.md).) Software shipped fakes-first and gates green (871 tests, 98.7% cov);
+> hardware/field validation (H1–H5) still moves it to `Validated`. Pairs with
+> [../CHARTER.md](../CHARTER.md) (scope + invariants), [../ROADMAP.md](../ROADMAP.md) (milestone),
+> and [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (track). Code docstrings cite this
+> spec's `§` numbers.
 
 **Milestone / Initiative:** Initiative Scout  **Track:** Scout.0–Scout.5  **Author:** peer-review, 2026-07-05
 
-> ## ⛔ GATE — READ FIRST
+> ## ✅ GATE — RESOLVED
 >
-> **The mission-export deliverable (§1 Phase 3, `export_mission`) collides with the CHARTER §3
-> non-goal "mission/waypoint autonomy … out of scope pending a separate amendment," reaffirmed
-> in all three existing carve-outs.** No survey-*export* code ships until a maintainer ratifies a
-> §3 carve-out for **offline waypoint generation + export for a human pilot to load** (surfaced
-> per CHARTER §6). Everything else in this spec — georeferencing, fusion, coverage *analysis*,
-> and the field-map/triage view — is unaffected and proceeds without the carve-out. The proposed
-> carve-out text lives in [../PLAN_PEER_REVIEW_SCOUT.md](../PLAN_PEER_REVIEW_SCOUT.md) for the
-> maintainer decision; do **not** edit CHARTER in passing.
+> The mission-export deliverable (§1 Phase 3, `export_mission`) required a CHARTER §3 carve-out
+> (mission/waypoint autonomy was out of scope). **The maintainer ratified a §3 carve-out on
+> 2026-07-05 for offline survey generation + export for a human pilot to load** (no autonomy, no
+> auto-upload, no in-flight action, no MAVLink writes) — recorded in [../CHARTER.md](../CHARTER.md)
+> §3. `export_mission` ships wired into the `meshsa-scout gen-mission` CLI under that carve-out.
 
 ---
 
