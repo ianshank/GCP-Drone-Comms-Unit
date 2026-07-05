@@ -41,6 +41,20 @@ def test_higher_confidence_wins_position_keeps_id_and_status() -> None:
     assert merged.lat == near_lat  # higher-confidence position adopted
 
 
+def test_no_chaining_beyond_radius() -> None:
+    # Feed a run of ever-higher-confidence detections each stepping east; membership is anchored
+    # to the original position, so a point >radius from the anchor must NOT merge (no chaining),
+    # even though it is within radius of the latest representative.
+    d = Deduplicator(radius_m=1.0)
+    d.add(_det("a", 38.5, -122.5, conf=0.10))
+    lat, lon = 38.5, -122.5
+    for i in range(6):
+        lat, lon = destination(lat, lon, 90.0, 0.5)  # 0.5 m east each step
+        d.add(_det(f"s{i}", lat, lon, conf=0.2 + i * 0.1))
+    # ~3 m east of the anchor -> a new cluster, not a chained merge into "a".
+    assert len(d.results()) >= 2
+
+
 def test_far_detections_stay_separate() -> None:
     d = Deduplicator(radius_m=1.0)
     d.add(_det("a", 38.5, -122.5))

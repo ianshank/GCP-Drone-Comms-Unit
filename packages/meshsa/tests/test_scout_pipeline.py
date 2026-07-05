@@ -137,6 +137,28 @@ def test_merge_preserves_persisted_triage() -> None:
             )
         ],
     )
+    pins = pipe.ingest(
+        [_fp(2.0)],
+        [
+            PixelDetection(
+                frame_id="f2",
+                ts=2.0,
+                bbox=BBox(x1=955, y1=535, x2=965, y2=545),
+                cls="missing_vine",
+                conf=0.99,
+            )
+        ],
+    )
     kept = pipe.store.get(det_id)
     assert kept is not None
     assert kept.status == "tagged"  # triage preserved despite the higher-conf merge
+    # The returned pins reflect the persisted triage too, not the pre-merge dedup copy.
+    assert [p.status for p in pins if p.id == det_id] == ["tagged"]
+
+
+def test_dropped_skew_accumulates_across_batches() -> None:
+    pipe = _pipeline()
+    far = _det(100.0, CAM.img_w / 2, CAM.img_h * 0.3)  # no pose within skew
+    pipe.ingest([_fp(0.0)], [far])
+    pipe.ingest([_fp(0.0)], [far])
+    assert pipe.stats.dropped_skew == 2  # accumulates, not reset per batch

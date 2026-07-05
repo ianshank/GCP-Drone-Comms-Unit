@@ -36,9 +36,9 @@ existing TAK map and an optional thin web view. Deliverables in priority order:
 4. **Scout.4 — Ground station**: emit each `GeoDetection` through the existing
    `detection_codec → MARKER → cot → TAK` path so anomalies render in ATAK/FreeTAKServer; add a
    thin `aiohttp` + MapLibre operator view for **tag/reject/inspect** and GeoJSON/CSV export.
-5. **Scout.3 — Mission geometry** *(GATED)*: row-aligned boustrophedon **coverage analysis**
-   (ships) and `export_mission` to QGC `.plan` / ArduPilot `.waypoints` **(blocked on the §3
-   carve-out)**.
+5. **Scout.3 — Mission geometry**: row-aligned boustrophedon **coverage analysis** and
+   `export_mission` to QGC `.plan` / ArduPilot `.waypoints` — **shipped** under the §3
+   offline-survey carve-out ratified 2026-07-05 (wired into `meshsa-scout gen-mission`).
 6. **Scout.5 — Companion glue** `[HW]`-gated: `PoseSource` (position + attitude + AGL) and a
    `DetectionSource` seam (replay feeder now; IMX500 backend later), verified against ArduPilot
    SITL + a fake detection feeder.
@@ -228,7 +228,7 @@ process/module entry points are the only other pragmas — legitimate socket/ent
 
 - **Mechanism (binary):** §7 green; gates (`ruff`/`ruff format`/`mypy --strict`/`pytest`) green
   from `packages/meshsa`; coverage floor met; `CHANGELOG` + `NEXTSTEPS` updated; spec status →
-  `Implemented`. `export_mission` excluded until the §3 carve-out ratifies.
+  `Implemented`. `export_mission` ships under the ratified §3 offline-survey carve-out.
 - **Validation (separate → `Validated`):** RTK integration (H2), camera calibration (H1), a DEM
   tile (H3), and a field pass (H5) that measures pin accuracy vs ground truth within the A1 error
   budget on one block. Thresholds stay provisional until measured (mirror the FPV §8 split).

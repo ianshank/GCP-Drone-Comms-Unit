@@ -7,6 +7,23 @@ offline field use, vendor the asset and point the ``<script>``/``<link>`` at a l
 
 from __future__ import annotations
 
+import json
+
+#: Placeholder replaced at serve time with the JSON-encoded bearer token (or ``null``).
+_TOKEN_PLACEHOLDER = "__SCOUT_TOKEN__"
+
+
+def render_page(token: str | None) -> str:
+    """Return the operator page with the bearer token injected for its `fetch` calls.
+
+    The token is JSON-encoded (so it is a valid JS literal and cannot break out of the
+    string), letting the page attach ``Authorization: Bearer <token>`` to the data/status
+    requests. `/` itself is gated on the same token by the app, so serving it here does not
+    widen exposure.
+    """
+    return MAP_HTML.replace(_TOKEN_PLACEHOLDER, json.dumps(token))
+
+
 MAP_HTML = """<!doctype html>
 <html lang="en">
 <head>
@@ -38,9 +55,16 @@ const map = new maplibregl.Map({
 });
 const COLORS = { new: '#e6550d', tagged: '#31a354', rejected: '#636363', inspected: '#3182bd' };
 let selected = null;
+// Injected by the server (render_page): the bearer token for a secured deployment, or null.
+const SCOUT_TOKEN = __SCOUT_TOKEN__;
+function authHeaders(extra) {
+  const h = extra || {};
+  if (SCOUT_TOKEN) { h['Authorization'] = 'Bearer ' + SCOUT_TOKEN; }
+  return h;
+}
 
 async function refresh() {
-  const res = await fetch('detections');
+  const res = await fetch('detections', { headers: authHeaders() });
   if (!res.ok) { document.getElementById('info').textContent = 'auth required'; return; }
   const fc = await res.json();
   if (map.getSource('dets')) { map.getSource('dets').setData(fc); }
@@ -77,7 +101,7 @@ async function refresh() {
 async function setStatus(status) {
   if (!selected) return;
   await fetch(`detections/${selected}/status`, { method: 'POST',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ status }) });
   refresh();
 }
 window.setStatus = setStatus;

@@ -34,6 +34,13 @@ def test_bbox_rejects_non_finite() -> None:
         BBox(x1=float("nan"), y1=0, x2=1, y2=1)
 
 
+def test_bbox_rejects_inverted_or_degenerate() -> None:
+    with pytest.raises(ValidationError):  # x2 <= x1
+        BBox(x1=30, y1=0, x2=10, y2=10)
+    with pytest.raises(ValidationError):  # y2 <= y1 (degenerate)
+        BBox(x1=0, y1=10, x2=10, y2=10)
+
+
 def test_pixel_detection_conf_range() -> None:
     with pytest.raises(ValidationError):
         PixelDetection(frame_id="f", ts=1.0, bbox=BBox(x1=0, y1=0, x2=1, y2=1), cls="x", conf=1.5)

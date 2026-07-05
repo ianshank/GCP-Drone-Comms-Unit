@@ -156,13 +156,13 @@ def _cmd_run_station(
 ) -> int:  # pragma: no cover - serve loop
     from aiohttp import web
 
-    from .station import build_app, validate_bind
+    from .station import build_app
 
     block = load_block(args.block) if args.block else sample_block()
     pipe, _flight = _run_replay(block, config, rtk=not args.no_rtk, seed=args.seed)
     token = config.station_token or None
-    validate_bind(config.station_host, token)
-    app = build_app(pipe.store, token=token)
+    # build_app enforces the fail-closed bind rule internally when given the host.
+    app = build_app(pipe.store, host=config.station_host, token=token)
     web.run_app(app, host=config.station_host, port=config.station_port)
     return 0
 

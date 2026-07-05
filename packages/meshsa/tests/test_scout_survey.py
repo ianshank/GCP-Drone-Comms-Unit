@@ -88,9 +88,14 @@ def test_ardupilot_waypoints_format() -> None:
     text = to_ardupilot_waypoints(path)
     lines = text.strip().splitlines()
     assert lines[0] == "QGC WPL 110"
-    assert len(lines) == len(path) + 1
-    cols = lines[1].split("\t")
-    assert cols[0] == "0"  # seq
-    assert cols[1] == "1"  # first row is current
-    assert cols[3] == "16"  # NAV_WAYPOINT
-    assert cols[-1] == "1"  # autocontinue
+    # Header + an explicit home row (seq 0) + one row per survey waypoint.
+    assert len(lines) == len(path) + 2
+    home = lines[1].split("\t")
+    assert home[0] == "0"  # home seq
+    assert home[1] == "1"  # home is the current item
+    assert home[2] == "0"  # MAV_FRAME_GLOBAL (absolute alt) for home
+    first_wp = lines[2].split("\t")
+    assert first_wp[0] == "1"  # survey waypoints start at seq 1
+    assert first_wp[1] == "0"  # not current
+    assert first_wp[3] == "16"  # NAV_WAYPOINT
+    assert first_wp[-1] == "1"  # autocontinue

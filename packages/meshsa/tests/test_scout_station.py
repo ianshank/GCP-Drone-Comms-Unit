@@ -58,6 +58,30 @@ def test_set_status_body() -> None:
     assert set_status_body(store, "missing", {"status": "tagged"})[1] == 404
 
 
+def test_build_app_self_validates_bind() -> None:
+    with pytest.raises(ValueError):  # non-loopback without a token is refused inside build_app
+        build_app(_store(), host="0.0.0.0", token=None)
+    build_app(_store(), host="0.0.0.0", token="tok")  # ok with a token
+    build_app(_store(), host="127.0.0.1", token=None)  # loopback ok without a token
+
+
+async def test_index_gated_and_injects_token() -> None:
+    app = build_app(_store(), token="sekret")
+    async with TestClient(TestServer(app)) as client:
+        assert (await client.get("/")).status == 401  # page gated when a token is set
+        ok = await client.get("/", params={"token": "sekret"})
+        assert ok.status == 200
+        body = await ok.text()
+        assert '"sekret"' in body  # token injected so the page's fetches can authenticate
+
+
+async def test_index_open_without_token() -> None:
+    async with TestClient(TestServer(build_app(_store()))) as client:
+        resp = await client.get("/")
+        assert resp.status == 200
+        assert "null" in await resp.text()  # SCOUT_TOKEN injected as null
+
+
 async def test_open_endpoints() -> None:
     async with TestClient(TestServer(build_app(_store()))) as client:
         assert (await client.get("/healthz")).status == 200

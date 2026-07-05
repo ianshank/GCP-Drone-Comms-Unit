@@ -5,7 +5,9 @@
 > the plan's prose, and then **adversarially re-reviewed against the source**. Part 1 is the
 > claim-by-claim review; Part 2 is the regenerated plan with the corrections folded in; Part 3 is
 > the CHARTER carve-out proposal the mission-export deliverable requires. The executable spec is
-> [specs/initiative-scout.md](specs/initiative-scout.md) (status **Definition**).
+> [specs/initiative-scout.md](specs/initiative-scout.md). This document is the original
+> peer-review + revised plan; the spec has since shipped and is now status **Implemented**
+> (references to "Definition" below are the plan's state at authoring time, kept as history).
 
 ## Context
 

@@ -18,6 +18,8 @@ from .schemas import Waypoint
 _MAV_CMD_NAV_WAYPOINT = 16
 #: MAV_FRAME_GLOBAL_RELATIVE_ALT.
 _MAV_FRAME_GLOBAL_RELATIVE_ALT = 3
+#: MAV_FRAME_GLOBAL (absolute alt) — used for the WPL home row.
+_MAV_FRAME_GLOBAL = 0
 #: QGC waypoint-list text header.
 _WPL_HEADER = "QGC WPL 110"
 
@@ -65,30 +67,41 @@ def to_qgc_plan(
     }
 
 
-def to_ardupilot_waypoints(waypoints: Sequence[Waypoint]) -> str:
+def to_ardupilot_waypoints(
+    waypoints: Sequence[Waypoint], *, home: tuple[float, float, float] | None = None
+) -> str:
     """Build an ArduPilot/QGC WPL 110 ``.waypoints`` text block.
 
-    Row 0 is the home/current item; each waypoint is a ``NAV_WAYPOINT`` in a relative-alt
-    frame. Tab-separated per the QGC WPL spec.
+    QGC WPL 110 treats **row 0 as the planned home position** (its de-facto convention), so an
+    explicit home row is emitted first (``current=1``, absolute-alt frame), then the survey
+    waypoints follow at sequence ``1..N`` in a relative-alt frame — otherwise a GCS would take
+    the first survey waypoint as home and shift the mission. Tab-separated per the WPL spec.
     """
+    if home is None:
+        first = waypoints[0] if waypoints else None
+        home = (first.lat, first.lon, first.alt_agl_m) if first is not None else (0.0, 0.0, 0.0)
+    rows: list[tuple[int, int, float, float, float]] = [
+        (_MAV_FRAME_GLOBAL, 1, home[0], home[1], home[2])  # seq 0 = home / current
+    ]
+    for wp in waypoints:
+        rows.append((_MAV_FRAME_GLOBAL_RELATIVE_ALT, 0, wp.lat, wp.lon, wp.alt_agl_m))
     lines = [_WPL_HEADER]
-    for i, wp in enumerate(waypoints):
-        current = 1 if i == 0 else 0
+    for seq, (frame, current, lat, lon, alt) in enumerate(rows):
         lines.append(
             "\t".join(
                 str(x)
                 for x in (
-                    wp.seq,
+                    seq,
                     current,
-                    _MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                    frame,
                     _MAV_CMD_NAV_WAYPOINT,
                     0,
                     0,
                     0,
                     0,
-                    f"{wp.lat:.8f}",
-                    f"{wp.lon:.8f}",
-                    f"{wp.alt_agl_m:.2f}",
+                    f"{lat:.8f}",
+                    f"{lon:.8f}",
+                    f"{alt:.2f}",
                     1,
                 )
             )

@@ -18,7 +18,7 @@ from ...netauth import validate_bind as _validate_bind
 from ..protocols import Store
 from ..schemas import DETECTION_STATUSES
 from ..store import to_csv, to_geojson
-from ._html import MAP_HTML
+from ._html import render_page
 
 _log = structlog.get_logger("meshsa.scout.station")
 
@@ -66,14 +66,20 @@ def set_status_body(store: Store, detection_id: str, payload: Any) -> tuple[dict
 def build_app(
     store: Store,
     *,
+    host: str | None = None,
     token: str | None = None,
     block_geojson: dict[str, object] | None = None,
 ) -> Any:
     """Build the aiohttp station app.
 
-    ``/`` (map) and ``/healthz`` stay open; ``/detections``, ``/export.*``, ``/block`` and the
-    status POST require the bearer token when one is configured.
+    When ``host`` is given, the fail-closed bind rule is enforced **inside** ``build_app`` (a
+    non-loopback bind without a token raises), so the guarantee travels with the app rather than
+    relying on the caller. ``/healthz`` stays open; ``/`` (map) and the data/status endpoints
+    require the bearer token when one is configured — the page is served with the token injected
+    (gated by a ``?token=`` query) so its `fetch` calls can authenticate.
     """
+    if host is not None:
+        validate_bind(host, token)
     from aiohttp import web
 
     def _guard(request: Any) -> Any | None:
@@ -81,8 +87,12 @@ def build_app(
             return web.json_response({"error": "unauthorized"}, status=401)
         return None
 
-    async def index(_request: Any) -> Any:
-        return web.Response(text=MAP_HTML, content_type="text/html")
+    async def index(request: Any) -> Any:
+        # Browsers can't set an Authorization header on navigation, so the page is gated on a
+        # ``?token=`` query when a token is configured; the token is then injected for its fetches.
+        if token and not authorize(token, "Bearer " + (request.query.get("token") or "")):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        return web.Response(text=render_page(token), content_type="text/html")
 
     async def healthz(_request: Any) -> Any:
         return web.json_response({"status": "ok"})

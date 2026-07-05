@@ -34,6 +34,9 @@ DEFAULT_CAMERA = Camera(img_w=1920, img_h=1080, h_fov_deg=70.0, v_fov_deg=42.0)
 #: harness (not production config) but cross-referenced to avoid drift.
 _RTK_POS_SIGMA_M, _RTK_ATT_SIGMA_DEG = 0.05, 0.2
 _M8N_POS_SIGMA_M, _M8N_ATT_SIGMA_DEG = 2.5, 1.0
+#: Vertical GNSS error runs larger than horizontal on consumer receivers; scale the
+#: position σ to give the reported AGL a representative altitude-error term.
+_VERTICAL_NOISE_FACTOR = 1.5
 
 
 @dataclass(frozen=True)
@@ -200,10 +203,11 @@ class ReplayFlight:
             nlat, nlon = destination(true_pose.lat, true_pose.lon, b, r)
         else:
             nlat, nlon = true_pose.lat, true_pose.lon
+        alt_noise = rng.gauss(0.0, pos_sigma * _VERTICAL_NOISE_FACTOR)
         reported = Pose(
             lat=nlat,
             lon=nlon,
-            alt_agl_m=true_pose.alt_agl_m,
+            alt_agl_m=max(1.0, true_pose.alt_agl_m + alt_noise),
             heading_deg=(true_pose.heading_deg + rng.gauss(0.0, att_sigma)) % 360.0,
             pitch_deg=true_pose.pitch_deg + rng.gauss(0.0, att_sigma),
         )

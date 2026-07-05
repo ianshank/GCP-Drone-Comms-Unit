@@ -46,6 +46,14 @@ flight-logs/
 *.h264
 *.mkv
 
+# Scout runtime artifacts (meshsa.scout): generated missions, SQLite stores, exports.
+# DEM inputs (*.tif) are operator-supplied and intentionally not ignored here.
+*.plan
+*.waypoints
+*.sqlite
+*.sqlite3
+scout-*.db
+
 # Tooling
 .python-version
 

@@ -65,7 +65,7 @@ geo = [
 ]
 scout = [
     "aiohttp>=3.9",
-    "rasterio>=1.3",
+    "meshsa[geo]",  # reuse the geo (rasterio DEM) stack rather than re-pinning it
 ]
 dev = [
     "pytest>=8",

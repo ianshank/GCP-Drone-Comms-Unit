@@ -23,36 +23,46 @@ class Deduplicator:
 
     def __init__(self, radius_m: float) -> None:
         self._radius_m = radius_m
-        self._clusters: list[GeoDetection] = []
+        self._reps: list[GeoDetection] = []
+        #: Each cluster's **original** position, used as the fixed membership anchor so the
+        #: representative adopting higher-confidence fixes cannot "chain" the cluster location
+        #: cumulatively beyond ``radius_m`` (the single-linkage failure mode).
+        self._anchors: list[tuple[float, float]] = []
         self.merges = 0
 
     def add(self, detection: GeoDetection) -> GeoDetection:
         """Add a detection; return the canonical (possibly pre-existing) cluster fix.
 
-        On a merge the cluster keeps its original id and triage status but adopts the
-        higher-confidence position, so an operator's tag/reject on a pin is not lost when
-        a later, better frame arrives.
+        Membership is tested against each cluster's fixed anchor (its first detection), so a
+        run of higher-confidence merges can refine the *reported* position but never drift the
+        cluster beyond ``radius_m`` of where it started. On a merge the cluster keeps its stable
+        id and triage status but adopts the higher-confidence position.
         """
-        for i, rep in enumerate(self._clusters):
-            if ground_distance_m(detection.lat, detection.lon, rep.lat, rep.lon) <= self._radius_m:
+        for i, (anchor_lat, anchor_lon) in enumerate(self._anchors):
+            if (
+                ground_distance_m(detection.lat, detection.lon, anchor_lat, anchor_lon)
+                <= self._radius_m
+            ):
                 self.merges += 1
+                rep = self._reps[i]
                 if detection.conf > rep.conf:
                     merged = detection.model_copy(
                         update={"id": rep.id, "status": rep.status, "block_id": rep.block_id}
                     )
                 else:
                     merged = rep
-                self._clusters[i] = merged
+                self._reps[i] = merged
                 _log.debug(
                     "detection_merged",
                     cluster_id=rep.id,
                     merges=self.merges,
-                    clusters=len(self._clusters),
+                    clusters=len(self._reps),
                 )
                 return merged
-        self._clusters.append(detection)
+        self._reps.append(detection)
+        self._anchors.append((detection.lat, detection.lon))
         return detection
 
     def results(self) -> list[GeoDetection]:
         """Return the current deduplicated cluster representatives."""
-        return list(self._clusters)
+        return list(self._reps)

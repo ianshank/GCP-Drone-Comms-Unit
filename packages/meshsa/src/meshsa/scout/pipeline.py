@@ -142,7 +142,9 @@ class ScoutPipeline:
             self._store.add(canonical)
             if self._emit is not None:
                 self._emit(self._to_envelope(canonical))
-        self.stats.dropped_skew = self._sync.dropped
+        # ``_sync`` is rebuilt per batch, so accumulate its drops like the other counters
+        # (``detections_in``/``projected``/``dropped_horizon``) for multi-batch/streaming use.
+        self.stats.dropped_skew += self._sync.dropped
         self.stats.merges = self._dedup.merges
         self.stats.pins = len(self._dedup.results())
         _log.info(
@@ -153,7 +155,9 @@ class ScoutPipeline:
             dropped_horizon=self.stats.dropped_horizon,
             pins=self.stats.pins,
         )
-        return self._dedup.results()
+        # Return store-backed detections so any operator triage persisted for a cluster is
+        # reflected in the returned pins (the dedup cluster copy keeps the pre-merge status).
+        return [self._store.get(d.id) or d for d in self._dedup.results()]
 
     def _to_envelope(self, det: GeoDetection) -> Envelope:
         """Reuse the existing detection codec to build a positioned MARKER envelope."""

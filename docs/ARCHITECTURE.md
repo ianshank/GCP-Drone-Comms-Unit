@@ -41,6 +41,8 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.inference`              | `NemotronClient` + `InferenceService`: opt-in NVIDIA NIM AI bridge (`[inference]` extra) |
 | `meshsa.command`                | Supervised command path: staging, confirmation, audit, MAVLink link + pump |
 | `meshsa.command.errors`         | `CommandError(MeshSAError)` + typed refusal sub-hierarchy             |
+| `meshsa.cv.geo`                 | Pure pixel→lat/lon projection (`project_to_ground`, `Terrain` seam, covariance error) |
+| `meshsa.scout`                  | Vineyard scouting: georef fusion, dedup, store, survey/mission export, `aiohttp` station (`[scout]` extra) |
 | `meshsa.examples.base_node`     | Thin re-export of `meshsa.cli` (demonstrative only)                 |
 
 ## Patterns
@@ -86,7 +88,8 @@ from receiving messages. This ensures the message-delivery hot path is fault-tol
 ### Env-var bindings
 `NodeConfig.from_env()` reads `MESHSA_*` environment variables for all config sections:
 scalar node fields, `MESHSA_MESH_*` (MeshConfig), `MESHSA_ROUTER_*` (RouterConfig),
-`MESHSA_HEALTH_*` (HealthConfig), and `MESHSA_INFERENCE_*` (NemotronConfig). Individual
+`MESHSA_HEALTH_*` (HealthConfig), `MESHSA_INFERENCE_*` (NemotronConfig), and
+`MESHSA_SCOUT_*` (ScoutConfig). Individual
 env-vars always override the JSON blob value for the same field. Parsing uses shared
 helpers (`parse_int`, `parse_float`, `_parse_bool`) that name the offending variable on
 bad values.
@@ -162,3 +165,32 @@ Design choices that keep it consistent with the framework invariants:
   (swapped for v4l2/GStreamer on the production Jetson).
 - **Command authority** is limited to a pre-flight arm interlock (`ArmGuard`) under the
   CHARTER §3 carve-out; the monitor never intervenes in flight.
+
+## Vineyard scouting subsystem (`meshsa.scout`)
+
+`meshsa.scout` (`packages/meshsa/src/meshsa/scout/`) is a self-contained, offline,
+hardware-free pipeline that turns a mapping survey into a georeferenced, deduplicated anomaly
+map. It follows the same invariants as the rest of the framework and **reuses** the proven
+primitives rather than forking them.
+
+- **Reuse, not fork.** Georeferencing is the pure `meshsa.cv.geo` (extended additively with a
+  `Terrain` seam, roll, and a covariance error model); pins reach ATAK through the existing
+  `detection_codec → MARKER Envelope → cot` path (no codec edit, no schema bump); the station
+  reuses `meshsa.netauth` (shared with `meshsa.llm.server`) for loopback/bearer/fail-closed bind.
+- **`Protocol` seams, fakes-first (Invariant 3).** `PoseSource`/`DetectionSource`/`Terrain`/
+  `Store` are injected; a seeded synthetic `replay` harness drives the whole pipeline with no
+  radios/GPS/camera, and `--health-check` asserts known truths geolocate within the RTK budget
+  and dedupe to the expected pin count.
+- **Config-driven (Invariant 5).** Every tunable is a `ScoutConfig` field (`MESHSA_SCOUT_*`),
+  composed into `NodeConfig`; camera intrinsics, DEM path, store path, and marker stale are all
+  config, wired through `build_terrain` / `build_store` / `make_marker_codec` / `camera_from_config`.
+- **Pose is the real work.** `mavlink_source` is position-only, so `PoseFuser` fuses `ATTITUDE`
+  + position + terrain into a `cv.geo.Pose` with **true AGL**; `TimeSync` matches detections to
+  the nearest pose (max-skew drop-and-count) and `Deduplicator` clusters at `vine_spacing/2`,
+  anchored to each cluster's original position so a run of higher-confidence merges cannot chain
+  the pin beyond the radius.
+- **Offline mission export only (CHARTER §3 carve-out).** `survey` + `export_mission` emit QGC
+  `.plan` / ArduPilot `.waypoints` (with an explicit WPL home row) as **inert files a human
+  loads** — scout issues no vehicle commands and no MAVLink writes. The DEM raster read is the
+  only `# pragma: no cover` glue (`[geo]`/rasterio extra); its grid-shaping and the bilinear
+  math are pure and tested.

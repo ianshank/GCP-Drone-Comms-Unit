@@ -107,7 +107,10 @@ def load_dem(path: str) -> GriddedTerrain:
     with rasterio.open(path) as ds:  # pragma: no cover - file I/O glue (whole block)
         band: Any = ds.read(1)
         t = ds.transform
-        grid = grid_from_band(band, ds.width, ds.height)
+        # Prefer numpy's bulk conversion for large DEMs; fall back to the pure helper.
+        grid = (
+            band.tolist() if hasattr(band, "tolist") else grid_from_band(band, ds.width, ds.height)
+        )
         transform = GridTransform(x0=float(t.c), y0=float(t.f), dx=float(t.a), dy=float(-t.e))
         _log.info("dem_loaded", path=path, rows=len(grid), cols=len(grid[0]))
         return GriddedTerrain(grid, transform)
