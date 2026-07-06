@@ -73,6 +73,26 @@ class InferenceHttpError(InferenceError):
         super().__init__(message or f"inference HTTP {status}")
 
 
+def _is_transient_status(status: int) -> bool:
+    """True for HTTP statuses worth retrying/queueing: rate-limit (429) or 5xx server errors."""
+    return status == _HTTP_TOO_MANY_REQUESTS or status >= _HTTP_SERVER_ERROR_FLOOR
+
+
+def _is_offline_retryable(exc: InferenceError) -> bool:
+    """True when a failure is a connectivity/transient condition worth an offline replay.
+
+    Transport errors (API unreachable) and *transient* HTTP failures (429 / 5xx that already
+    exhausted the retry budget) are offline-worthy. A permanent client error (401/400/404) or a
+    malformed-payload / max-retries base ``InferenceError`` is **not** — replaying it can never
+    succeed, so it must surface fast instead of cycling in the queue forever.
+    """
+    if isinstance(exc, InferenceTransportError):
+        return True
+    if isinstance(exc, InferenceHttpError):
+        return _is_transient_status(exc.status)
+    return False
+
+
 # ── HTTP seam ───────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class HttpResponse:
@@ -216,14 +236,11 @@ class NemotronClient:
         self.config = config
         self._sleep = sleep
         self._transport: HttpTransport = transport if transport is not None else AiohttpTransport()
-        # Parse the structured-output schema once (fail fast on a bad schema at
-        # construction rather than on every request). None when not configured.
-        self._guided_json: Any | None = None
-        if config.guided_json_schema:
-            try:
-                self._guided_json = json.loads(config.guided_json_schema)
-            except json.JSONDecodeError as exc:
-                raise InferenceError("invalid guided_json_schema (not JSON)") from exc
+        # Parse the structured-output schema once. NemotronConfig has already validated it as a
+        # JSON object at config load (fail-fast there), so this cannot raise. None when unset.
+        self._guided_json: Any | None = (
+            json.loads(config.guided_json_schema) if config.guided_json_schema else None
+        )
 
     @property
     def _want_json(self) -> bool:
@@ -278,7 +295,7 @@ class NemotronClient:
 
             status = resp.status
             # Rate limiting and 5xx server errors are transient: retry with backoff.
-            if status == _HTTP_TOO_MANY_REQUESTS or status >= _HTTP_SERVER_ERROR_FLOOR:
+            if _is_transient_status(status):
                 if attempt < retries:
                     _log.debug("inference_http_retry", attempt=attempt, status=status)
                     await self._sleep(self._backoff_delay(attempt))
@@ -290,7 +307,11 @@ class NemotronClient:
                 _log.error("inference_http_error", status=status, transient=False)
                 raise InferenceHttpError(status)
 
-            return self._parse(resp.payload, want_json=self._want_json)
+            return self._parse(
+                resp.payload,
+                want_json=self._want_json,
+                summary_field=self.config.guided_json_summary_field,
+            )
 
         raise InferenceError("inference failed after max retries")  # pragma: no cover
 
@@ -299,12 +320,16 @@ class NemotronClient:
         return min(self.config.backoff_base**attempt, self.config.backoff_max_s)
 
     @staticmethod
-    def _parse(data: dict[str, Any], *, want_json: bool = False) -> InferenceResult:
+    def _parse(
+        data: dict[str, Any], *, want_json: bool = False, summary_field: str = "summary"
+    ) -> InferenceResult:
         """Extract the completion text, mapping a malformed body to InferenceError.
 
         In structured (``want_json``) mode, a JSON-object reply carrying a string
-        ``summary`` field is unwrapped to that field; any non-JSON or unshaped reply
-        falls back to the raw text so a structured request never loses the answer.
+        ``summary_field`` (config-driven, default ``"summary"``) is unwrapped to that field;
+        any non-JSON or unshaped reply falls back to the raw text — logged as
+        ``structured_parse_fallback`` so the missed structured contract is observable — so a
+        structured request never loses the answer.
         """
         try:
             content: str = data["choices"][0]["message"]["content"]
@@ -316,8 +341,10 @@ class NemotronClient:
                 obj: Any = json.loads(content)
             except (json.JSONDecodeError, TypeError):
                 obj = None
-            if isinstance(obj, dict) and isinstance(obj.get("summary"), str):
-                summary = obj["summary"]
+            if isinstance(obj, dict) and isinstance(obj.get(summary_field), str):
+                summary = obj[summary_field]
+            else:
+                _log.debug("structured_parse_fallback", summary_field=summary_field)
         _log.debug("inference_success", reply_chars=len(summary))
         return InferenceResult(summary=summary, raw_response=json.dumps(data))
 
@@ -398,38 +425,41 @@ class InferenceService:
 
     async def _analyze_and_publish(self, envelope: Envelope) -> None:
         try:
-            if self._semaphore is not None:
-                async with self._semaphore:
-                    await self._analyze_once(envelope)
-            else:
-                await self._analyze_once(envelope)
+            result = await self._gated_analyze(envelope)
+            if not result.summary:
+                return
+            await self._publish(envelope, result)
+            # Drain OUTSIDE any semaphore permit (`_gated_analyze` already released it) so a
+            # backlog flush doesn't monopolize the concurrency cap.
+            await self._drain_offline()
         except asyncio.CancelledError:
             raise
+        except InferenceError as exc:
+            # A connectivity/transient failure is queued for later replay (when a queue is
+            # configured); a permanent one (bad key, malformed body) surfaces as before so it
+            # fails fast and loud instead of cycling in the queue forever.
+            if self._offline is not None and _is_offline_retryable(exc):
+                self._offline_put(self._offline, envelope, front=False)
+                _log.warning(
+                    "inference_offline_enqueue", original_id=envelope.msg_id, error=str(exc)
+                )
+            else:
+                _log.warning("inference_task_failed", exc_info=True)
         except Exception:
             _log.warning("inference_task_failed", exc_info=True)
 
-    async def _analyze_once(self, envelope: Envelope) -> None:
-        """Rate-limit, analyze one envelope, publish on success, and drain the queue.
+    async def _gated_analyze(self, envelope: Envelope) -> InferenceResult:
+        """Run one analysis through the rate-limit gate: space, then a per-call permit.
 
-        An inference failure (transport/HTTP error surviving retries) enqueues the
-        envelope for offline replay instead of dropping it; a successful pass drains
-        any queued envelopes.
+        Spacing happens *before* acquiring a permit (so a permit is never spent merely
+        waiting), and the permit wraps only the network call — so both live requests and each
+        offline replay honor ``min_interval_s`` and ``max_concurrent_requests`` identically.
         """
         await self._space()
-        try:
-            result = await self.client.analyze(envelope)
-        except InferenceError as exc:
-            # With no offline queue, preserve prior behavior: let the failure surface to
-            # the task-level handler. Otherwise queue the envelope for a later replay.
-            if self._offline is None:
-                raise
-            self._enqueue_offline(self._offline, envelope)
-            _log.warning("inference_offline_enqueue", original_id=envelope.msg_id, error=str(exc))
-            return
-        if not result.summary:
-            return
-        await self._publish(envelope, result)
-        await self._drain_offline()
+        if self._semaphore is None:
+            return await self.client.analyze(envelope)
+        async with self._semaphore:
+            return await self.client.analyze(envelope)
 
     async def _space(self) -> None:
         """Enforce ``min_interval_s`` spacing between requests via the injected clock."""
@@ -458,35 +488,49 @@ class InferenceService:
         await self.router.publish(reply)
         _log.info("inference_published", original_id=envelope.msg_id, reply_id=reply.msg_id)
 
-    def _enqueue_offline(self, queue: deque[Envelope], envelope: Envelope) -> None:
-        """Queue an envelope for later replay; count drop-the-oldest overflow.
+    def _offline_put(self, queue: deque[Envelope], envelope: Envelope, *, front: bool) -> None:
+        """Add an envelope to the offline queue at either end, counting any overflow.
 
-        ``queue`` is passed explicitly (always the caller's non-``None`` ``_offline``)
-        so this helper never has to re-narrow the optional.
+        ``front=True`` (a re-queued replay) preserves FIFO — the item returns to where it was
+        popped. A full deque silently drops the item at the opposite end on insert, so we
+        count it (drop-and-count, mirroring ``FlightLogger``) rather than lose it silently —
+        this also covers the case where a concurrent producer refilled the queue during a
+        drain ``await``.
         """
         if len(queue) == queue.maxlen:
-            # deque drops the oldest on append when full — record it (drop-and-count,
-            # mirroring FlightLogger) so silent loss is visible in the counter.
             self._offline_dropped += 1
             _log.warning("inference_offline_dropped", dropped_total=self._offline_dropped)
-        queue.append(envelope)
+        if front:
+            queue.appendleft(envelope)
+        else:
+            queue.append(envelope)
 
     async def _drain_offline(self) -> None:
-        """Replay queued envelopes after a success; re-queue and stop on the first failure."""
+        """Replay queued envelopes after a success.
+
+        A *transient* replay failure returns the item to the FRONT (FIFO) and stops draining —
+        connectivity is likely down again. A *permanent* replay failure drops the item (counted)
+        and continues, so one poison envelope can never block replay of the rest.
+        """
         if not self._offline:
             return
         async with self._drain_lock:
             while self._offline:
                 pending = self._offline.popleft()
                 try:
-                    result = await self.client.analyze(pending)
+                    result = await self._gated_analyze(pending)
                 except InferenceError as exc:
-                    # Put the failed envelope back at the FRONT (where it was popped) so
-                    # replay order stays FIFO — the oldest failure is retried first next
-                    # time. appendleft can't overflow here (we just popped a slot).
-                    self._offline.appendleft(pending)
-                    _log.warning("inference_offline_replay_failed", error=str(exc))
-                    return
+                    if _is_offline_retryable(exc):
+                        self._offline_put(self._offline, pending, front=True)
+                        _log.warning("inference_offline_replay_failed", error=str(exc))
+                        return
+                    self._offline_dropped += 1
+                    _log.warning(
+                        "inference_offline_replay_dropped",
+                        dropped_total=self._offline_dropped,
+                        error=str(exc),
+                    )
+                    continue
                 if result.summary:
                     await self._publish(pending, result)
 

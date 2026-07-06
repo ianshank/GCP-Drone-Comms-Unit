@@ -731,11 +731,28 @@ async def test_client_text_mode_sends_no_structured_directive(make_transport, en
     assert "nvext" not in body and "response_format" not in body
 
 
-def test_client_invalid_guided_json_schema_raises_at_construction(make_transport):
-    """A malformed guided_json_schema fails fast at construction, not per request."""
-    cfg = NemotronConfig(enabled=True, api_key="k", guided_json_schema="{not json")
-    with pytest.raises(InferenceError, match="guided_json_schema"):
-        NemotronClient(cfg, transport=make_transport([]))
+async def test_client_guided_json_summary_field_is_configurable(make_transport, env):
+    """The unwrap key follows guided_json_summary_field, not a hardcoded 'summary'."""
+    cfg = NemotronConfig(
+        enabled=True,
+        api_key="k",
+        guided_json_schema='{"type": "object"}',
+        guided_json_summary_field="report",
+    )
+    transport = make_transport([_ok('{"report": "custom-key reply", "summary": "ignored"}')])
+    client = NemotronClient(cfg, transport=transport)
+    result = await client.analyze(env)
+    assert result.summary == "custom-key reply"
+
+
+async def test_client_json_mode_missing_configured_field_falls_back(make_transport, env):
+    """When the configured field is absent, fall back to raw text (never lose the reply)."""
+    cfg = NemotronConfig(
+        enabled=True, api_key="k", response_format="json", guided_json_summary_field="report"
+    )
+    client = NemotronClient(cfg, transport=make_transport([_ok('{"summary": "wrong key"}')]))
+    result = await client.analyze(env)
+    assert result.summary == '{"summary": "wrong key"}'
 
 
 # ── Track-B: rate limiting (concurrency + min-interval) ─────────────────
@@ -966,3 +983,109 @@ async def test_service_offline_replay_failure_preserves_fifo_order(make_transpor
     assert svc._offline is not None
     # 'a' stayed at the front (appendleft), 'b' still behind it — arrival order preserved.
     assert [e.msg_id for e in svc._offline] == ["a", "b"]
+
+
+# ── Track-B hardening: offline error classification + gated drain ───────
+
+
+async def test_service_permanent_http_error_not_queued(make_transport, mock_router, env):
+    """A permanent 4xx (401 bad key) must NOT be queued for offline replay."""
+    cfg = NemotronConfig(enabled=True, api_key="bad", max_retries=0, offline_queue_max=4)
+    svc = _service(cfg, mock_router, make_transport([HttpResponse(status=401, payload={})]))
+    svc.start()
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await svc.stop()
+    assert mock_router.published == []
+    assert svc._offline is not None and len(svc._offline) == 0  # not queued — fails fast
+
+
+async def test_service_malformed_payload_not_queued(make_transport, mock_router, env):
+    """A malformed 200 body (base InferenceError) must NOT be queued (never replays clean)."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    svc = _service(cfg, mock_router, make_transport([HttpResponse(status=200, payload={"x": 1})]))
+    svc.start()
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await svc.stop()
+    assert mock_router.published == []
+    assert svc._offline is not None and len(svc._offline) == 0
+
+
+async def test_service_5xx_exhausted_is_queued(make_transport, mock_router, env):
+    """A 5xx that survives retries IS transient → queued for offline replay."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    svc = _service(cfg, mock_router, make_transport([HttpResponse(status=503, payload={})]))
+    svc.start()
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await svc.stop()
+    assert svc._offline is not None and len(svc._offline) == 1
+
+
+async def test_service_drain_honors_min_interval(make_transport, mock_router, env):
+    """Offline replay goes through the same _space() gate as live requests (no burst)."""
+    sleeps: list[float] = []
+
+    async def rec_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    cfg = NemotronConfig(
+        enabled=True, api_key="k", max_retries=0, offline_queue_max=4, min_interval_s=0.5
+    )
+    # msg1 fails (transient) -> queued; msg2 ok -> publish + drain replays msg1 ok.
+    transport = make_transport([InferenceTransportError("down"), _ok("s2"), _ok("s1")])
+    svc = _service(cfg, mock_router, transport, clock=_FixedClock(), sleep=rec_sleep)
+    svc.start()
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await mock_router.handlers[0](env)
+    await _await_published(mock_router, 2)
+    await svc.stop()
+    # 3 gated calls total (fail, live-ok, replay-ok); the 2nd and 3rd each wait one interval.
+    assert sleeps == [pytest.approx(0.5), pytest.approx(0.5)]
+
+
+async def test_service_drain_drops_permanent_and_continues(make_transport, mock_router):
+    """A replay failing permanently is dropped (counted) and draining continues to the next."""
+    a, b, c = _pli("a", "u1"), _pli("b", "u2"), _pli("c", "u3")
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    # a,b fail (transient) -> [a, b]; c ok -> publish; drain: a -> 401 permanent (drop+continue),
+    # b -> ok (publish).
+    transport = make_transport(
+        [
+            InferenceTransportError("a"),
+            InferenceTransportError("b"),
+            _ok("c-ok"),
+            HttpResponse(status=401, payload={}),
+            _ok("b-replay"),
+        ]
+    )
+    svc = _service(cfg, mock_router, transport)
+    svc.start()
+    await mock_router.handlers[0](a)
+    await _await_idle(svc)
+    await mock_router.handlers[0](b)
+    await _await_idle(svc)
+    await mock_router.handlers[0](c)
+    await _await_published(mock_router, 2)
+    await _await_idle(svc)
+    await svc.stop()
+
+    assert len(mock_router.published) == 2  # c-ok + b-replay; 'a' was dropped as permanent
+    assert svc._offline is not None and len(svc._offline) == 0
+    assert svc._offline_dropped == 1
+
+
+async def test_service_non_inference_exception_logged_not_queued(make_transport, mock_router, env):
+    """A non-InferenceError (e.g. an unexpected bug) is caught + logged, never queued or raised."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    # A plain RuntimeError from the transport is not an InferenceError — it bypasses the retry
+    # loop and the offline classifier, hitting the task-level safety net.
+    svc = _service(cfg, mock_router, make_transport([RuntimeError("unexpected bug")]))
+    svc.start()
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await svc.stop()
+    assert mock_router.published == []
+    assert svc._offline is not None and len(svc._offline) == 0  # generic errors aren't queued

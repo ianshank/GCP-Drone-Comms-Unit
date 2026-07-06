@@ -140,6 +140,7 @@ def test_from_env_inference_track_b_fields():
         "MESHSA_INFERENCE_MAX_CONCURRENT_REQUESTS": "4",
         "MESHSA_INFERENCE_RESPONSE_FORMAT": "json",
         "MESHSA_INFERENCE_GUIDED_JSON_SCHEMA": '{"type": "object"}',
+        "MESHSA_INFERENCE_GUIDED_JSON_SUMMARY_FIELD": "report",
         "MESHSA_INFERENCE_MODELS": "nvidia/a, nvidia/b ,nvidia/c",
         "MESHSA_INFERENCE_OFFLINE_QUEUE_MAX": "16",
         # ``model`` must be in the allow-list, else the after-validator rejects it.
@@ -150,6 +151,7 @@ def test_from_env_inference_track_b_fields():
     assert c.inference.max_concurrent_requests == 4
     assert c.inference.response_format == "json"
     assert c.inference.guided_json_schema == '{"type": "object"}'
+    assert c.inference.guided_json_summary_field == "report"
     assert c.inference.models == ("nvidia/a", "nvidia/b", "nvidia/c")  # trimmed, order kept
     assert c.inference.offline_queue_max == 16
 
@@ -161,8 +163,25 @@ def test_inference_track_b_defaults_are_no_ops():
     assert cfg.max_concurrent_requests == 0
     assert cfg.response_format == "text"
     assert cfg.guided_json_schema == ""
+    assert cfg.guided_json_summary_field == "summary"
     assert cfg.models == ()
     assert cfg.offline_queue_max == 0
+
+
+def test_inference_guided_json_schema_valid_object_accepted():
+    cfg = NemotronConfig(guided_json_schema='{"type": "object", "properties": {}}')
+    assert cfg.guided_json_schema.startswith("{")
+
+
+def test_inference_guided_json_schema_rejects_malformed_json():
+    with pytest.raises(ValidationError, match="not valid JSON"):
+        NemotronConfig(guided_json_schema="{not json")
+
+
+def test_inference_guided_json_schema_rejects_non_object():
+    # A JSON array/scalar is valid JSON but not a schema object.
+    with pytest.raises(ValidationError, match="must be a JSON object"):
+        NemotronConfig(guided_json_schema="[1, 2, 3]")
 
 
 def test_inference_model_allowlist_rejects_out_of_list_model():

@@ -74,7 +74,11 @@ class NemotronConfig(BaseModel):
     response_format: Literal["text", "json"] = "text"
     #: A JSON-schema string for NVIDIA's ``nvext.guided_json`` structured output;
     #: "" disables it (see spec §5 — NVIDIA recommends this over ``response_format``).
+    #: Validated at config load: when set it must parse to a JSON object.
     guided_json_schema: str = ""
+    #: Reply field unwrapped from a structured (JSON) response into the insight summary;
+    #: match this to the key your ``guided_json_schema`` defines. Default ``"summary"``.
+    guided_json_summary_field: str = Field(default="summary", min_length=1)
     #: Optional model allow-list; empty = no restriction. When set, ``model`` must be
     #: a member and :meth:`with_model` rejects anything outside it.
     models: tuple[str, ...] = ()
@@ -82,21 +86,32 @@ class NemotronConfig(BaseModel):
     #: unreachable; 0 = disabled (no queueing, prior behavior).
     offline_queue_max: int = Field(default=0, ge=0)
 
+    def _reject_model_not_allowed(self, model: str) -> None:
+        """Raise when ``model`` is outside a configured allow-list (no-op if unset)."""
+        if self.models and model not in self.models:
+            raise ValueError(f"model {model!r} not in allow-list {self.models}")
+
     @model_validator(mode="after")
-    def _model_in_allowlist(self) -> NemotronConfig:
-        """When an allow-list is configured, the active ``model`` must be in it."""
-        if self.models and self.model not in self.models:
-            raise ValueError(f"model {self.model!r} not in allow-list {self.models}")
+    def _validate_after(self) -> NemotronConfig:
+        """Fail fast at config load: enforce the allow-list and parse the guided schema."""
+        self._reject_model_not_allowed(self.model)
+        if self.guided_json_schema:
+            try:
+                schema = json.loads(self.guided_json_schema)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"guided_json_schema is not valid JSON: {exc}") from exc
+            if not isinstance(schema, dict):
+                raise ValueError("guided_json_schema must be a JSON object")
         return self
 
     def with_model(self, model: str) -> NemotronConfig:
         """Return a copy pinned to ``model`` (multi-model switch).
 
-        Rejects a model outside ``models`` when an allow-list is configured, so a
-        runtime switch can never escape the operator-approved set.
+        Rejects a model outside ``models`` when an allow-list is configured, so a runtime
+        switch can never escape the operator-approved set. The manual re-check is required
+        because Pydantic v2's ``model_copy`` does **not** re-run validators.
         """
-        if self.models and model not in self.models:
-            raise ValueError(f"model {model!r} not in allow-list {self.models}")
+        self._reject_model_not_allowed(model)
         return self.model_copy(update={"model": model})
 
 
@@ -258,6 +273,7 @@ class NodeConfig(BaseModel):
             f"{prefix}INFERENCE_MAX_CONCURRENT_REQUESTS": ("max_concurrent_requests", parse_int),
             f"{prefix}INFERENCE_RESPONSE_FORMAT": ("response_format", _str),
             f"{prefix}INFERENCE_GUIDED_JSON_SCHEMA": ("guided_json_schema", _str),
+            f"{prefix}INFERENCE_GUIDED_JSON_SUMMARY_FIELD": ("guided_json_summary_field", _str),
             f"{prefix}INFERENCE_MODELS": ("models", _csv_tuple),
             f"{prefix}INFERENCE_OFFLINE_QUEUE_MAX": ("offline_queue_max", parse_int),
         }
