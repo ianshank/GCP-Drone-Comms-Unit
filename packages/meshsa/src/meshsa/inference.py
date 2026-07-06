@@ -481,7 +481,10 @@ class InferenceService:
                 try:
                     result = await self.client.analyze(pending)
                 except InferenceError as exc:
-                    self._enqueue_offline(self._offline, pending)
+                    # Put the failed envelope back at the FRONT (where it was popped) so
+                    # replay order stays FIFO — the oldest failure is retried first next
+                    # time. appendleft can't overflow here (we just popped a slot).
+                    self._offline.appendleft(pending)
                     _log.warning("inference_offline_replay_failed", error=str(exc))
                     return
                 if result.summary:

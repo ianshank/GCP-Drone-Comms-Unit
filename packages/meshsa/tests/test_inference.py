@@ -924,3 +924,45 @@ async def test_service_offline_replay_skips_empty_summary(make_transport, mock_r
 
     assert len(mock_router.published) == 1  # only s2; the empty replay is dropped
     assert not svc._offline
+
+
+def _pli(msg_id: str, source_uid: str) -> Envelope:
+    return Envelope(
+        schema_version=1,
+        msg_id=msg_id,
+        ts=1.0,
+        source_uid=source_uid,
+        kind=MessageKind.PLI,
+        payload={"position": {"lat": 1.0, "lon": 2.0}},
+    )
+
+
+async def test_service_offline_replay_failure_preserves_fifo_order(make_transport, mock_router):
+    """A failed replay returns to the FRONT of the queue, ahead of newer entries (FIFO)."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    a, b, c = _pli("a", "u1"), _pli("b", "u2"), _pli("c", "u3")
+    # a fails -> [a]; b fails -> [a, b]; c ok -> publish, drain pops a -> fails -> back to front.
+    transport = make_transport(
+        [
+            InferenceTransportError("a"),
+            InferenceTransportError("b"),
+            _ok("c-ok"),
+            InferenceTransportError("a2"),
+        ]
+    )
+    svc = _service(cfg, mock_router, transport)
+    svc.start()
+
+    await mock_router.handlers[0](a)
+    await _await_idle(svc)
+    await mock_router.handlers[0](b)
+    await _await_idle(svc)
+    await mock_router.handlers[0](c)
+    await _await_published(mock_router, 1)
+    await _await_idle(svc)
+    await svc.stop()
+
+    assert len(mock_router.published) == 1  # only c
+    assert svc._offline is not None
+    # 'a' stayed at the front (appendleft), 'b' still behind it — arrival order preserved.
+    assert [e.msg_id for e in svc._offline] == ["a", "b"]
