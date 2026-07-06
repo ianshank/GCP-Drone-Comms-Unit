@@ -1,6 +1,6 @@
 # Initiative E — AI Inference (`meshsa.inference`)
 
-> **Status: Implemented (MVP + HTTP-transport seam); Track-B hardening is Definition.**
+> **Status: Implemented (MVP + HTTP-transport seam + Track-B hardening).**
 > (Definition → Implemented → Validated; see [README.md](README.md).) Pairs with
 > [../CHARTER.md](../CHARTER.md) §4 (invariants), [../ROADMAP.md](../ROADMAP.md) Initiative E,
 > and [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) Track B. Code cites this spec by `§`.
@@ -22,8 +22,8 @@ Deliverables:
    lifecycle guards, configurable backoff, injectable sleep.
 2. **HTTP-transport seam (shipped, §3/§5):** the network boundary is an injectable
    `HttpTransport` `Protocol` so the retry/parse logic is pure and version-independent.
-3. **Hardening backlog (Definition, §4/§7):** local rate limiting, structured response parsing,
-   multi-model support, offline fallback.
+3. **Hardening backlog (Implemented, §4/§7):** local rate limiting, structured response parsing,
+   multi-model support, offline fallback — all four shipped as additive, default-off config.
 
 ### Non-goals
 
@@ -117,10 +117,39 @@ are logged and swallowed (one bad message never tears down the service).
 | `backoff_max_s` | `30.0` (`>= 0.0`) | cap applied as `min(backoff_base**attempt, backoff_max_s)` |
 | `insight_prefix` | `[AI Insight]` (`min_length 1`) | feedback-loop marker |
 
-**Track-B additions (Definition):** `min_interval_s`, `max_concurrent_requests` (rate limiting);
-a `response_format`/JSON-mode toggle (structured parsing); a model allow-list (multi-model); an
-offline queue bound (offline fallback). Each is a config field with an explicit default + env
-binding — no literals.
+**Track-B additions (Implemented).** Each is a `NemotronConfig` field with an explicit default +
+`MESHSA_INFERENCE_*` binding; every default is a no-op so an existing deployment is unchanged:
+
+| Field | Default | Meaning |
+| ----- | ------- | ------- |
+| `min_interval_s` | `0.0` (`>= 0.0`) | rate limiting — min spacing between requests; 0 = unspaced |
+| `max_concurrent_requests` | `0` (`>= 0`) | rate limiting — max in-flight requests; 0 = unbounded |
+| `response_format` | `"text"` (`text`\|`json`) | structured parsing — request a JSON reply |
+| `guided_json_schema` | `""` | structured parsing — NVIDIA `nvext.guided_json` schema string |
+| `models` | `()` | multi-model — allow-list; when set, `model` must be a member |
+| `offline_queue_max` | `0` (`>= 0`) | offline fallback — bounded replay-queue depth; 0 = disabled |
+
+**Rate limiting** lives in `InferenceService`, not the pure `NemotronClient`: a
+`asyncio.BoundedSemaphore` caps *concurrency* while the clock-driven `min_interval_s` gate caps
+*rate* (a semaphore alone cannot). The concurrency slot is held across `analyze()`'s internal
+retry loop — a **deliberate** choice to bound API spend/pressure on a constrained edge node
+*inclusive of retries*, rather than the general "retry outside the slot" pattern.
+
+**Structured parsing.** When `guided_json_schema` is set it is sent as `nvext.guided_json`
+(NVIDIA's recommended mechanism — the portable `response_format:{"type":"json_object"}` toggle,
+used when only `response_format == "json"` is set, permits *any* valid JSON incl. `{}`). `_parse`
+unwraps a string `summary` field from a JSON-object reply and **falls back to the raw text** on
+any non-JSON/unshaped reply, so a structured request never loses the answer. A bad
+`guided_json_schema` fails fast at `NemotronClient` construction.
+
+**Multi-model.** `models` is validated on construction (`model ∈ models`); `with_model(name)`
+returns a copy pinned to `name`, rejecting anything outside the allow-list.
+
+**Offline fallback.** A `deque(maxlen=offline_queue_max)` in `InferenceService` queues an
+envelope when `analyze()` fails after retries; overflow drops the oldest and increments a drop
+counter (drop-and-count, mirroring `FlightLogger`). The next successful analysis drains the
+queue, re-queuing and stopping on the first replay failure. With `offline_queue_max = 0` the
+prior behavior (failure surfaces to the task handler, nothing queued) is preserved exactly.
 
 ---
 

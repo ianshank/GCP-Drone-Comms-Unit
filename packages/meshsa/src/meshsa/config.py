@@ -8,7 +8,7 @@ import os
 from collections.abc import Callable, Mapping
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ._parsing import parse_float, parse_int
 from .models import NodeTier
@@ -62,6 +62,42 @@ class NemotronConfig(BaseModel):
     backoff_base: float = Field(default=2.0, ge=1.0)
     backoff_max_s: float = Field(default=30.0, ge=0.0)
     insight_prefix: str = Field(default="[AI Insight]", min_length=1)
+    # ── Track-B hardening (spec §5). Every field defaults to the prior behavior:
+    #    0 / "" / "text" / () are all no-ops, so an existing deployment is unchanged. ──
+    #: Minimum spacing between analysis requests (rate limiting); 0.0 = unspaced.
+    min_interval_s: float = Field(default=0.0, ge=0.0)
+    #: Max concurrent in-flight analysis requests (rate limiting); 0 = unbounded.
+    max_concurrent_requests: int = Field(default=0, ge=0)
+    #: Request the model return JSON. ``guided_json_schema`` (NVIDIA's ``nvext``,
+    #: preferred) takes precedence; ``"json"`` sends the portable OpenAI
+    #: ``response_format`` toggle; ``"text"`` is the default free-form reply.
+    response_format: Literal["text", "json"] = "text"
+    #: A JSON-schema string for NVIDIA's ``nvext.guided_json`` structured output;
+    #: "" disables it (see spec §5 — NVIDIA recommends this over ``response_format``).
+    guided_json_schema: str = ""
+    #: Optional model allow-list; empty = no restriction. When set, ``model`` must be
+    #: a member and :meth:`with_model` rejects anything outside it.
+    models: tuple[str, ...] = ()
+    #: Bounded offline queue depth for envelopes that failed while the API was
+    #: unreachable; 0 = disabled (no queueing, prior behavior).
+    offline_queue_max: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _model_in_allowlist(self) -> NemotronConfig:
+        """When an allow-list is configured, the active ``model`` must be in it."""
+        if self.models and self.model not in self.models:
+            raise ValueError(f"model {self.model!r} not in allow-list {self.models}")
+        return self
+
+    def with_model(self, model: str) -> NemotronConfig:
+        """Return a copy pinned to ``model`` (multi-model switch).
+
+        Rejects a model outside ``models`` when an allow-list is configured, so a
+        runtime switch can never escape the operator-approved set.
+        """
+        if self.models and model not in self.models:
+            raise ValueError(f"model {model!r} not in allow-list {self.models}")
+        return self.model_copy(update={"model": model})
 
 
 class HealthConfig(BaseModel):
@@ -147,6 +183,10 @@ class NodeConfig(BaseModel):
         def _str(_name: str, value: str) -> str:
             return value
 
+        def _csv_tuple(_name: str, value: str) -> tuple[str, ...]:
+            """Parse a comma-separated env value into a tuple of trimmed, non-empty items."""
+            return tuple(x.strip() for x in value.split(",") if x.strip())
+
         scalar_map: dict[str, tuple[str, Callable[[str, str], Any]]] = {
             f"{prefix}UID": ("uid", _str),
             f"{prefix}CALLSIGN": ("callsign", _str),
@@ -214,6 +254,12 @@ class NodeConfig(BaseModel):
             f"{prefix}INFERENCE_BACKOFF_BASE": ("backoff_base", parse_float),
             f"{prefix}INFERENCE_BACKOFF_MAX_S": ("backoff_max_s", parse_float),
             f"{prefix}INFERENCE_INSIGHT_PREFIX": ("insight_prefix", _str),
+            f"{prefix}INFERENCE_MIN_INTERVAL_S": ("min_interval_s", parse_float),
+            f"{prefix}INFERENCE_MAX_CONCURRENT_REQUESTS": ("max_concurrent_requests", parse_int),
+            f"{prefix}INFERENCE_RESPONSE_FORMAT": ("response_format", _str),
+            f"{prefix}INFERENCE_GUIDED_JSON_SCHEMA": ("guided_json_schema", _str),
+            f"{prefix}INFERENCE_MODELS": ("models", _csv_tuple),
+            f"{prefix}INFERENCE_OFFLINE_QUEUE_MAX": ("offline_queue_max", parse_int),
         }
         for env_key, (field, caster) in inference_scalars.items():
             if env_key in env:

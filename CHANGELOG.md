@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`meshsa.inference` Track-B hardening (spec `docs/specs/initiative-e-inference.md` §5).** Four
+  additive, default-off options on `NemotronConfig` (all `MESHSA_INFERENCE_*` env-bound, no magic
+  numbers): **rate limiting** (`min_interval_s` + `max_concurrent_requests` — a `BoundedSemaphore`
+  caps concurrency and a clock-driven min-interval gate caps rate, enforced in `InferenceService`);
+  **structured (JSON) parsing** (`response_format` + `guided_json_schema` — a schema is sent as
+  NVIDIA `nvext.guided_json`, else the portable `response_format:{"type":"json_object"}` toggle,
+  and `_parse` unwraps a JSON `summary` field with a raw-text fallback so the text path never
+  regresses); **multi-model** (`models` allow-list + `NemotronConfig.with_model()` with a
+  construction-time validator); and **offline fallback** (`offline_queue_max` bounded deque that
+  queues failed envelopes drop-and-count on overflow and replays them on the next success). Every
+  default is a no-op, so existing deployments are unchanged; `inference.py` stays at 100% coverage.
+- **`docs/ROADMAP_RECONCILIATION.md`.** Records that an externally-circulated "Architectural
+  Roadmap" (Google Cloud / Langfuse / Spring-Boot-JUnit / autonomous agent-swarm) was written
+  without repo access and is largely inapplicable or out of scope per CHARTER §3; maps each claim
+  to reality and notes the one in-scope slice that became the inference Track-B work above.
 - **`meshsa.scout` — vineyard structural-anomaly scouting (spec `docs/specs/initiative-scout.md`;
   CHARTER §3 offline-survey carve-out ratified 2026-07-05).** Turns a mapping survey (RGB
   detections + autopilot pose) into a georeferenced, deduplicated anomaly map on the existing

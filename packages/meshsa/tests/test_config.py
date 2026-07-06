@@ -1,8 +1,9 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
-from meshsa import NodeConfig, NodeTier
+from meshsa import NemotronConfig, NodeConfig, NodeTier
 
 
 def test_defaults_are_explicit_not_hardcoded():
@@ -126,6 +127,70 @@ def test_from_env_inference_enabled_bool_parsing(raw, expected):
     env = {"MESHSA_UID": "n", "MESHSA_CALLSIGN": "B", "MESHSA_INFERENCE_ENABLED": raw}
     c = NodeConfig.from_env(env)
     assert c.inference.enabled is expected
+
+
+# ── Track-B inference config (rate limit / structured / multi-model / offline) ──
+
+
+def test_from_env_inference_track_b_fields():
+    env = {
+        "MESHSA_UID": "n2",
+        "MESHSA_CALLSIGN": "FULL",
+        "MESHSA_INFERENCE_MIN_INTERVAL_S": "0.25",
+        "MESHSA_INFERENCE_MAX_CONCURRENT_REQUESTS": "4",
+        "MESHSA_INFERENCE_RESPONSE_FORMAT": "json",
+        "MESHSA_INFERENCE_GUIDED_JSON_SCHEMA": '{"type": "object"}',
+        "MESHSA_INFERENCE_MODELS": "nvidia/a, nvidia/b ,nvidia/c",
+        "MESHSA_INFERENCE_OFFLINE_QUEUE_MAX": "16",
+        # ``model`` must be in the allow-list, else the after-validator rejects it.
+        "MESHSA_INFERENCE_MODEL": "nvidia/a",
+    }
+    c = NodeConfig.from_env(env)
+    assert c.inference.min_interval_s == pytest.approx(0.25)
+    assert c.inference.max_concurrent_requests == 4
+    assert c.inference.response_format == "json"
+    assert c.inference.guided_json_schema == '{"type": "object"}'
+    assert c.inference.models == ("nvidia/a", "nvidia/b", "nvidia/c")  # trimmed, order kept
+    assert c.inference.offline_queue_max == 16
+
+
+def test_inference_track_b_defaults_are_no_ops():
+    """Unset Track-B fields default to prior behavior (no rate limit / text / no queue)."""
+    cfg = NemotronConfig()
+    assert cfg.min_interval_s == 0.0
+    assert cfg.max_concurrent_requests == 0
+    assert cfg.response_format == "text"
+    assert cfg.guided_json_schema == ""
+    assert cfg.models == ()
+    assert cfg.offline_queue_max == 0
+
+
+def test_inference_model_allowlist_rejects_out_of_list_model():
+    with pytest.raises(ValidationError):
+        NemotronConfig(models=("nvidia/a", "nvidia/b"), model="nvidia/z")
+
+
+def test_inference_with_model_switches_within_allowlist():
+    cfg = NemotronConfig(models=("nvidia/a", "nvidia/b"), model="nvidia/a")
+    switched = cfg.with_model("nvidia/b")
+    assert switched.model == "nvidia/b"
+    assert cfg.model == "nvidia/a"  # original is untouched (copy)
+
+
+def test_inference_with_model_rejects_out_of_list():
+    cfg = NemotronConfig(models=("nvidia/a",), model="nvidia/a")
+    with pytest.raises(ValueError, match="allow-list"):
+        cfg.with_model("nvidia/z")
+
+
+def test_inference_with_model_unrestricted_when_no_allowlist():
+    cfg = NemotronConfig()  # empty allow-list = no restriction
+    assert cfg.with_model("any/model").model == "any/model"
+
+
+def test_inference_response_format_rejects_unknown_value():
+    with pytest.raises(ValidationError):
+        NemotronConfig(response_format="xml")
 
 
 def test_from_env_inference_bad_numeric_names_offending_variable():

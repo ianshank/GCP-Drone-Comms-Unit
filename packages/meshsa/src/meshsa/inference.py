@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
@@ -215,6 +216,19 @@ class NemotronClient:
         self.config = config
         self._sleep = sleep
         self._transport: HttpTransport = transport if transport is not None else AiohttpTransport()
+        # Parse the structured-output schema once (fail fast on a bad schema at
+        # construction rather than on every request). None when not configured.
+        self._guided_json: Any | None = None
+        if config.guided_json_schema:
+            try:
+                self._guided_json = json.loads(config.guided_json_schema)
+            except json.JSONDecodeError as exc:
+                raise InferenceError("invalid guided_json_schema (not JSON)") from exc
+
+    @property
+    def _want_json(self) -> bool:
+        """True when a structured (JSON) reply was requested via either mechanism."""
+        return self._guided_json is not None or self.config.response_format == "json"
 
     async def analyze(self, envelope: Envelope) -> InferenceResult:
         if not self.config.enabled or not self.config.api_key:
@@ -233,6 +247,13 @@ class NemotronClient:
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
         }
+        # Structured-output directive (spec §5). NVIDIA recommends its ``nvext.guided_json``
+        # schema over the portable ``response_format`` JSON toggle (which allows any valid
+        # JSON, including ``{}``), so the schema wins when both are set.
+        if self._guided_json is not None:
+            payload["nvext"] = {"guided_json": self._guided_json}
+        elif self.config.response_format == "json":
+            payload["response_format"] = {"type": "json_object"}
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
@@ -269,7 +290,7 @@ class NemotronClient:
                 _log.error("inference_http_error", status=status, transient=False)
                 raise InferenceHttpError(status)
 
-            return self._parse(resp.payload)
+            return self._parse(resp.payload, want_json=self._want_json)
 
         raise InferenceError("inference failed after max retries")  # pragma: no cover
 
@@ -278,14 +299,27 @@ class NemotronClient:
         return min(self.config.backoff_base**attempt, self.config.backoff_max_s)
 
     @staticmethod
-    def _parse(data: dict[str, Any]) -> InferenceResult:
-        """Extract the completion text, mapping a malformed body to InferenceError."""
+    def _parse(data: dict[str, Any], *, want_json: bool = False) -> InferenceResult:
+        """Extract the completion text, mapping a malformed body to InferenceError.
+
+        In structured (``want_json``) mode, a JSON-object reply carrying a string
+        ``summary`` field is unwrapped to that field; any non-JSON or unshaped reply
+        falls back to the raw text so a structured request never loses the answer.
+        """
         try:
             content: str = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise InferenceError("malformed completion payload") from exc
-        _log.debug("inference_success", reply_chars=len(content))
-        return InferenceResult(summary=content, raw_response=json.dumps(data))
+        summary = content
+        if want_json:
+            try:
+                obj: Any = json.loads(content)
+            except (json.JSONDecodeError, TypeError):
+                obj = None
+            if isinstance(obj, dict) and isinstance(obj.get("summary"), str):
+                summary = obj["summary"]
+        _log.debug("inference_success", reply_chars=len(summary))
+        return InferenceResult(summary=summary, raw_response=json.dumps(data))
 
     async def close(self) -> None:
         """Close the underlying transport, if any."""
@@ -304,16 +338,35 @@ class InferenceService:
         source_uid: str,
         *,
         transport: HttpTransport | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.config = config
         self.router = router
         self.clock = clock
         self.id_factory = id_factory
         self.source_uid = source_uid
-        self.client = NemotronClient(config, transport=transport)
+        self.client = NemotronClient(config, transport=transport, sleep=sleep)
+        self._sleep = sleep
         self._bg_tasks: set[asyncio.Task[None]] = set()
         self._running = False
         self._subscribed = False
+        # ── Rate limiting (spec §5). A BoundedSemaphore caps *concurrency*; the
+        #    min-interval gate caps *rate* — a semaphore alone cannot. Both are no-ops
+        #    at their defaults (0), preserving prior behavior. ──
+        self._semaphore: asyncio.BoundedSemaphore | None = (
+            asyncio.BoundedSemaphore(config.max_concurrent_requests)
+            if config.max_concurrent_requests > 0
+            else None
+        )
+        self._interval_lock = asyncio.Lock()
+        self._last_request_at: float | None = None
+        # ── Offline fallback (spec §5): a bounded queue of envelopes that failed while
+        #    the API was unreachable, replayed on the next success. None = disabled. ──
+        self._offline: deque[Envelope] | None = (
+            deque(maxlen=config.offline_queue_max) if config.offline_queue_max > 0 else None
+        )
+        self._offline_dropped = 0
+        self._drain_lock = asyncio.Lock()
 
     def start(self) -> None:
         if not self.config.enabled or self._subscribed:
@@ -345,27 +398,94 @@ class InferenceService:
 
     async def _analyze_and_publish(self, envelope: Envelope) -> None:
         try:
-            result = await self.client.analyze(envelope)
-            if not result.summary:
-                return
-
-            reply = Envelope(
-                schema_version=SCHEMA_VERSION,
-                msg_id=self.id_factory.new_id(),
-                ts=self.clock.now(),
-                source_uid=self.source_uid,
-                kind=MessageKind.CHAT,
-                payload=ChatPayload(
-                    text=f"{self.config.insight_prefix} {result.summary}",
-                    to=envelope.source_uid,
-                ).model_dump(),
-            )
-            await self.router.publish(reply)
-            _log.info("inference_published", original_id=envelope.msg_id, reply_id=reply.msg_id)
+            if self._semaphore is not None:
+                async with self._semaphore:
+                    await self._analyze_once(envelope)
+            else:
+                await self._analyze_once(envelope)
         except asyncio.CancelledError:
             raise
         except Exception:
             _log.warning("inference_task_failed", exc_info=True)
+
+    async def _analyze_once(self, envelope: Envelope) -> None:
+        """Rate-limit, analyze one envelope, publish on success, and drain the queue.
+
+        An inference failure (transport/HTTP error surviving retries) enqueues the
+        envelope for offline replay instead of dropping it; a successful pass drains
+        any queued envelopes.
+        """
+        await self._space()
+        try:
+            result = await self.client.analyze(envelope)
+        except InferenceError as exc:
+            # With no offline queue, preserve prior behavior: let the failure surface to
+            # the task-level handler. Otherwise queue the envelope for a later replay.
+            if self._offline is None:
+                raise
+            self._enqueue_offline(self._offline, envelope)
+            _log.warning("inference_offline_enqueue", original_id=envelope.msg_id, error=str(exc))
+            return
+        if not result.summary:
+            return
+        await self._publish(envelope, result)
+        await self._drain_offline()
+
+    async def _space(self) -> None:
+        """Enforce ``min_interval_s`` spacing between requests via the injected clock."""
+        if self.config.min_interval_s <= 0:
+            return
+        async with self._interval_lock:
+            now = self.clock.now()
+            if self._last_request_at is not None:
+                wait = self.config.min_interval_s - (now - self._last_request_at)
+                if wait > 0:
+                    await self._sleep(wait)
+            self._last_request_at = self.clock.now()
+
+    async def _publish(self, envelope: Envelope, result: InferenceResult) -> None:
+        reply = Envelope(
+            schema_version=SCHEMA_VERSION,
+            msg_id=self.id_factory.new_id(),
+            ts=self.clock.now(),
+            source_uid=self.source_uid,
+            kind=MessageKind.CHAT,
+            payload=ChatPayload(
+                text=f"{self.config.insight_prefix} {result.summary}",
+                to=envelope.source_uid,
+            ).model_dump(),
+        )
+        await self.router.publish(reply)
+        _log.info("inference_published", original_id=envelope.msg_id, reply_id=reply.msg_id)
+
+    def _enqueue_offline(self, queue: deque[Envelope], envelope: Envelope) -> None:
+        """Queue an envelope for later replay; count drop-the-oldest overflow.
+
+        ``queue`` is passed explicitly (always the caller's non-``None`` ``_offline``)
+        so this helper never has to re-narrow the optional.
+        """
+        if len(queue) == queue.maxlen:
+            # deque drops the oldest on append when full — record it (drop-and-count,
+            # mirroring FlightLogger) so silent loss is visible in the counter.
+            self._offline_dropped += 1
+            _log.warning("inference_offline_dropped", dropped_total=self._offline_dropped)
+        queue.append(envelope)
+
+    async def _drain_offline(self) -> None:
+        """Replay queued envelopes after a success; re-queue and stop on the first failure."""
+        if not self._offline:
+            return
+        async with self._drain_lock:
+            while self._offline:
+                pending = self._offline.popleft()
+                try:
+                    result = await self.client.analyze(pending)
+                except InferenceError as exc:
+                    self._enqueue_offline(self._offline, pending)
+                    _log.warning("inference_offline_replay_failed", error=str(exc))
+                    return
+                if result.summary:
+                    await self._publish(pending, result)
 
     async def stop(self) -> None:
         self._running = False

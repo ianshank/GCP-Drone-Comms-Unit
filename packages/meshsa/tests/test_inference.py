@@ -674,3 +674,253 @@ def test_require_aiohttp_raises_when_absent(monkeypatch):
     monkeypatch.setattr(inference_mod, "aiohttp", None)
     with pytest.raises(RuntimeError, match="meshsa\\[inference\\]"):
         _require_aiohttp()
+
+
+# ── Track-B: structured (JSON) response parsing ─────────────────────────
+
+
+async def test_client_guided_json_sends_nvext_and_extracts_summary(make_transport, env):
+    """A guided_json_schema is sent as nvext.guided_json and a JSON reply is unwrapped."""
+    cfg = NemotronConfig(enabled=True, api_key="k", guided_json_schema='{"type": "object"}')
+    transport = make_transport([_ok('{"summary": "structured reply"}')])
+    client = NemotronClient(cfg, transport=transport)
+
+    result = await client.analyze(env)
+    assert result.summary == "structured reply"
+    body = transport.calls[0]["json_body"]
+    assert body["nvext"] == {"guided_json": {"type": "object"}}
+    assert "response_format" not in body  # schema wins; the portable toggle is not sent
+
+
+async def test_client_response_format_json_sends_toggle_and_extracts(make_transport, env):
+    """response_format='json' (no schema) sends the portable OpenAI JSON toggle."""
+    cfg = NemotronConfig(enabled=True, api_key="k", response_format="json")
+    transport = make_transport([_ok('{"summary": "hi"}')])
+    client = NemotronClient(cfg, transport=transport)
+
+    result = await client.analyze(env)
+    assert result.summary == "hi"
+    body = transport.calls[0]["json_body"]
+    assert body["response_format"] == {"type": "json_object"}
+    assert "nvext" not in body
+
+
+async def test_client_json_mode_falls_back_to_raw_on_non_json(make_transport, env):
+    """A structured request whose reply is not JSON keeps the raw text (never lost)."""
+    cfg = NemotronConfig(enabled=True, api_key="k", response_format="json")
+    client = NemotronClient(cfg, transport=make_transport([_ok("just prose")]))
+    result = await client.analyze(env)
+    assert result.summary == "just prose"
+
+
+async def test_client_json_mode_dict_without_summary_keeps_raw(make_transport, env):
+    """A JSON object lacking a string 'summary' field falls back to the raw content."""
+    cfg = NemotronConfig(enabled=True, api_key="k", response_format="json")
+    client = NemotronClient(cfg, transport=make_transport([_ok('{"other": 1}')]))
+    result = await client.analyze(env)
+    assert result.summary == '{"other": 1}'
+
+
+async def test_client_text_mode_sends_no_structured_directive(make_transport, env):
+    """The default text mode sends neither nvext nor response_format."""
+    cfg = NemotronConfig(enabled=True, api_key="k")
+    transport = make_transport([_ok("plain")])
+    client = NemotronClient(cfg, transport=transport)
+    await client.analyze(env)
+    body = transport.calls[0]["json_body"]
+    assert "nvext" not in body and "response_format" not in body
+
+
+def test_client_invalid_guided_json_schema_raises_at_construction(make_transport):
+    """A malformed guided_json_schema fails fast at construction, not per request."""
+    cfg = NemotronConfig(enabled=True, api_key="k", guided_json_schema="{not json")
+    with pytest.raises(InferenceError, match="guided_json_schema"):
+        NemotronClient(cfg, transport=make_transport([]))
+
+
+# ── Track-B: rate limiting (concurrency + min-interval) ─────────────────
+
+
+class _FixedClock:
+    """A clock frozen at one instant, so elapsed-since-last is always zero."""
+
+    def now(self) -> float:
+        return 100.0
+
+
+async def _await_published(mock_router, n: int) -> None:
+    for _ in range(1000):
+        if len(mock_router.published) >= n:
+            return
+        await asyncio.sleep(0)
+
+
+async def _await_idle(svc) -> None:
+    for _ in range(1000):
+        if not svc._bg_tasks:
+            return
+        await asyncio.sleep(0)
+
+
+def _service(cfg, mock_router, transport, *, clock=None, sleep=None):
+    kwargs = {}
+    if sleep is not None:
+        kwargs["sleep"] = sleep
+    return InferenceService(
+        config=cfg,
+        router=mock_router,
+        clock=clock or SystemClock(),
+        id_factory=UuidFactory(),
+        source_uid="node-base",
+        transport=transport,
+        **kwargs,
+    )
+
+
+async def test_service_min_interval_spaces_requests(make_transport, mock_router, env):
+    """With a frozen clock, the second request waits min_interval_s; the first does not."""
+    sleeps: list[float] = []
+
+    async def rec_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    cfg = NemotronConfig(enabled=True, api_key="k", min_interval_s=0.5)
+    svc = _service(
+        cfg, mock_router, make_transport([_ok("a"), _ok("b")]), clock=_FixedClock(), sleep=rec_sleep
+    )
+    svc.start()
+    await mock_router.handlers[0](env)
+    await mock_router.handlers[0](env)
+    await _await_published(mock_router, 2)
+    await svc.stop()
+
+    assert len(mock_router.published) == 2
+    assert sleeps == [pytest.approx(0.5)]  # exactly one spacing wait, for the 2nd request
+
+
+async def test_service_min_interval_no_wait_when_elapsed_exceeds(
+    make_transport, mock_router, env, clock
+):
+    """When more than min_interval_s has elapsed, no spacing wait occurs (wait<=0 branch)."""
+    sleeps: list[float] = []
+
+    async def rec_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    # The conftest FakeClock (via the `clock` fixture) advances 1.0s per now() call — always
+    # > 0.5s of spacing.
+    cfg = NemotronConfig(enabled=True, api_key="k", min_interval_s=0.5)
+    svc = _service(
+        cfg, mock_router, make_transport([_ok("a"), _ok("b")]), clock=clock, sleep=rec_sleep
+    )
+    svc.start()
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await mock_router.handlers[0](env)
+    await _await_published(mock_router, 2)
+    await svc.stop()
+
+    assert sleeps == []  # clock advanced past the interval — never waited
+
+
+def test_service_bounded_semaphore_created_when_configured(mock_router, make_transport):
+    cfg = NemotronConfig(enabled=True, api_key="k", max_concurrent_requests=2)
+    svc = _service(cfg, mock_router, make_transport([]))
+    assert isinstance(svc._semaphore, asyncio.BoundedSemaphore)
+
+
+def test_service_no_semaphore_by_default(mock_router, make_transport):
+    cfg = NemotronConfig(enabled=True, api_key="k")
+    svc = _service(cfg, mock_router, make_transport([]))
+    assert svc._semaphore is None
+
+
+async def test_service_publishes_under_concurrency_limit(make_transport, mock_router, env):
+    """Two messages both publish while gated by a max_concurrent_requests=1 semaphore."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_concurrent_requests=1)
+    svc = _service(cfg, mock_router, make_transport([_ok("a"), _ok("b")]))
+    svc.start()
+    await mock_router.handlers[0](env)
+    await mock_router.handlers[0](env)
+    await _await_published(mock_router, 2)
+    await svc.stop()
+    assert len(mock_router.published) == 2
+
+
+# ── Track-B: offline queue (enqueue-on-failure, replay-on-recovery) ─────
+
+
+async def test_service_offline_queue_replays_on_recovery(make_transport, mock_router, env):
+    """A failed analysis is queued, then replayed and published on the next success."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    # msg1 fails; msg2 succeeds (publishes s2) then drains msg1 (publishes s1-replay).
+    transport = make_transport([InferenceTransportError("down"), _ok("s2"), _ok("s1-replay")])
+    svc = _service(cfg, mock_router, transport)
+    svc.start()
+
+    await mock_router.handlers[0](env)  # message 1 -> fails -> queued
+    await _await_idle(svc)
+    assert svc._offline is not None and len(svc._offline) == 1
+
+    await mock_router.handlers[0](env)  # message 2 -> success -> publish + drain replay
+    await _await_published(mock_router, 2)
+    await svc.stop()
+
+    assert len(mock_router.published) == 2
+    assert not svc._offline  # queue drained
+
+
+async def test_service_offline_queue_drops_oldest_when_full(make_transport, mock_router, env):
+    """Overflow drops the oldest and increments the drop counter (drop-and-count)."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=1)
+    transport = make_transport([InferenceTransportError("x")], repeat_last=True)
+    svc = _service(cfg, mock_router, transport)
+    svc.start()
+
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await svc.stop()
+
+    assert svc._offline is not None and len(svc._offline) == 1
+    assert svc._offline_dropped == 1
+
+
+async def test_service_offline_replay_requeues_on_repeat_failure(make_transport, mock_router, env):
+    """If a replay fails again, the envelope is re-queued and draining stops."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    # msg1 fails -> queued; msg2 ok -> publish; drain replays msg1 -> fails -> re-queued.
+    transport = make_transport(
+        [InferenceTransportError("a"), _ok("s2"), InferenceTransportError("b")]
+    )
+    svc = _service(cfg, mock_router, transport)
+    svc.start()
+
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await mock_router.handlers[0](env)
+    await _await_published(mock_router, 1)
+    await svc.stop()
+
+    assert len(mock_router.published) == 1  # only s2
+    assert svc._offline is not None and len(svc._offline) == 1  # msg1 back in the queue
+
+
+async def test_service_offline_replay_skips_empty_summary(make_transport, mock_router, env):
+    """A replay that yields an empty summary is not published (drain's summary guard)."""
+    cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=4)
+    # msg1 fails -> queued; msg2 ok -> publish; drain replays msg1 -> empty content -> no publish.
+    transport = make_transport([InferenceTransportError("a"), _ok("s2"), _ok("")])
+    svc = _service(cfg, mock_router, transport)
+    svc.start()
+
+    await mock_router.handlers[0](env)
+    await _await_idle(svc)
+    await mock_router.handlers[0](env)
+    await _await_published(mock_router, 1)
+    await _await_idle(svc)
+    await svc.stop()
+
+    assert len(mock_router.published) == 1  # only s2; the empty replay is dropped
+    assert not svc._offline
