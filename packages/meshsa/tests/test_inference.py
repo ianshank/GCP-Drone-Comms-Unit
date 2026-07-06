@@ -770,6 +770,7 @@ async def _await_published(mock_router, n: int) -> None:
         if len(mock_router.published) >= n:
             return
         await asyncio.sleep(0)
+    raise AssertionError(f"expected >= {n} published, got {len(mock_router.published)}")
 
 
 async def _await_idle(svc) -> None:
@@ -777,6 +778,7 @@ async def _await_idle(svc) -> None:
         if not svc._bg_tasks:
             return
         await asyncio.sleep(0)
+    raise AssertionError(f"service never became idle: {len(svc._bg_tasks)} task(s) still running")
 
 
 def _service(cfg, mock_router, transport, *, clock=None, sleep=None):

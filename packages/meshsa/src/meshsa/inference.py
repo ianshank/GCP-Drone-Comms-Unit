@@ -452,8 +452,12 @@ class InferenceService:
         """Run one analysis through the rate-limit gate: space, then a per-call permit.
 
         Spacing happens *before* acquiring a permit (so a permit is never spent merely
-        waiting), and the permit wraps only the network call — so both live requests and each
-        offline replay honor ``min_interval_s`` and ``max_concurrent_requests`` identically.
+        waiting). The permit then wraps the whole ``analyze()`` call — **including its internal
+        retry/backoff sleeps** — so under transient failures a slot is held across retries. That
+        is deliberate: ``max_concurrent_requests`` bounds in-flight requests *inclusive of
+        retries* to cap edge API spend (spec §5). Both live requests and each offline replay go
+        through this same gate, so they honor ``min_interval_s``/``max_concurrent_requests``
+        identically.
         """
         await self._space()
         if self._semaphore is None:
