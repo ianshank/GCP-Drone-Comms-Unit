@@ -17,6 +17,7 @@ avoiding an import cycle.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -103,6 +104,16 @@ class MavlinkSettings(BaseSettings):
     #: ``source_system``/``source_component`` above, which are *this* unit's own IDs.
     target_system: int = Field(default=1, ge=0, le=255)
     target_component: int = Field(default=1, ge=0, le=255)
+    #: Output frame for LANDING_TARGET. "body_frd" (default, backward-compatible) sends angular
+    #: offsets about the body; "local_ned" sends a projected N/E/D position (needs a PoseSource
+    #: and a fresh vehicle pose — otherwise the send is fail-safe suppressed).
+    frame: Literal["body_frd", "local_ned"] = "body_frd"
+    #: Align frame capture time to the vehicle clock via a TIMESYNC exchange before stamping
+    #: LANDING_TARGET.time_usec. Off by default (publish-time wall clock, prior behaviour).
+    timesync_enabled: bool = False
+    #: Source of LANDING_TARGET.time_usec: "publish" (wall clock at send, default) or
+    #: "capture" (per-frame capture timestamp + TIMESYNC offset when available).
+    capture_time_source: Literal["publish", "capture"] = "publish"
 
     @property
     def target_class_set(self) -> frozenset[str] | None:
