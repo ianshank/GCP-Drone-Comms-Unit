@@ -35,6 +35,15 @@ _TRANSPORT_METRICS = {
     "rx_frames": "meshsa_transport_rx_frames",
 }
 
+#: Inference-service counters -> Prometheus series names. Counters carry the ``_total``
+#: suffix; gauges (queue depth, pending tasks) do not, per Prometheus naming convention.
+_INFERENCE_METRICS = {
+    "offline_dropped": "meshsa_inference_offline_dropped_total",
+    "intake_dropped": "meshsa_inference_intake_dropped_total",
+    "offline_queue_depth": "meshsa_inference_offline_queue_depth",
+    "pending_tasks": "meshsa_inference_pending_tasks",
+}
+
 
 def _escape_label_value(value: str) -> str:
     """Escape a Prometheus label value per the text-exposition spec.
@@ -48,7 +57,12 @@ def _escape_label_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def render_prometheus(metrics: RouterMetrics, transports: Mapping[str, Mapping[str, int]]) -> str:
+def render_prometheus(
+    metrics: RouterMetrics,
+    transports: Mapping[str, Mapping[str, int]],
+    *,
+    inference: Mapping[str, int] | None = None,
+) -> str:
     """Render router + per-transport counters as Prometheus text-exposition lines.
 
     Hand-rolled text (no ``prometheus_client`` dependency): one ``name value``
@@ -57,6 +71,11 @@ def render_prometheus(metrics: RouterMetrics, transports: Mapping[str, Mapping[s
     to ``0`` so the exported series set is stable across transport types. The
     transport name is escaped (:func:`_escape_label_value`) so a user-configured
     name with special characters still yields valid exposition text.
+
+    ``inference`` is an optional snapshot of ``InferenceService.as_dict()``
+    counters; when omitted (the default) no ``meshsa_inference_*`` lines are
+    emitted and the output is byte-identical to callers that predate this
+    parameter. Missing keys within a provided mapping default to ``0``.
     """
     lines = [
         f"meshsa_rx_total {metrics.rx}",
@@ -70,4 +89,7 @@ def render_prometheus(metrics: RouterMetrics, transports: Mapping[str, Mapping[s
         for key, metric in _TRANSPORT_METRICS.items():
             value = counters.get(key, 0)
             lines.append(f'{metric}{{transport="{label}"}} {value}')
+    if inference is not None:
+        for key, metric in _INFERENCE_METRICS.items():
+            lines.append(f"{metric} {inference.get(key, 0)}")
     return "\n".join(lines) + "\n"

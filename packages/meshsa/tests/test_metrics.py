@@ -124,6 +124,28 @@ def test_render_prometheus_emits_all_dashboard_metric_names():
         assert name in text
 
 
+def test_render_prometheus_emits_inference_series_when_present():
+    text = render_prometheus(
+        RouterMetrics(),
+        {},
+        inference={
+            "offline_dropped": 2,
+            "offline_queue_depth": 3,
+            "intake_dropped": 4,
+            "pending_tasks": 5,
+        },
+    )
+    assert "meshsa_inference_offline_dropped_total 2" in text
+    assert "meshsa_inference_offline_queue_depth 3" in text
+    assert "meshsa_inference_intake_dropped_total 4" in text
+    assert "meshsa_inference_pending_tasks 5" in text
+
+
+def test_render_prometheus_omits_inference_when_absent():
+    text = render_prometheus(RouterMetrics(), {})
+    assert "meshsa_inference_" not in text
+
+
 def test_render_prometheus_escapes_special_chars_in_transport_name():
     # Transport names are user-configurable, so a name with a backslash, quote and
     # newline must be escaped per the text-exposition spec (\\ \" \n) so the line
