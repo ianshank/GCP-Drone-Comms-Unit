@@ -3,6 +3,11 @@
 > Changeable, near-term backlog. The stable plan is [CHARTER.md](CHARTER.md) (scope +
 > invariants) and [ROADMAP.md](ROADMAP.md) (milestone trajectory); keep this aligned with
 > both. Update freely as work lands.
+>
+> ℹ️ An externally-circulated "Architectural Roadmap" (Google Cloud / Langfuse / Spring Boot /
+> agent-swarm) was reconciled against the real code in
+> [ROADMAP_RECONCILIATION.md](ROADMAP_RECONCILIATION.md) — most of it is inapplicable or out of
+> scope per CHARTER §3; the in-scope slice became the AI-inference Track-B work below.
 
 ## Done (this initial PR)
 - `telemetry` codec + `mavlink_source` (pymavlink) + `msp_source` (Betaflight MSP/YAMSPy)
@@ -33,12 +38,22 @@
       version drift. The brittle `aiohttp<3.10` pin and `aioresponses` were removed; persistent
       non-2xx → `InferenceHttpError`, transport/timeout → `InferenceTransportError`.
       Spec: [specs/initiative-e-inference.md](specs/initiative-e-inference.md). `inference.py` 100% cov.
-- [ ] **Local rate limiting**: add `min_interval_s`/`max_concurrent_requests` to prevent
-      API spend spikes when many mesh messages arrive rapidly
-- [ ] **Structured response parsing**: parse NVIDIA API structured output instead of raw
-      text `content` field — support JSON mode when available
-- [ ] **Multi-model support**: allow switching between Nemotron models at runtime via env var
-- [ ] **Offline fallback**: queue messages when API is unreachable, replay when restored
+- [x] **Local rate limiting**: `min_interval_s` + `max_concurrent_requests` (`NemotronConfig`,
+      `MESHSA_INFERENCE_*`). Enforced in `InferenceService` — a `BoundedSemaphore` caps
+      concurrency and a clock-driven min-interval gate caps rate (a semaphore alone cannot).
+      Both default to 0 (no-op). Deliberately bounds in-flight *inclusive of retries* to cap
+      edge API spend (documented in the spec).
+- [x] **Structured response parsing**: `response_format` (`text`|`json`) + `guided_json_schema`.
+      Per NVIDIA guidance, a schema is sent as `nvext.guided_json` (preferred over the portable
+      `response_format:{"type":"json_object"}` toggle, which allows empty JSON); `_parse` unwraps a
+      JSON `summary` field and **falls back to raw text** on any non-JSON reply, so the text path
+      never regresses.
+- [x] **Multi-model support**: `models` allow-list (`MESHSA_INFERENCE_MODELS`, comma-separated) +
+      `NemotronConfig.with_model()` runtime switch that rejects a model outside the allow-list; a
+      validator enforces `model ∈ models` at construction.
+- [x] **Offline fallback**: bounded `offline_queue_max` deque in `InferenceService` — a failure
+      (transport/HTTP error surviving retries) enqueues the envelope (drop-and-count on overflow,
+      mirroring `FlightLogger`) and the next success drains/replays it. 0 = disabled (prior behavior).
 
 ## Perception (initiative D — **CHARTER carve-out ratified 2026-06-20**)
 > On-board `jetson_yolo_gcs`: camera → YOLO/Hailo detection → GStreamer video to a GCS →

@@ -7,7 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`meshsa.inference` Track-B gap-analysis hardening (post-review).** Scoped the offline replay
+  queue to genuine connectivity/transient failures (`InferenceTransportError`, or `429`/`5xx`
+  that exhausted retries) via a new `_is_offline_retryable` predicate reusing a shared
+  `_is_transient_status` — a permanent `401`/`400`/malformed-payload failure is no longer queued
+  (it would replay forever and never drain). Offline replay now runs through the same
+  `_gated_analyze` rate-limit gate as live requests (min-interval spacing applied **before** a
+  per-call semaphore permit, so a backlog can't burst and a permit isn't spent while merely
+  waiting); a permanent replay failure is dropped-and-counted and draining continues (no
+  head-of-line block) while a transient one returns to the FIFO front and stops. Removed the
+  hardcoded `"summary"` unwrap key (now the configurable `guided_json_summary_field`) and log a
+  `structured_parse_fallback` when structured parsing falls back to raw text. `guided_json_schema`
+  is now validated as a JSON object at `NemotronConfig` load (fail-fast) and the allow-list guard
+  is deduplicated. Addresses Copilot review on PR #26.
+
 ### Added
+- **`meshsa.inference` Track-B hardening (spec `docs/specs/initiative-e-inference.md` §5).** Four
+  additive, default-off options on `NemotronConfig` (all `MESHSA_INFERENCE_*` env-bound, no magic
+  numbers): **rate limiting** (`min_interval_s` + `max_concurrent_requests` — a `BoundedSemaphore`
+  caps concurrency and a clock-driven min-interval gate caps rate, enforced in `InferenceService`);
+  **structured (JSON) parsing** (`response_format` + `guided_json_schema` — a schema is sent as
+  NVIDIA `nvext.guided_json`, else the portable `response_format:{"type":"json_object"}` toggle,
+  and `_parse` unwraps a JSON `summary` field with a raw-text fallback so the text path never
+  regresses); **multi-model** (`models` allow-list + `NemotronConfig.with_model()` with a
+  construction-time validator); and **offline fallback** (`offline_queue_max` bounded deque that
+  queues failed envelopes drop-and-count on overflow and replays them on the next success). Every
+  default is a no-op, so existing deployments are unchanged; `inference.py` stays at 100% coverage.
+- **`docs/ROADMAP_RECONCILIATION.md`.** Records that an externally-circulated "Architectural
+  Roadmap" (Google Cloud / Langfuse / Spring-Boot-JUnit / autonomous agent-swarm) was written
+  without repo access and is largely inapplicable or out of scope per CHARTER §3; maps each claim
+  to reality and notes the one in-scope slice that became the inference Track-B work above.
 - **`meshsa.scout` — vineyard structural-anomaly scouting (spec `docs/specs/initiative-scout.md`;
   CHARTER §3 offline-survey carve-out ratified 2026-07-05).** Turns a mapping survey (RGB
   detections + autopilot pose) into a georeferenced, deduplicated anomaly map on the existing

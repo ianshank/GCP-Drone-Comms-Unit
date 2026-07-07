@@ -1,6 +1,6 @@
 # Initiative E — AI Inference (`meshsa.inference`)
 
-> **Status: Implemented (MVP + HTTP-transport seam); Track-B hardening is Definition.**
+> **Status: Implemented (MVP + HTTP-transport seam + Track-B hardening).**
 > (Definition → Implemented → Validated; see [README.md](README.md).) Pairs with
 > [../CHARTER.md](../CHARTER.md) §4 (invariants), [../ROADMAP.md](../ROADMAP.md) Initiative E,
 > and [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) Track B. Code cites this spec by `§`.
@@ -22,8 +22,8 @@ Deliverables:
    lifecycle guards, configurable backoff, injectable sleep.
 2. **HTTP-transport seam (shipped, §3/§5):** the network boundary is an injectable
    `HttpTransport` `Protocol` so the retry/parse logic is pure and version-independent.
-3. **Hardening backlog (Definition, §4/§7):** local rate limiting, structured response parsing,
-   multi-model support, offline fallback.
+3. **Hardening backlog (Implemented, §4/§7):** local rate limiting, structured response parsing,
+   multi-model support, offline fallback — all four shipped as additive, default-off config.
 
 ### Non-goals
 
@@ -117,10 +117,58 @@ are logged and swallowed (one bad message never tears down the service).
 | `backoff_max_s` | `30.0` (`>= 0.0`) | cap applied as `min(backoff_base**attempt, backoff_max_s)` |
 | `insight_prefix` | `[AI Insight]` (`min_length 1`) | feedback-loop marker |
 
-**Track-B additions (Definition):** `min_interval_s`, `max_concurrent_requests` (rate limiting);
-a `response_format`/JSON-mode toggle (structured parsing); a model allow-list (multi-model); an
-offline queue bound (offline fallback). Each is a config field with an explicit default + env
-binding — no literals.
+**Track-B additions (Implemented).** Each is a `NemotronConfig` field with an explicit default +
+`MESHSA_INFERENCE_*` binding; every default is a no-op so an existing deployment is unchanged:
+
+| Field | Default | Meaning |
+| ----- | ------- | ------- |
+| `min_interval_s` | `0.0` (`>= 0.0`) | rate limiting — min spacing between requests; 0 = unspaced |
+| `max_concurrent_requests` | `0` (`>= 0`) | rate limiting — max in-flight requests; 0 = unbounded |
+| `response_format` | `"text"` (`text`\|`json`) | structured parsing — request a JSON reply |
+| `guided_json_schema` | `""` | structured parsing — NVIDIA `nvext.guided_json` schema string; validated as a JSON **object** at config load |
+| `guided_json_summary_field` | `"summary"` | structured parsing — reply field unwrapped into the insight summary |
+| `models` | `()` | multi-model — allow-list; when set, `model` must be a member |
+| `offline_queue_max` | `0` (`>= 0`) | offline fallback — bounded replay-queue depth; 0 = disabled |
+
+**Rate limiting** lives in `InferenceService`, not the pure `NemotronClient`. Every network call
+— live *and* each offline replay — goes through one `_gated_analyze` gate that (a) applies the
+clock-driven `min_interval_s` spacing **before** acquiring a permit (a permit is never spent
+merely waiting), then (b) acquires an `asyncio.BoundedSemaphore` permit **per call**. The
+semaphore caps *concurrency*; the interval gate caps *rate* (a semaphore alone cannot). Each
+permit is held across `analyze()`'s internal retry loop — a **deliberate** choice to bound API
+spend/pressure on a constrained edge node *inclusive of retries*.
+
+**Structured parsing.** When `guided_json_schema` is set it is sent as `nvext.guided_json`
+(NVIDIA's recommended mechanism — the portable `response_format:{"type":"json_object"}` toggle,
+used when only `response_format == "json"` is set, permits *any* valid JSON incl. `{}`). `_parse`
+unwraps the configurable `guided_json_summary_field` (default `"summary"`) from a JSON-object
+reply and **falls back to the raw text** — logged `structured_parse_fallback` for observability —
+on any non-JSON/unshaped reply, so a structured request never loses the answer. `guided_json_schema`
+is validated as a JSON **object** at `NemotronConfig` load (fail-fast, same as every other field).
+
+**Multi-model.** `models` is validated on construction (`model ∈ models`); `with_model(name)`
+returns a copy pinned to `name`, rejecting anything outside the allow-list.
+
+**Offline fallback.** A `deque(maxlen=offline_queue_max)` in `InferenceService` queues an
+envelope **only** when the failure is a genuine connectivity/transient condition —
+`InferenceTransportError`, or an `InferenceHttpError` with a transient status (`429`/`5xx`) that
+exhausted the retry budget (classified by `_is_offline_retryable`). A **permanent** failure (a
+non-transient 4xx like `401`/`400`, a malformed-payload/base `InferenceError`, or any other
+exception) is **not** queued — it surfaces fast instead of cycling forever. Overflow at either
+end drops and increments a counter (drop-and-count, mirroring `FlightLogger`). The next
+successful analysis drains the queue **through the same rate-limit gate**; a *transient* replay
+failure returns the item to the front (FIFO) and stops, while a *permanent* replay failure drops
+that one item (counted) and continues, so a poison envelope never blocks the rest. With
+`offline_queue_max = 0` the prior behavior (failure surfaces to the task handler, nothing queued)
+is preserved exactly.
+
+### Known limits (deferred)
+- Rate limiting is enforced by `InferenceService`; a caller using the public `NemotronClient`
+  directly is not paced (the client stays a pure state machine per CHARTER §4.3/§4.4).
+- `handle_message` spawns one task per inbound envelope; `max_concurrent_requests` bounds
+  in-flight *analyze* calls but not queued task intake.
+- `_space` uses the injected `Clock`; if that clock is wall-time, an NTP step can skew one
+  interval. `_offline_dropped` is logged but not yet exported via `/metrics`.
 
 ---
 
