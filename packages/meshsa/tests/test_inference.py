@@ -1091,3 +1091,41 @@ async def test_service_non_inference_exception_logged_not_queued(make_transport,
     await svc.stop()
     assert mock_router.published == []
     assert svc._offline is not None and len(svc._offline) == 0  # generic errors aren't queued
+
+
+# ── Backpressure: bound handle_message task intake (max_pending_tasks) ──────
+
+
+def _chat_envelope(text: str, *, source_uid: str) -> Envelope:
+    return Envelope(
+        schema_version=1,
+        msg_id="chat-1",
+        ts=1.0,
+        source_uid=source_uid,
+        kind=MessageKind.CHAT,
+        payload={"text": text},
+    )
+
+
+async def test_handle_message_sheds_when_pending_tasks_at_cap(make_transport, mock_router):
+    # With the cap reached, a new inbound envelope is dropped-and-counted, no task spawned.
+    cfg = NemotronConfig(enabled=True, api_key="k", max_pending_tasks=1)
+    svc = _service(cfg, mock_router, make_transport([]))
+    svc._running = True
+    # Simulate one in-flight task already occupying the only slot.
+    slow = asyncio.get_event_loop().create_future()
+    svc._bg_tasks.add(asyncio.ensure_future(slow))
+    await svc.handle_message(_chat_envelope("hello", source_uid="other"))
+    assert svc._intake_dropped == 1
+    assert len(svc._bg_tasks) == 1  # no new task added
+    slow.set_result(None)
+
+
+async def test_handle_message_unbounded_when_cap_zero(make_transport, mock_router):
+    cfg = NemotronConfig(enabled=True, api_key="k", max_pending_tasks=0)
+    svc = _service(cfg, mock_router, make_transport([_ok("hi-reply")]))
+    svc._running = True
+    await svc.handle_message(_chat_envelope("hi", source_uid="other"))
+    assert svc._intake_dropped == 0
+    await _await_published(mock_router, 1)
+    await svc.stop()
