@@ -10,6 +10,7 @@ from jetson_yolo_gcs.core.errors import MavlinkError
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge, compute_angles
 from jetson_yolo_gcs.mavlink.heartbeat import HeartbeatMonitor
+from jetson_yolo_gcs.mavlink.pose import VehiclePose
 from tests.conftest import FakeClock
 from tests.unit.test_mavlink_heartbeat import SettableClock
 
@@ -125,6 +126,82 @@ def test_publish_body_frd_sends_eight_positional_args_no_position_valid() -> Non
     assert len(args) == 8
     assert kwargs == {}
     assert args[2] == 12  # MAV_FRAME_BODY_FRD
+
+
+def test_publish_body_frd_unchanged_after_frame_dispatch() -> None:
+    # Task 12 guard: with frame="body_frd" (default) explicitly set, the frame-dispatch
+    # refactor must still emit exactly the pre-refactor 8-positional-arg wire format.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, frame="body_frd", fov_x_rad=2.0, fov_y_rad=2.0),
+        connection=conn,
+        clock=FakeClock(times=[2.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    det, result = _result_with((140, 90, 160, 110))
+    assert bridge.publish(det, result) is True
+    args, kwargs = conn.mav.calls[0]
+    assert len(args) == 8 and args[2] == 12  # still MAV_FRAME_BODY_FRD, 8 positional
+    assert kwargs == {}
+
+
+class _FixedPose:
+    """A :class:`PoseSource` fake returning a caller-supplied pose (or ``None``) forever."""
+
+    def __init__(self, pose: VehiclePose | None) -> None:
+        self._pose = pose
+
+    def latest(self) -> VehiclePose | None:
+        return self._pose
+
+
+def test_local_ned_sends_position_valid_with_pose() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7),
+        connection=conn,
+        clock=FakeClock(times=[3.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(VehiclePose(alt_agl_m=100.0, heading_deg=0.0, pitch_deg=90.0)),
+    )
+    det, result = _result_with((315, 235, 325, 245))  # ~centre of 640x480
+    assert bridge.publish(det, result) is True
+    assert len(conn.mav.calls) == 1
+    args, kwargs = conn.mav.calls[0]
+    assert args[2] == 1  # MAV_FRAME_LOCAL_NED
+    # nadir centre => target ~directly below: north~0, east~0, down~100, position_valid=1
+    assert kwargs.get("position_valid", args[-1]) == 1
+
+
+def test_local_ned_suppresses_when_no_pose() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7),
+        connection=conn,
+        clock=FakeClock(times=[3.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(None),
+    )
+    det, result = _result_with((315, 235, 325, 245))
+    assert bridge.publish(det, result) is False
+    assert conn.mav.calls == []  # fail-safe: never send position_valid=1 without a pose
+
+
+def test_local_ned_suppresses_when_ray_unprojectable() -> None:
+    # A pose *is* present but yields an unusable ray (alt_agl_m <= 0 is always unprojectable
+    # per project_pixel_to_ned) -> must suppress just like the no-pose case, not send a bogus
+    # position_valid=1.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7),
+        connection=conn,
+        clock=FakeClock(times=[3.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(VehiclePose(alt_agl_m=0.0, heading_deg=0.0, pitch_deg=90.0)),
+    )
+    det, result = _result_with((315, 235, 325, 245))
+    assert bridge.publish(det, result) is False
+    assert conn.mav.calls == []
 
 
 def test_publish_opens_connection_via_factory_when_none() -> None:

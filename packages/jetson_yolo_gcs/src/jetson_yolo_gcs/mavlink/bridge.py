@@ -30,8 +30,10 @@ from ..core.clock import Clock, SystemClock
 from ..core.config import MavlinkSettings, PipelineSettings
 from ..core.errors import MavlinkError
 from ..detection.base import Detection, DetectionResult
+from ..geometry.ned import CameraFov, project_pixel_to_ned
 from ..utils.log_throttle import should_log_throttled
 from .heartbeat import HeartbeatMonitor, HeartbeatReport
+from .pose import PoseSource
 
 ConnectionFactory = Callable[[], Any]
 
@@ -39,6 +41,9 @@ _log = structlog.get_logger("jetson_yolo_gcs.mavlink.bridge")
 
 #: MAV_FRAME_BODY_FRD — angles are relative to the vehicle body (forward-right-down).
 _MAV_FRAME_BODY_FRD = 12
+
+#: MAV_FRAME_LOCAL_NED — x/y/z are a projected North/East/Down position (PX4 precision-land).
+_MAV_FRAME_LOCAL_NED = 1
 
 #: Default throttle for the "suppressed; no fresh heartbeat" warning (1st + every Nth), sourced
 #: from the same config default as the pipeline's drop-log throttle so operators tune one knob.
@@ -84,6 +89,7 @@ class LandingTargetBridge:
         clock: Clock | None = None,
         heartbeat: HeartbeatMonitor | None = None,
         log_every: int = _DEFAULT_LOG_EVERY,
+        pose_source: PoseSource | None = None,
     ) -> None:
         if log_every < 1:
             raise ValueError(f"log_every must be >= 1, got {log_every}")
@@ -91,6 +97,9 @@ class LandingTargetBridge:
         self._conn = connection
         self._factory = connection_factory or _default_connection_factory(settings)
         self._clock: Clock = clock or SystemClock()
+        #: Vehicle-pose feed for the ``local_ned`` frame (Task 13). ``None`` when unset —
+        #: the ``local_ned`` path then always fail-safe suppresses (no pose to project from).
+        self._pose_source = pose_source
         #: Fail-closed heartbeat gate. ``None`` disables the gate (``require_heartbeat``
         #: off); otherwise a monotonic-timebase freshness monitor sized by config.
         self._heartbeat: HeartbeatMonitor | None
@@ -180,8 +189,9 @@ class LandingTargetBridge:
         """Send one ``LANDING_TARGET`` for ``detection``.
 
         Returns ``True`` if a message was sent, ``False`` if the send was suppressed (feature
-        disabled, or the fail-closed heartbeat gate found no fresh autopilot heartbeat). A
-        missing/stale heartbeat is a *suppression*, not an error; a connection factory that
+        disabled, the fail-closed heartbeat gate found no fresh autopilot heartbeat, or — for
+        ``frame="local_ned"`` — no usable vehicle pose was available to project). A missing/
+        stale heartbeat or pose is a *suppression*, not an error; a connection factory that
         yields nothing is still a loud :class:`MavlinkError` (a real fault, not a gate miss).
         """
         if not self._settings.enable_landing_target:
@@ -199,21 +209,46 @@ class LandingTargetBridge:
                 return False
         if self._conn is None:
             self.start()
-        angle_x, angle_y = compute_angles(
-            detection,
-            result,
-            fov_x_rad=self._settings.fov_x_rad,
-            fov_y_rad=self._settings.fov_y_rad,
-        )
-        size_x = abs(detection.bbox[2] - detection.bbox[0]) / result.width if result.width else 0.0
-        size_y = (
-            abs(detection.bbox[3] - detection.bbox[1]) / result.height if result.height else 0.0
-        )
-        time_usec = int(self._clock.now() * 1_000_000)
         if self._conn is None:
             # start() should have opened a connection; a None here means the factory
             # produced nothing. Fail loud rather than silently dropping a safety message.
             raise MavlinkError("no MAVLink connection available to publish LANDING_TARGET")
+        time_usec = self._compute_time_usec(capture_t=None)  # Task 14 replaces the arg
+        if self._settings.frame == "local_ned":
+            if not self._send_local_ned(detection, result, time_usec):
+                return False
+        else:
+            angle_x, angle_y = compute_angles(
+                detection,
+                result,
+                fov_x_rad=self._settings.fov_x_rad,
+                fov_y_rad=self._settings.fov_y_rad,
+            )
+            size_x = (
+                abs(detection.bbox[2] - detection.bbox[0]) / result.width if result.width else 0.0
+            )
+            size_y = (
+                abs(detection.bbox[3] - detection.bbox[1]) / result.height
+                if result.height
+                else 0.0
+            )
+            self._send_body_frd(angle_x, angle_y, size_x, size_y, time_usec)
+        self._suppressed_count = 0
+        return True
+
+    def _compute_time_usec(self, *, capture_t: float | None) -> int:
+        """``LANDING_TARGET.time_usec`` from the wall clock at publish time.
+
+        ``capture_t`` is accepted now (unused) so Task 14 can wire per-frame capture-time +
+        TIMESYNC offset without another signature change at every call site.
+        """
+        return int(self._clock.now() * 1_000_000)
+
+    def _send_body_frd(
+        self, angle_x: float, angle_y: float, size_x: float, size_y: float, time_usec: int
+    ) -> None:
+        """Send the ``MAV_FRAME_BODY_FRD`` angular-offset LANDING_TARGET (default, unchanged)."""
+        assert self._conn is not None
         self._conn.mav.landing_target_send(
             time_usec,
             0,  # target_num
@@ -224,8 +259,72 @@ class LandingTargetBridge:
             float(size_x * self._settings.fov_x_rad),
             float(size_y * self._settings.fov_y_rad),
         )
-        self._suppressed_count = 0
+
+    def _send_local_ned(
+        self, detection: Detection, result: DetectionResult, time_usec: int
+    ) -> bool:
+        """Send a LOCAL_NED LANDING_TARGET; return ``False`` (fail-safe suppress) without a pose.
+
+        A ``position_valid=1`` message with a bogus position is worse than none, so if there is
+        no :class:`PoseSource`, no fresh pose, or the ray is unprojectable (at/above the horizon,
+        no altitude), this suppresses and logs rather than sends. Arg order/values verified
+        (2026-07) against the MAVLink LANDING_TARGET spec (message id 149, ``common.xml``) and
+        the installed pymavlink ``landing_target_send`` signature: positional
+        ``time_usec, target_num, frame, angle_x, angle_y, distance, size_x, size_y, x, y, z, q,
+        type, position_valid``, with ``q`` a ``(w, x, y, z)`` quaternion (identity =
+        ``[1, 0, 0, 0]``) and ``type=0`` (``LANDING_TARGET_TYPE_LIGHT_BEACON``).
+        """
+        pose = self._pose_source.latest() if self._pose_source is not None else None
+        if pose is None:
+            self._log_ned_suppressed("no_pose")
+            return False
+        cx, cy = detection.center
+        cam = CameraFov(
+            img_w=result.width,
+            img_h=result.height,
+            h_fov_rad=self._settings.fov_x_rad,
+            v_fov_rad=self._settings.fov_y_rad,
+        )
+        ned = project_pixel_to_ned(
+            cam,
+            cx,
+            cy,
+            alt_agl_m=pose.alt_agl_m,
+            heading_deg=pose.heading_deg,
+            pitch_deg=pose.pitch_deg,
+            roll_deg=pose.roll_deg,
+        )
+        if ned is None:
+            self._log_ned_suppressed("unprojectable")
+            return False
+        assert self._conn is not None
+        self._conn.mav.landing_target_send(
+            time_usec,
+            0,  # target_num
+            _MAV_FRAME_LOCAL_NED,
+            0.0,  # angle_x (unused in NED)
+            0.0,  # angle_y (unused in NED)
+            0.0,  # distance (unused in NED)
+            0.0,  # size_x (unused in NED)
+            0.0,  # size_y (unused in NED)
+            float(ned.north_m),
+            float(ned.east_m),
+            float(ned.down_m),
+            [1.0, 0.0, 0.0, 0.0],  # q: identity quaternion (w, x, y, z)
+            0,  # target type = LANDING_TARGET_TYPE_LIGHT_BEACON
+            1,  # position_valid
+        )
         return True
+
+    def _log_ned_suppressed(self, reason: str) -> None:
+        """Throttled warning mirroring the heartbeat-gate suppression log style."""
+        self._suppressed_count += 1
+        if should_log_throttled(self._suppressed_count, self._log_every):
+            _log.warning(
+                "LANDING_TARGET (local_ned) suppressed: no usable pose (fail-closed)",
+                suppressed=self._suppressed_count,
+                reason=reason,
+            )
 
     def close(self) -> None:
         """Close the MAVLink connection if we own one (idempotent, best-effort)."""
