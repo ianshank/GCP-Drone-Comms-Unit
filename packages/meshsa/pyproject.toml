@@ -110,6 +110,7 @@ testpaths = ["tests"]
 pythonpath = ["../../flightctl"]
 markers = [
     "slow: long-running soak/fuzz tests; exercised by the nightly workflow",
+    "e2e: end-to-end tests needing a live FreeTAKServer; opt-in via MESHSA_FTS_E2E=1 (never in the coverage gate)",
 ]
 
 [tool.coverage.run]
