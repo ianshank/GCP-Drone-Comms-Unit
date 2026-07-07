@@ -12,6 +12,7 @@ from jetson_yolo_gcs.core.errors import DetectionError
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge
 from jetson_yolo_gcs.mavlink.pose import VehiclePose
+from jetson_yolo_gcs.mavlink.timesync import TimeSync
 from jetson_yolo_gcs.pipeline import Pipeline, _should_log_drop
 from jetson_yolo_gcs.streaming.camera import Frame
 from jetson_yolo_gcs.utils.fps import FpsCounter
@@ -105,6 +106,32 @@ def test_full_step_streams_and_publishes_best() -> None:
     assert len(conn.mav.calls) == 1
     # No more frames -> step returns False.
     assert pipeline.step() is False
+
+
+def test_full_step_publishes_capture_time_from_frame_t() -> None:
+    # capture_time_source="capture" + a TimeSync offset -> time_usec is derived from the
+    # source frame's captured Frame.t (not the wall clock at publish time), through the
+    # bridge's TIMESYNC-aware _compute_time_usec (Task 14).
+    conn = _RecordingConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True,
+            require_heartbeat=False,
+            capture_time_source="capture",
+        ),
+        connection=conn,
+        timesync=TimeSync(offset_us=250_000),
+    )
+    frame_t = 42.5
+    pipeline = Pipeline(
+        camera=FakeCamera([Frame(idx=0, t=frame_t, data="frame-0")]),
+        detector=FakeDetector(_sample()),
+        bridge=bridge,
+    )
+    assert pipeline.step() is True
+    assert len(conn.mav.calls) == 1
+    time_usec = conn.mav.calls[0][0]
+    assert time_usec == int(frame_t * 1_000_000) + 250_000
 
 
 class _FixedPose:
@@ -298,7 +325,9 @@ def test_suppression_does_not_reset_failure_streak() -> None:
     outcomes: list[str] = ["raise", "suppress", "raise"]
 
     class _ScriptedBridge(LandingTargetBridge):
-        def publish(self, detection: Detection, result: DetectionResult) -> bool:
+        def publish(
+            self, detection: Detection, result: DetectionResult, *, capture_t: float | None = None
+        ) -> bool:
             outcome = outcomes.pop(0)
             if outcome == "raise":
                 raise RuntimeError("link down")
@@ -436,7 +465,9 @@ def test_target_class_filter_selects_named_class() -> None:
     captured: list[Detection] = []
 
     class _CapturingBridge(LandingTargetBridge):
-        def publish(self, detection: Detection, result: DetectionResult) -> bool:
+        def publish(
+            self, detection: Detection, result: DetectionResult, *, capture_t: float | None = None
+        ) -> bool:
             captured.append(detection)
             return True
 

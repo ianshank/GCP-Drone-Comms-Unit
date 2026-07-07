@@ -34,6 +34,7 @@ from ..geometry.ned import CameraFov, project_pixel_to_ned
 from ..utils.log_throttle import should_log_throttled
 from .heartbeat import HeartbeatMonitor, HeartbeatReport
 from .pose import PoseSource
+from .timesync import TimeSync
 
 ConnectionFactory = Callable[[], Any]
 
@@ -90,6 +91,7 @@ class LandingTargetBridge:
         heartbeat: HeartbeatMonitor | None = None,
         log_every: int = _DEFAULT_LOG_EVERY,
         pose_source: PoseSource | None = None,
+        timesync: TimeSync | None = None,
     ) -> None:
         if log_every < 1:
             raise ValueError(f"log_every must be >= 1, got {log_every}")
@@ -100,6 +102,9 @@ class LandingTargetBridge:
         #: Vehicle-pose feed for the ``local_ned`` frame (Task 13). ``None`` when unset —
         #: the ``local_ned`` path then always fail-safe suppresses (no pose to project from).
         self._pose_source = pose_source
+        #: Local->vehicle clock offset for capture-time ``time_usec`` (Task 14). ``None`` when
+        #: unset — the "capture" source then uses the raw capture timestamp (no offset applied).
+        self._timesync = timesync
         #: Fail-closed heartbeat gate. ``None`` disables the gate (``require_heartbeat``
         #: off); otherwise a monotonic-timebase freshness monitor sized by config.
         self._heartbeat: HeartbeatMonitor | None
@@ -185,7 +190,9 @@ class LandingTargetBridge:
         """
         return self._heartbeat.report() if self._heartbeat is not None else None
 
-    def publish(self, detection: Detection, result: DetectionResult) -> bool:
+    def publish(
+        self, detection: Detection, result: DetectionResult, *, capture_t: float | None = None
+    ) -> bool:
         """Send one ``LANDING_TARGET`` for ``detection``.
 
         Returns ``True`` if a message was sent, ``False`` if the send was suppressed (feature
@@ -193,6 +200,10 @@ class LandingTargetBridge:
         ``frame="local_ned"`` — no usable vehicle pose was available to project). A missing/
         stale heartbeat or pose is a *suppression*, not an error; a connection factory that
         yields nothing is still a loud :class:`MavlinkError` (a real fault, not a gate miss).
+
+        ``capture_t`` is the frame's capture timestamp (seconds, same timebase as the injected
+        :class:`Clock`); it feeds ``time_usec`` only when ``capture_time_source="capture"``
+        (default ``"publish"`` ignores it and stamps the wall clock at send time, unchanged).
         """
         if not self._settings.enable_landing_target:
             return False
@@ -213,7 +224,7 @@ class LandingTargetBridge:
             # start() should have opened a connection; a None here means the factory
             # produced nothing. Fail loud rather than silently dropping a safety message.
             raise MavlinkError("no MAVLink connection available to publish LANDING_TARGET")
-        time_usec = self._compute_time_usec(capture_t=None)  # Task 14 replaces the arg
+        time_usec = self._compute_time_usec(capture_t=capture_t)
         if self._settings.frame == "local_ned":
             if not self._send_local_ned(detection, result, time_usec):
                 return False
@@ -228,20 +239,19 @@ class LandingTargetBridge:
                 abs(detection.bbox[2] - detection.bbox[0]) / result.width if result.width else 0.0
             )
             size_y = (
-                abs(detection.bbox[3] - detection.bbox[1]) / result.height
-                if result.height
-                else 0.0
+                abs(detection.bbox[3] - detection.bbox[1]) / result.height if result.height else 0.0
             )
             self._send_body_frd(angle_x, angle_y, size_x, size_y, time_usec)
         self._suppressed_count = 0
         return True
 
     def _compute_time_usec(self, *, capture_t: float | None) -> int:
-        """``LANDING_TARGET.time_usec`` from the wall clock at publish time.
-
-        ``capture_t`` is accepted now (unused) so Task 14 can wire per-frame capture-time +
-        TIMESYNC offset without another signature change at every call site.
-        """
+        """LANDING_TARGET.time_usec per config: publish-time wall clock, or per-frame capture
+        time mapped to the vehicle clock via TIMESYNC when available."""
+        if self._settings.capture_time_source == "capture" and capture_t is not None:
+            if self._timesync is not None:
+                return self._timesync.to_vehicle_usec(capture_t)
+            return int(capture_t * 1_000_000)
         return int(self._clock.now() * 1_000_000)
 
     def _send_body_frd(

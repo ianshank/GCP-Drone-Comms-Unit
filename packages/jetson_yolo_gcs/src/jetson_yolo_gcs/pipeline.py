@@ -195,10 +195,12 @@ class Pipeline:
             self._bridge.poll_heartbeat()
             target = self._select_target(result)
             if target is not None:
-                self._publish_target(target, result)
+                self._publish_target(target, result, capture_t=frame.t)
         return True
 
-    def _publish_target(self, target: Detection, result: DetectionResult) -> None:
+    def _publish_target(
+        self, target: Detection, result: DetectionResult, *, capture_t: float
+    ) -> None:
         """Publish one target through the bridge, applying the failure/cadence policy.
 
         A failed publish is counted and rate-limited-logged; it re-raises once the number of
@@ -207,10 +209,14 @@ class Pipeline:
         the first). A send the bridge suppresses (heartbeat gate) is counted separately and is
         neither a success nor a failure — it does **not** reset the consecutive-failure streak,
         so an intermittently-fresh link with a persistently broken send still escalates.
+
+        ``capture_t`` is the source frame's capture timestamp (:attr:`Frame.t`), forwarded to
+        the bridge so ``capture_time_source="capture"`` can stamp ``time_usec`` from the frame
+        rather than the wall clock at publish time (the ``"publish"`` default ignores it).
         """
         assert self._bridge is not None  # guarded by the caller
         try:
-            sent = self._bridge.publish(target, result)
+            sent = self._bridge.publish(target, result, capture_t=capture_t)
         except Exception:  # noqa: BLE001 - a publish fault is counted/tolerated, never crashes the loop
             self.landing_target_publish_failures += 1
             self._consecutive_publish_failures += 1

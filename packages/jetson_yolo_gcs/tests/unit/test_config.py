@@ -162,3 +162,17 @@ def test_mavlink_frame_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("MAVLINK_FRAME", "galactic")
     with pytest.raises(ValidationError):
         MavlinkSettings()
+
+
+def test_mavlink_capture_time_source_rejects_unknown_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MAVLINK_CAPTURE_TIME_SOURCE", "bogus")
+    with pytest.raises(ValidationError):
+        MavlinkSettings()
+
+
+def test_mavlink_timesync_and_capture_time_source_defaults() -> None:
+    s = MavlinkSettings()
+    assert s.timesync_enabled is False
+    assert s.capture_time_source == "publish"

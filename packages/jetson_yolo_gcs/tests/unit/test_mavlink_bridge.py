@@ -11,6 +11,7 @@ from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge, compute_angles
 from jetson_yolo_gcs.mavlink.heartbeat import HeartbeatMonitor
 from jetson_yolo_gcs.mavlink.pose import VehiclePose
+from jetson_yolo_gcs.mavlink.timesync import TimeSync
 from tests.conftest import FakeClock
 from tests.unit.test_mavlink_heartbeat import SettableClock
 
@@ -145,6 +146,56 @@ def test_publish_body_frd_unchanged_after_frame_dispatch() -> None:
     assert kwargs == {}
 
 
+def test_compute_time_usec_publish_default_uses_clock() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, capture_time_source="publish"),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 7_000_000  # ignores capture_t
+
+
+def test_compute_time_usec_capture_uses_frame_time_plus_offset() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, capture_time_source="capture"),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+        timesync=TimeSync(offset_us=500_000),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 5_500_000
+
+
+def test_compute_time_usec_capture_without_timesync_uses_raw_capture_t() -> None:
+    # capture_time_source="capture" but no TimeSync injected -> use capture_t directly
+    # (no offset available), still ignoring the publish-time clock.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, capture_time_source="capture"),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 5_000_000
+
+
+def test_compute_time_usec_capture_falls_back_to_clock_when_capture_t_none() -> None:
+    # capture_time_source="capture" but capture_t is None (no frame timestamp available)
+    # -> fall back to the publish-time wall clock rather than crashing.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, capture_time_source="capture"),
+        connection=conn,
+        clock=FakeClock(times=[9.0]),
+        heartbeat=_fresh_monitor(),
+        timesync=TimeSync(offset_us=500_000),
+    )
+    assert bridge._compute_time_usec(capture_t=None) == 9_000_000
+
+
 class _FixedPose:
     """A :class:`PoseSource` fake returning a caller-supplied pose (or ``None``) forever."""
 
@@ -158,7 +209,9 @@ class _FixedPose:
 def test_local_ned_sends_position_valid_with_pose() -> None:
     conn = _FakeConn()
     bridge = LandingTargetBridge(
-        MavlinkSettings(enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7),
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
         connection=conn,
         clock=FakeClock(times=[3.0]),
         heartbeat=_fresh_monitor(),
@@ -184,7 +237,9 @@ def test_local_ned_sends_position_valid_with_pose() -> None:
 def test_local_ned_suppresses_when_no_pose() -> None:
     conn = _FakeConn()
     bridge = LandingTargetBridge(
-        MavlinkSettings(enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7),
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
         connection=conn,
         clock=FakeClock(times=[3.0]),
         heartbeat=_fresh_monitor(),
@@ -201,7 +256,9 @@ def test_local_ned_suppresses_when_ray_unprojectable() -> None:
     # position_valid=1.
     conn = _FakeConn()
     bridge = LandingTargetBridge(
-        MavlinkSettings(enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7),
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
         connection=conn,
         clock=FakeClock(times=[3.0]),
         heartbeat=_fresh_monitor(),
