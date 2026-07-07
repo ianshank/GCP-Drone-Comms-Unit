@@ -24,12 +24,12 @@
     }
   ],
   "title": "MeshSA Router & Transports (Golden Signals)",
-  "description": "MeshSA gateway observability mapped to the four golden signals (Traffic, Errors, Saturation, Latency). Metric names mirror packages/meshsa/src/meshsa/metrics.py; see ops/observability/README.md.",
+  "description": "MeshSA gateway observability mapped to the four golden signals (Traffic, Errors, Saturation, Latency), plus an AI Inference row covering the meshsa_inference_* offline-drop/queue-depth/intake-drop/pending-task series. Metric names mirror packages/meshsa/src/meshsa/metrics.py; see ops/observability/README.md.",
   "uid": "meshsa-golden-signals",
   "tags": ["meshsa", "golden-signals", "observability"],
   "timezone": "",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "graphTooltip": 1,
   "time": {
@@ -465,6 +465,135 @@
         "mode": "markdown",
         "content": "### Latency is not yet instrumented\n\nMeshSA does **not** export an end-to-end latency metric today. There is no histogram (e.g. `meshsa_..._seconds_bucket`) emitted by `packages/meshsa/src/meshsa/metrics.py`, so a true latency panel cannot be drawn honestly.\n\n**Proxies in the meantime** (see the Saturation row):\n\n- **Reconnect frequency** — `rate(meshsa_transport_reconnects[$__rate_interval])` rising indicates an unstable link, which inflates delivery latency.\n- **Inbox-full drop rate** — `rate(meshsa_transport_dropped_inbox_full[$__rate_interval])` rising indicates queue saturation, which delays (or sheds) frames.\n\n**Future work (M3):** add a latency histogram in `metrics.py`, then replace this panel with a real p50/p95/p99 view. Until that metric exists, no latency series is plotted here — by design."
       }
+    },
+    {
+      "id": 500,
+      "type": "row",
+      "title": "AI Inference (initiative E)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Inference drops (offline / intake)",
+      "description": "Per-second rate of envelopes dropped from the offline replay queue (meshsa_inference_offline_dropped_total) and shed at task intake (meshsa_inference_intake_dropped_total). Sustained non-zero => the edge node cannot keep up with inbound analysis load.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["last", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(meshsa_inference_offline_dropped_total[$__rate_interval])",
+          "legendFormat": "offline_dropped"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(meshsa_inference_intake_dropped_total[$__rate_interval])",
+          "legendFormat": "intake_dropped"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Inference saturation (queue depth / pending tasks)",
+      "description": "Instantaneous gauges: offline replay queue depth (meshsa_inference_offline_queue_depth) and in-flight analysis tasks (meshsa_inference_pending_tasks). Approaching the configured offline_queue_max / max_pending_tasks caps means shedding is imminent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["last", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "meshsa_inference_offline_queue_depth",
+          "legendFormat": "offline_queue_depth"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "meshsa_inference_pending_tasks",
+          "legendFormat": "pending_tasks"
+        }
+      ]
     }
   ]
 }

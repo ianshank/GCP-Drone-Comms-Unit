@@ -104,12 +104,18 @@ def test_render_prometheus_transport_missing_rx_frames_defaults_zero():
 
 def test_render_prometheus_emits_all_dashboard_metric_names():
     # Drift guard for ops/observability/grafana-meshsa-dashboard.json: the
-    # dashboard's PromQL references exactly these 8 metric names (5 router + 3
-    # per-transport). Renaming one in metrics.py without updating the dashboard
-    # must trip this test so the two never silently diverge.
+    # dashboard's PromQL references exactly these 12 metric names (5 router + 3
+    # per-transport + 4 inference). Renaming one in metrics.py without updating
+    # the dashboard must trip this test so the two never silently diverge.
     text = render_prometheus(
         RouterMetrics(rx=1, tx=2, forwarded=3, dropped_undecodable=4, schema_mismatch=5),
         {"radio": {"dropped_inbox_full": 6, "reconnects": 7, "rx_frames": 8}},
+        inference={
+            "offline_dropped": 9,
+            "offline_queue_depth": 10,
+            "intake_dropped": 11,
+            "pending_tasks": 12,
+        },
     )
     for name in (
         "meshsa_rx_total",
@@ -120,6 +126,10 @@ def test_render_prometheus_emits_all_dashboard_metric_names():
         "meshsa_transport_dropped_inbox_full",
         "meshsa_transport_reconnects",
         "meshsa_transport_rx_frames",
+        "meshsa_inference_offline_dropped_total",
+        "meshsa_inference_offline_queue_depth",
+        "meshsa_inference_intake_dropped_total",
+        "meshsa_inference_pending_tasks",
     ):
         assert name in text
 

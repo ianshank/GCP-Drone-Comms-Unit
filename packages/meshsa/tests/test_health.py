@@ -143,3 +143,8 @@ def test_render_metrics_prometheus_includes_inference(node_with_inference):
 
 def test_render_metrics_json_omits_inference_when_disabled(node_no_inference):
     assert "inference" not in render_metrics(node_no_inference, "json")
+
+
+def test_render_metrics_prometheus_omits_inference_when_disabled(node_no_inference):
+    text = render_metrics(node_no_inference, "prometheus")
+    assert "meshsa_inference_" not in text
