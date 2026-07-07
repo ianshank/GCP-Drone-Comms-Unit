@@ -16,10 +16,13 @@ from tests.unit.test_mavlink_heartbeat import SettableClock
 
 class _FakeMav:
     def __init__(self) -> None:
-        self.calls: list[tuple[object, ...]] = []
+        #: Each entry is ``(args, kwargs)`` for one ``landing_target_send`` call, so tests
+        #: can pin both the positional arity/values *and* that no kwargs snuck in (the
+        #: latter matters for the pre-NED-refactor characterization test below).
+        self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-    def landing_target_send(self, *args: object) -> None:
-        self.calls.append(args)
+    def landing_target_send(self, *args: object, **kwargs: object) -> None:
+        self.calls.append((args, kwargs))
 
 
 class _FakeMsg:
@@ -98,11 +101,30 @@ def test_publish_sends_landing_target_when_enabled() -> None:
     det, result = _result_with((140, 90, 160, 110))
     assert bridge.publish(det, result) is True
     assert len(conn.mav.calls) == 1
-    args = conn.mav.calls[0]
+    args, kwargs = conn.mav.calls[0]
+    assert kwargs == {}
     assert args[0] == 2_000_000  # time_usec from clock
     assert args[1] == 0  # target_num
     assert args[2] == 12  # MAV_FRAME_BODY_FRD
     assert args[3] == pytest.approx(0.5)  # angle_x
+
+
+def test_publish_body_frd_sends_eight_positional_args_no_position_valid() -> None:
+    # Characterization (pre-NED refactor): body_frd path sends exactly 8 positional args,
+    # frame=MAV_FRAME_BODY_FRD(12), and NO x/y/z/position_valid (defaults => position_valid=0).
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, fov_x_rad=2.0, fov_y_rad=2.0),
+        connection=conn,
+        clock=FakeClock(times=[2.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    det, result = _result_with((140, 90, 160, 110))
+    assert bridge.publish(det, result) is True
+    args, kwargs = conn.mav.calls[0]
+    assert len(args) == 8
+    assert kwargs == {}
+    assert args[2] == 12  # MAV_FRAME_BODY_FRD
 
 
 def test_publish_opens_connection_via_factory_when_none() -> None:
