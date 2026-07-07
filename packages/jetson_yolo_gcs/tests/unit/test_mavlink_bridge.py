@@ -164,13 +164,21 @@ def test_local_ned_sends_position_valid_with_pose() -> None:
         heartbeat=_fresh_monitor(),
         pose_source=_FixedPose(VehiclePose(alt_agl_m=100.0, heading_deg=0.0, pitch_deg=90.0)),
     )
-    det, result = _result_with((315, 235, 325, 245))  # ~centre of 640x480
+    det, result = _result_with((95, 95, 105, 105))  # true centre (100,100) of the 200x200 result
     assert bridge.publish(det, result) is True
     assert len(conn.mav.calls) == 1
     args, kwargs = conn.mav.calls[0]
+    assert kwargs == {}  # local_ned path sends all 14 args positionally (verified against impl)
     assert args[2] == 1  # MAV_FRAME_LOCAL_NED
-    # nadir centre => target ~directly below: north~0, east~0, down~100, position_valid=1
-    assert kwargs.get("position_valid", args[-1]) == 1
+    # nadir centre => target directly below: north=0, east=0, down=alt_agl_m.
+    # Pin the full x/y/z payload (not just frame + position_valid) so an arg-order regression
+    # (e.g. a y<->z swap) fails here instead of silently reaching the autopilot.
+    assert args[8] == pytest.approx(0.0, abs=1e-6)  # north/x
+    assert args[9] == pytest.approx(0.0, abs=1e-6)  # east/y
+    assert args[10] == pytest.approx(100.0)  # down/z == alt_agl_m
+    # position_valid is always positional at index 13 for this call site (see bridge.py's
+    # _send_local_ned docstring); read it there rather than via a kwargs-or-fallback guess.
+    assert args[13] == 1
 
 
 def test_local_ned_suppresses_when_no_pose() -> None:
