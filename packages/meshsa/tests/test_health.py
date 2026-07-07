@@ -1,5 +1,7 @@
 """Pure health_snapshot rendering (the aiohttp server is a pragma'd seam)."""
 
+import pytest
+
 from meshsa import NodeConfig, build_node, health_snapshot
 from meshsa.health import _resolve_metrics_options, render_metrics
 
@@ -12,6 +14,26 @@ def _node(health: dict | None = None):
         **({"health": health} if health else {}),
     )
     return build_node(cfg)
+
+
+@pytest.fixture
+def node_with_inference(make_transport):
+    # config.inference.enabled=True gives build_node an InferenceService (Node.inference_service
+    # is non-None); the FakeHttpTransport keeps this fake-network, same pattern as test_inference.py.
+    cfg = NodeConfig(
+        uid="u",
+        callsign="U",
+        transports=[{"name": "mesh", "type": "loopback"}],
+        inference={"enabled": True, "api_key": "nvapi-test"},
+    )
+    return build_node(cfg, inference_transport=make_transport([]))
+
+
+@pytest.fixture
+def node_no_inference():
+    # Default NemotronConfig() has enabled=False, so build_node leaves
+    # node.inference_service as None — the disabled/backward-compat path.
+    return _node()
 
 
 def test_health_config_defaults():
@@ -99,3 +121,25 @@ def test_resolve_metrics_options_explicit_args_override_config():
     assert enabled is False
     assert path == "/other"
     assert fmt == "prometheus"
+
+
+# ── render_metrics: inference counters (Task 4) ─────────────────────────
+
+
+def test_render_metrics_json_includes_inference_when_enabled(node_with_inference):
+    body = render_metrics(node_with_inference, "json")
+    assert set(body["inference"]) == {
+        "offline_dropped",
+        "offline_queue_depth",
+        "intake_dropped",
+        "pending_tasks",
+    }
+
+
+def test_render_metrics_prometheus_includes_inference(node_with_inference):
+    text = render_metrics(node_with_inference, "prometheus")
+    assert "meshsa_inference_pending_tasks" in text
+
+
+def test_render_metrics_json_omits_inference_when_disabled(node_no_inference):
+    assert "inference" not in render_metrics(node_no_inference, "json")
