@@ -496,7 +496,12 @@ def test_poll_heartbeat_logs_lost_and_reacquired_transitions() -> None:
         bridge.poll_heartbeat()  # recv None -> stale -> lost
         bridge.poll_heartbeat()  # beat at t=105 -> reacquired
     events = [e["event"] for e in logs]
-    assert sum("acquired" in e and "reacquired" not in e for e in events) == 1  # exactly once
+    # Match the bridge's full gate-open text, not a bare "acquired" substring: HeartbeatMonitor
+    # also emits a debug-level "autopilot heartbeat acquired" on the first beat, which
+    # capture_logs() sees or drops depending on the ambient structlog level (INFO filtering is
+    # order-dependent across the suite). Matching the specific transition message asserts the
+    # edge-triggered acquisition fired exactly once, independent of that log-level state.
+    assert sum("acquired; LANDING_TARGET gate open" in e for e in events) == 1  # exactly once
     assert any("lost" in e for e in events)
     assert any("reacquired" in e for e in events)
 
