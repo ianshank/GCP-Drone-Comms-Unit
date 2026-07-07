@@ -561,3 +561,18 @@ class InferenceService:
             await asyncio.gather(*self._bg_tasks, return_exceptions=True)
         self._bg_tasks.clear()
         await self.client.close()
+
+    def as_dict(self) -> dict[str, int]:
+        """Point-in-time service counters for the ``/metrics`` exporter (pure read).
+
+        Mirrors the transport counter-attribute convention consumed by
+        :func:`meshsa.health._transport_counters`. ``offline_dropped`` /
+        ``intake_dropped`` are monotonic counters; ``offline_queue_depth`` /
+        ``pending_tasks`` are instantaneous gauges.
+        """
+        return {
+            "offline_dropped": self._offline_dropped,
+            "offline_queue_depth": len(self._offline) if self._offline is not None else 0,
+            "intake_dropped": self._intake_dropped,
+            "pending_tasks": len(self._bg_tasks),
+        }

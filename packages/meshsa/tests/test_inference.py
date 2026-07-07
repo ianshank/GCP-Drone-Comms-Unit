@@ -1129,3 +1129,28 @@ async def test_handle_message_unbounded_when_cap_zero(make_transport, mock_route
     assert svc._intake_dropped == 0
     await _await_published(mock_router, 1)
     await svc.stop()
+
+
+# ── InferenceService.as_dict(): point-in-time counters accessor ─────────────
+
+
+def test_as_dict_reports_counters(mock_router, make_transport):
+    cfg = NemotronConfig(enabled=True, api_key="k", offline_queue_max=4, max_pending_tasks=2)
+    svc = _service(cfg, mock_router, make_transport([]))
+    svc._offline_dropped = 3
+    svc._intake_dropped = 5
+    assert svc._offline is not None
+    svc._offline.append(_chat_envelope("q", source_uid="x"))  # depth 1
+    d = svc.as_dict()
+    assert d == {
+        "offline_dropped": 3,
+        "offline_queue_depth": 1,
+        "intake_dropped": 5,
+        "pending_tasks": 0,
+    }
+
+
+def test_as_dict_zero_depth_when_offline_disabled(mock_router, make_transport):
+    cfg = NemotronConfig(enabled=True, api_key="k", offline_queue_max=0)
+    svc = _service(cfg, mock_router, make_transport([]))
+    assert svc.as_dict()["offline_queue_depth"] == 0
