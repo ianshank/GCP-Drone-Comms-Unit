@@ -151,6 +151,17 @@ def test_render_prometheus_emits_inference_series_when_present():
     assert "meshsa_inference_pending_tasks 5" in text
 
 
+def test_render_prometheus_defaults_missing_inference_keys_to_zero():
+    # Only offline_dropped is supplied; the other three keys must default via
+    # `.get(key, 0)` rather than being omitted or raising a KeyError.
+    text = render_prometheus(RouterMetrics(), {}, inference={"offline_dropped": 7})
+    lines = text.splitlines()
+    assert "meshsa_inference_offline_dropped_total 7" in lines
+    assert "meshsa_inference_intake_dropped_total 0" in lines
+    assert "meshsa_inference_offline_queue_depth 0" in lines
+    assert "meshsa_inference_pending_tasks 0" in lines
+
+
 def test_render_prometheus_omits_inference_when_absent():
     text = render_prometheus(RouterMetrics(), {})
     assert "meshsa_inference_" not in text

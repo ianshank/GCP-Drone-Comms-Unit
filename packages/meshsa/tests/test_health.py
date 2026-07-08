@@ -141,6 +141,26 @@ def test_render_metrics_prometheus_includes_inference(node_with_inference):
     assert "meshsa_inference_pending_tasks" in text
 
 
+def test_render_metrics_propagates_exact_inference_counter_values(node_with_inference):
+    # Known, non-zero counters on the real service must propagate end-to-end through
+    # /metrics with exact values — not just the key names asserted elsewhere in this file.
+    node_with_inference.inference_service._offline_dropped = 3
+    node_with_inference.inference_service._intake_dropped = 5
+    # offline_queue_depth and pending_tasks stay 0: no offline items queued, no bg tasks.
+
+    body = render_metrics(node_with_inference, "json")
+    assert body["inference"] == {
+        "offline_dropped": 3,
+        "offline_queue_depth": 0,
+        "intake_dropped": 5,
+        "pending_tasks": 0,
+    }
+
+    text = render_metrics(node_with_inference, "prometheus")
+    assert "meshsa_inference_offline_dropped_total 3" in text
+    assert "meshsa_inference_intake_dropped_total 5" in text
+
+
 def test_render_metrics_json_omits_inference_when_disabled(node_no_inference):
     assert "inference" not in render_metrics(node_no_inference, "json")
 

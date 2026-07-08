@@ -1121,6 +1121,41 @@ async def test_handle_message_sheds_when_pending_tasks_at_cap(make_transport, mo
     slow.set_result(None)
 
 
+async def test_handle_message_accepts_below_cap_then_sheds_at_cap(make_transport, mock_router):
+    # cap=3 (not the degenerate cap=1 case): below cap must accept and spawn a task;
+    # only once occupancy reaches the cap does intake shed.
+    cfg = NemotronConfig(enabled=True, api_key="k", max_pending_tasks=3)
+    svc = _service(cfg, mock_router, make_transport([]))
+    svc._running = True
+
+    # Occupy 2 of 3 slots with fake in-flight tasks (mirrors the cap=1 shed test's technique).
+    slow1 = asyncio.get_event_loop().create_future()
+    slow2 = asyncio.get_event_loop().create_future()
+    svc._bg_tasks.add(asyncio.ensure_future(slow1))
+    svc._bg_tasks.add(asyncio.ensure_future(slow2))
+
+    # len(_bg_tasks)==2 < cap==3: the envelope must be accepted (a new task scheduled),
+    # not shed — the accept-path signal, mirrored by the dropped counter staying put.
+    await svc.handle_message(_chat_envelope("hello", source_uid="other"))
+    assert svc._intake_dropped == 0
+    assert len(svc._bg_tasks) == 3  # 2 fakes + 1 newly-spawned real task
+
+    # Occupy the 3rd slot with a fake too, so occupancy is deterministically pinned at the
+    # cap (3) rather than depending on the real task above ever completing.
+    slow3 = asyncio.get_event_loop().create_future()
+    svc._bg_tasks.add(asyncio.ensure_future(slow3))
+    assert len(svc._bg_tasks) == 4  # 3 fakes + 1 real, all still in-flight
+
+    # len(_bg_tasks)==4 >= cap==3: the next envelope must now be shed.
+    await svc.handle_message(_chat_envelope("world", source_uid="other"))
+    assert svc._intake_dropped == 1
+    assert len(svc._bg_tasks) == 4  # no new task added
+
+    slow1.set_result(None)
+    slow2.set_result(None)
+    slow3.set_result(None)
+
+
 async def test_handle_message_unbounded_when_cap_zero(make_transport, mock_router):
     cfg = NemotronConfig(enabled=True, api_key="k", max_pending_tasks=0)
     svc = _service(cfg, mock_router, make_transport([_ok("hi-reply")]))
