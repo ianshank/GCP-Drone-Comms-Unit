@@ -57,6 +57,10 @@ scout-*.db
 # Tooling
 .python-version
 
+# Agent / workflow scratch (superpowers SDD workspace: task briefs, review packages, ledger).
+# Self-ignored by an inner .gitignore too; listed here so it's explicit at the repo root.
+.superpowers/
+
 # Build outputs
 *.whl
 *.tar.gz

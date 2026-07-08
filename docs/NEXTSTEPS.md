@@ -54,6 +54,12 @@
 - [x] **Offline fallback**: bounded `offline_queue_max` deque in `InferenceService` — a failure
       (transport/HTTP error surviving retries) enqueues the envelope (drop-and-count on overflow,
       mirroring `FlightLogger`) and the next success drains/replays it. 0 = disabled (prior behavior).
+- [x] **`/metrics` counters + task-intake backpressure**: `InferenceService.as_dict()` exposes
+      `offline_dropped`/`offline_queue_depth`/`intake_dropped`/`pending_tasks`; a matching
+      `meshsa_inference_*` Prometheus/JSON series is emitted via `render_prometheus`/
+      `health.render_metrics` when `node.inference_service` is set, with a Grafana "AI Inference"
+      row. New `max_pending_tasks` (`MESHSA_INFERENCE_MAX_PENDING_TASKS`, default `0` = unbounded)
+      bounds task intake with drop-and-count, mirroring the offline-queue pattern.
 
 ## Perception (initiative D — **CHARTER carve-out ratified 2026-06-20**)
 > On-board `jetson_yolo_gcs`: camera → YOLO/Hailo detection → GStreamer video to a GCS →
@@ -80,15 +86,24 @@
 - [ ] **Real Hailo-8 `.hef` inference** (preferred offload; TensorRT GPU is the fallback).
       `.pt`→ONNX→`.hef` is built on an **x86 Ubuntu host only** (Hailo DFC is not ARM); the
       `.hef` is an offline artifact. Add a `[hailo]` extra + model-prep note.
-- [ ] **PX4 `LOCAL_NED` dialect:** PX4 ignores `angle_x/angle_y` and needs `MAV_FRAME_LOCAL_NED`
-      x/y/z (`position_valid=1`). Add `MAVLINK_FRAME` (`body_frd`|`local_ned`) + pixel→bearing→NED
-      (FOV + attitude/alt + `GPS_GLOBAL_ORIGIN`). First add a test pinning the current
-      `landing_target_send` arg arity / `position_valid=0` default.
+- [x] **PX4 `LOCAL_NED` dialect (software-complete; HW validation pending):** `MAVLINK_FRAME`
+      (`body_frd` default | `local_ned`) frame-dispatches `LandingTargetBridge.publish`; the
+      `local_ned` path projects pixel→bearing→NED (new `geometry/ned.py` pure ray-cast +
+      `mavlink/pose.py` `PoseSource`/`MavlinkPoseSource`, FOV + attitude/alt) and sends PX4's
+      expected x/y/z with `position_valid=1`. Body-FRD wire output stays byte-identical
+      (pin-guarded). **Fail-safe**, not fail-open: suppresses (returns `False`, no send) without a
+      `PoseSource`, without a fresh pose, or on an unprojectable/degenerate ray — reason-keyed via
+      `suppressed_snapshot()` (`no_heartbeat`/`no_pose`/`unprojectable`). **Remaining:** on-vehicle
+      PX4 SITL/hardware validation of the NED path.
       ([landing_target](https://mavlink.io/en/services/landing_target.html) /
       [PX4 precland](https://docs.px4.io/main/en/advanced_features/precland.html))
-- [ ] **TIMESYNC + capture-time `time_usec`:** align to the vehicle clock, *then* stamp frame
-      capture time. Until then keep publish-time or send `0` (ArduPilot ignores the field; raw
-      unsynced monotonic is a fusion hazard). ([TIMESYNC](https://mavlink.io/en/services/timesync.html))
+- [x] **TIMESYNC + capture-time `time_usec` (software-complete; HW validation pending):** new
+      `mavlink/timesync.py` `TimeSync` (offset tracking + `to_vehicle_usec`) gated by
+      `MAVLINK_TIMESYNC_ENABLED` (default `false`, load-bearing) and `MAVLINK_CAPTURE_TIME_SOURCE`
+      (`publish` default | `capture`). Defaults preserve current publish-time behavior; the device
+      TIMESYNC round-trip exchange itself is hardware-only (deferred, `# pragma: no cover`).
+      **Remaining:** on-vehicle validation of the offset/capture-time path.
+      ([TIMESYNC](https://mavlink.io/en/services/timesync.html))
 - [x] **Precision-landing safety hardening (software; HW validation still pending):**
       autopilot-**heartbeat** gate shipped — a self-contained `mavlink/heartbeat.py`
       `HeartbeatMonitor` mirrors the `meshsa.command.health.HeartbeatHealth` fail-closed pattern;
@@ -146,8 +161,14 @@
       gated behind explicit human confirmation, never autonomous model issuance.
 
 ## Near-term (M2 hardening)
+- [x] **Hardware-free FTS e2e harness:** `packages/meshsa/tests/e2e/test_fts_e2e.py` — CotCodec
+      encode→decode round-trip + CotFramer split-stream reassembly, always run (no hardware, adds
+      coverage); `e2e` marker registered in pyproject.
 - [ ] **Automated FTS e2e** (non-coverage job): bring up FTS in CI on a self-hosted Jetson
-      runner; assert a track via the FTS REST API and a multicast CoT listener.
+      runner; assert a track via the FTS REST API and a multicast CoT listener. A live-FTS
+      roundtrip test and `.github/workflows/fts-e2e.yml` (`workflow_dispatch`-only,
+      `runs-on: [self-hosted, jetson, arm64]`) are already wired behind `MESHSA_FTS_E2E=1`, but the
+      workflow does not run in normal CI pending a registered self-hosted Jetson runner.
 - [x] **TLS CoT (`:8089`)** for the TAK TCP transport (shipped — `transports/tak.py`:
       `tls://`/`ssl://`/`tcp://` scheme parsing, `_build_ssl_context`, CA + client cert/key,
       8089 default; plain `:8087` kept for closed dev nets). **Remaining:** signed ATAK

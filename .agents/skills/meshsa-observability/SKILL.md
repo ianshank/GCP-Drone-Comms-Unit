@@ -33,6 +33,19 @@ Prometheus exposition is hand-rolled in `metrics.py`.
    dashboard references is actually produced by `render_prometheus`.
 5. If the gateway is ever run multi-process, set **and wipe** `PROMETHEUS_MULTIPROC_DIR`
    between runs.
+6. **Optional inference series (only when `node.inference_service` is set):** the same pattern
+   extends to `meshsa.inference` — `InferenceService.as_dict()` surfaces
+   `offline_dropped`/`offline_queue_depth`/`intake_dropped`/`pending_tasks`, which
+   `render_prometheus(metrics, transports, *, inference=...)` renders as
+   `meshsa_inference_offline_dropped_total`, `meshsa_inference_intake_dropped_total` (counters)
+   and `meshsa_inference_offline_queue_depth`, `meshsa_inference_pending_tasks` (gauges). When
+   `inference` is omitted/`None` (inference disabled), no `meshsa_inference_*` lines are emitted
+   at all — don't emit zero-valued placeholders. `health.render_metrics` wires this end to end:
+   it reads `node.inference_service.as_dict()` and includes it as `body["inference"]` for the
+   json format or folds it into the same Prometheus text via `render_prometheus(...,
+   inference=...)`. The Grafana dashboard's "AI Inference" row (2 panels: drops-per-second from
+   the counters, and a saturation panel from the two gauges) follows the same
+   variables-not-baked-values convention as the rest of the dashboard.
 
 ## Procedure (gates)
 
@@ -44,5 +57,12 @@ Run from `packages/meshsa`: `python -m pytest`, `mypy src`, `ruff check .`,
 - `packages/meshsa/src/meshsa/metrics.py` (`RouterMetrics`, `render_prometheus`)
 - `packages/meshsa/src/meshsa/health.py`, `config.py` (`HealthConfig`)
 - `packages/meshsa/src/meshsa/transports/polling_source.py` (`rx_frames`, link log)
-- `ops/observability/README.md`
+- `packages/meshsa/src/meshsa/inference.py` (`InferenceService.as_dict`) — see also
+  `.agents/skills/meshsa-inference/SKILL.md` for the config/behavior side of these counters
+- `packages/meshsa/tests/test_metrics.py` — `test_render_prometheus_emits_all_dashboard_metric_names`
+  is the drift-guard: it asserts all 12 dashboard-referenced names (5 router + 3 per-transport +
+  4 inference) are actually produced by `render_prometheus`. Adding/renaming a series must update
+  this test's expected set in the same change.
+- `ops/observability/grafana-meshsa-dashboard.json` ("AI Inference" row) and
+  `ops/observability/README.md`
 - Google SRE golden signals: https://sre.google/sre-book/monitoring-distributed-systems/

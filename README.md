@@ -29,13 +29,16 @@ real time.
   `pip install -e "packages/meshsa[fpv]"`. (Pre-flight arm-gating is a deliberate, bounded
   exception to the read-only charter — see [docs/CHARTER.md](docs/CHARTER.md) §3.)
 - **Observability & a read-only SA assistant:** opt-in `/healthz` + `/metrics`
-  (Prometheus/JSON) on the gateway; an optional, **read-only** `meshsa.llm` assistant answers
-  operator questions over live telemetry and TAK tracks (it issues no vehicle commands).
+  (Prometheus/JSON) on the gateway; when inference is enabled, `/metrics` also exports
+  `meshsa_inference_*` counters/gauges (offline drops, intake drops, offline queue depth,
+  pending tasks). An optional, **read-only** `meshsa.llm` assistant answers operator
+  questions over live telemetry and TAK tracks (it issues no vehicle commands).
 - **AI-powered mesh inference (`meshsa.inference`):** an optional **NVIDIA Nemotron NIM**
   bridge subscribes to mesh traffic, runs tactical AI analysis, and broadcasts
   AI insight summaries (configurable prefix via `MESHSA_INFERENCE_INSIGHT_PREFIX`).
   Install with `pip install meshsa[inference]`; configure via `MESHSA_INFERENCE_*`
-  environment variables (12 fields incl. backoff tuning). Thread-safe, feedback-loop
+  environment variables (12 fields incl. backoff tuning and `MESHSA_INFERENCE_MAX_PENDING_TASKS`
+  intake backpressure, default `0` = unbounded). Thread-safe, feedback-loop
   safe (insight messages are never re-analyzed), with configurable retry backoff.
 - **Vineyard structural-anomaly scouting (`meshsa.scout`):** an offline, **hardware-free**
   pipeline that turns a mapping survey (RGB detections + autopilot pose) into a georeferenced,
