@@ -140,13 +140,21 @@ def build_healthz_app(
 
         async def metrics_handler(request: Any) -> Any:
             if not authorize(token, request.headers.get("Authorization")):
-                return web.json_response({"error": "unauthorized"}, status=401)
+                # RFC 7235 §3.1: a 401 must carry a WWW-Authenticate challenge.
+                return web.json_response(
+                    {"error": "unauthorized"},
+                    status=401,
+                    headers={"WWW-Authenticate": 'Bearer realm="meshsa-metrics"'},
+                )
             body = render_metrics(node, metrics_format)
             if isinstance(body, str):
                 return web.Response(text=body, content_type="text/plain")
             return web.json_response(body)
 
-        app.router.add_get(metrics_path, metrics_handler)
+        # aiohttp requires a leading slash; normalise a misconfigured metrics_path
+        # ("metrics" -> "/metrics") so an operator typo can't crash the listener at startup.
+        path = metrics_path if metrics_path.startswith("/") else f"/{metrics_path}"
+        app.router.add_get(path, metrics_handler)
 
     return app
 

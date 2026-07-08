@@ -35,12 +35,13 @@ async def _client(
     token: str | None,
     metrics_enabled: bool = True,
     metrics_format: str = "prometheus",
+    metrics_path: str = "/metrics",
 ) -> TestClient:
     app = build_healthz_app(
         _node(),
         token=token,
         metrics_enabled=metrics_enabled,
-        metrics_path="/metrics",
+        metrics_path=metrics_path,
         metrics_format=metrics_format,
     )
     client = TestClient(TestServer(app))
@@ -74,9 +75,23 @@ async def test_metrics_rejects_without_and_with_wrong_bearer() -> None:
         missing = await client.get("/metrics")
         assert missing.status == 401
         assert (await missing.json())["error"] == "unauthorized"
+        # RFC 7235 §3.1: a 401 must advertise the auth scheme.
+        assert missing.headers["WWW-Authenticate"] == 'Bearer realm="meshsa-metrics"'
 
         wrong = await client.get("/metrics", headers={"Authorization": "Bearer nope"})
         assert wrong.status == 401
+    finally:
+        await client.close()
+
+
+async def test_metrics_path_without_leading_slash_is_normalised() -> None:
+    # A misconfigured metrics_path ("metrics") must not crash startup; it is normalised to
+    # "/metrics" so aiohttp accepts the route.
+    client = await _client(token=None, metrics_path="metrics")
+    try:
+        res = await client.get("/metrics")
+        assert res.status == 200
+        assert "meshsa_rx_total 0" in await res.text()
     finally:
         await client.close()
 
