@@ -52,9 +52,11 @@ def project_pixel_to_ned(
 
     ``pitch_deg`` is camera depression below horizontal (+ looks down; 90 = nadir);
     ``heading_deg`` is camera azimuth (0=N, CW). ``None`` when there is no usable height
-    (``alt_agl_m <= 0``) or the ray is at/above the horizon.
+    (``alt_agl_m <= 0``), the image size is degenerate (``img_w``/``img_h <= 0``), or the ray
+    is at/above the horizon — so a malformed frame fail-safe suppresses the send rather than
+    dividing by zero on the LANDING_TARGET path.
     """
-    if alt_agl_m <= 0:
+    if alt_agl_m <= 0 or cam.img_w <= 0 or cam.img_h <= 0:
         return None
     yaw_off = math.degrees(_angle_off_axis_rad((2.0 * cx / cam.img_w) - 1.0, cam.h_fov_rad))
     pitch_off = math.degrees(_angle_off_axis_rad((2.0 * cy / cam.img_h) - 1.0, cam.v_fov_rad))

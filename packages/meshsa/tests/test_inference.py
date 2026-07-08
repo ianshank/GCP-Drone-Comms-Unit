@@ -1119,6 +1119,7 @@ async def test_handle_message_sheds_when_pending_tasks_at_cap(make_transport, mo
     assert svc._intake_dropped == 1
     assert len(svc._bg_tasks) == 1  # no new task added
     slow.set_result(None)
+    await svc.stop()  # tear down the service so no in-flight state leaks into later tests
 
 
 async def test_handle_message_accepts_below_cap_then_sheds_at_cap(make_transport, mock_router):
@@ -1154,6 +1155,9 @@ async def test_handle_message_accepts_below_cap_then_sheds_at_cap(make_transport
     slow1.set_result(None)
     slow2.set_result(None)
     slow3.set_result(None)
+    # The below-cap accept above spawned a real _analyze_and_publish task; stop the service so it
+    # is cancelled here rather than running later and emitting unrelated log noise into other tests.
+    await svc.stop()
 
 
 async def test_handle_message_unbounded_when_cap_zero(make_transport, mock_router):

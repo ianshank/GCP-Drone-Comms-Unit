@@ -56,5 +56,5 @@ Idle back-off is `PIPELINE_IDLE_POLL_S` (non-zero, avoids a CPU spin).
 ruff check . && ruff format --check . && python -m mypy src && python -m pytest
 ```
 
-`mypy --strict` and ruff stay clean; the suite is fakes-first and the coverage floor is **85%**
-(actual typically ~98%). `jetson-yolo-gcs --health-check` must keep exiting 0 with no hardware.
+`mypy --strict` and ruff stay clean; the suite is fakes-first and the coverage floor is **96%**
+(actual typically ~99%). `jetson-yolo-gcs --health-check` must keep exiting 0 with no hardware.

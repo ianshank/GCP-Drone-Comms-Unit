@@ -102,3 +102,31 @@ def test_roll_and_reflection_compose_for_below_center_pixel_at_nadir():
     assert off.north_m == pytest.approx(expected_range * math.cos(math.radians(azimuth_deg)))
     assert off.east_m == pytest.approx(expected_range * math.sin(math.radians(azimuth_deg)))
     assert off.down_m == pytest.approx(alt)
+
+
+def test_returns_none_for_degenerate_image_dimensions():
+    # A malformed 0-dimension frame must fail-safe suppress (None) rather than ZeroDivisionError
+    # on the LANDING_TARGET publish path — the body_frd path already guards width/height; the
+    # NED path (which divides by img_w/img_h) must too.
+    assert (
+        project_pixel_to_ned(
+            CameraFov(img_w=0, img_h=480, h_fov_rad=1.204, v_fov_rad=0.733),
+            0.0,
+            0.0,
+            alt_agl_m=100.0,
+            heading_deg=0.0,
+            pitch_deg=90.0,
+        )
+        is None
+    )
+    assert (
+        project_pixel_to_ned(
+            CameraFov(img_w=640, img_h=0, h_fov_rad=1.204, v_fov_rad=0.733),
+            0.0,
+            0.0,
+            alt_agl_m=100.0,
+            heading_deg=0.0,
+            pitch_deg=90.0,
+        )
+        is None
+    )
