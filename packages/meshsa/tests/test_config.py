@@ -273,6 +273,7 @@ def test_from_env_health_overrides():
         "MESHSA_HEALTH_ENABLED": "true",
         "MESHSA_HEALTH_HOST": "0.0.0.0",
         "MESHSA_HEALTH_PORT": "9090",
+        "MESHSA_HEALTH_TOKEN": "s3cr3t",
         "MESHSA_HEALTH_METRICS_ENABLED": "1",
         "MESHSA_HEALTH_METRICS_PATH": "/stats",
         "MESHSA_HEALTH_METRICS_FORMAT": "json",
@@ -281,6 +282,7 @@ def test_from_env_health_overrides():
     assert c.health.enabled is True
     assert c.health.host == "0.0.0.0"
     assert c.health.port == 9090
+    assert c.health.token == "s3cr3t"
     assert c.health.metrics_enabled is True
     assert c.health.metrics_path == "/stats"
     assert c.health.metrics_format == "json"

@@ -13,10 +13,28 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 
 from .metrics import render_prometheus
+from .netauth import authorize
+from .netauth import validate_bind as _validate_bind
 
 if TYPE_CHECKING:
     from .config import HealthConfig
     from .node import Node
+
+
+def validate_healthz_bind(host: str, token: str | None) -> None:
+    """Fail closed: a non-loopback ``/healthz``+``/metrics`` bind without a token is a misconfig.
+
+    ``/metrics`` discloses router/transport/inference counters, so a non-loopback bind must carry a
+    bearer token. Delegates to the shared ``netauth`` primitive (mirrors ``meshsa.llm.server`` and
+    the scout station), and is pure (no aiohttp) so it is unit-tested directly.
+    """
+    _validate_bind(
+        host,
+        token,
+        service="meshsa-healthz",
+        remedy="the /metrics surface discloses counters. Set health.token / MESHSA_HEALTH_TOKEN, "
+        "or bind to 127.0.0.1.",
+    )
 
 
 def _resolve_metrics_options(
@@ -94,38 +112,35 @@ def render_metrics(node: Node, fmt: Literal["prometheus", "json"]) -> str | dict
     return render_prometheus(node.router.metrics, _transport_counters(node), inference=inference)
 
 
-async def serve_healthz(
+def build_healthz_app(
     node: Node,
-    host: str,
-    port: int,
     *,
-    metrics_enabled: bool | None = None,
-    metrics_path: str | None = None,
-    metrics_format: Literal["prometheus", "json"] | None = None,
-) -> Any:  # pragma: no cover - real server
-    """Start an aiohttp ``/healthz`` (and opt-in ``/metrics``) listener.
+    token: str | None,
+    metrics_enabled: bool,
+    metrics_path: str,
+    metrics_format: Literal["prometheus", "json"],
+) -> Any:
+    """Build the aiohttp ``/healthz`` (+ opt-in ``/metrics``) application.
 
-    Returns the runner (call ``cleanup``). The metrics args default from
-    ``node.config.health.*`` when left unset, so ``health.metrics_enabled=true``
-    in config exposes ``/metrics`` without any CLI change. The snapshot/metrics
-    rendering and option-defaulting live in pure helpers above; only the aiohttp
-    wiring here is pragma-excluded.
+    ``/healthz`` is open (liveness), matching the other services. ``/metrics`` requires
+    ``Authorization: Bearer <token>`` when a ``token`` is set (it discloses router/transport/
+    inference counters); with no token it stays open (loopback-default). The auth branch lives
+    **here**, in this testable factory, not in the pragma-excluded ``serve_healthz`` wiring — so a
+    real request exercises it (mirrors ``scout.station.build_app`` / ``meshsa.llm.server.build_app``).
     """
     from aiohttp import web
 
-    metrics_enabled, metrics_path, metrics_format = _resolve_metrics_options(
-        node, metrics_enabled, metrics_path, metrics_format
-    )
-
-    async def handler(_request: Any) -> Any:
+    async def healthz(_request: Any) -> Any:
         return web.json_response(health_snapshot(node))
 
     app = web.Application()
-    app.router.add_get("/healthz", handler)
+    app.router.add_get("/healthz", healthz)
 
     if metrics_enabled:
 
-        async def metrics_handler(_request: Any) -> Any:
+        async def metrics_handler(request: Any) -> Any:
+            if not authorize(token, request.headers.get("Authorization")):
+                return web.json_response({"error": "unauthorized"}, status=401)
             body = render_metrics(node, metrics_format)
             if isinstance(body, str):
                 return web.Response(text=body, content_type="text/plain")
@@ -133,6 +148,43 @@ async def serve_healthz(
 
         app.router.add_get(metrics_path, metrics_handler)
 
+    return app
+
+
+async def serve_healthz(
+    node: Node,
+    host: str,
+    port: int,
+    *,
+    token: str | None = None,
+    metrics_enabled: bool | None = None,
+    metrics_path: str | None = None,
+    metrics_format: Literal["prometheus", "json"] | None = None,
+) -> Any:  # pragma: no cover - real server
+    """Start an aiohttp ``/healthz`` (and opt-in ``/metrics``) listener.
+
+    Returns the runner (call ``cleanup``). ``token`` defaults from ``node.config.health.token``;
+    the bind is validated fail-closed first (a non-loopback bind without a token is refused). The
+    metrics args default from ``node.config.health.*`` when left unset, so ``health.metrics_enabled=
+    true`` exposes ``/metrics`` with no CLI change. The routing/auth/rendering all live in pure,
+    tested helpers (``build_healthz_app``/``validate_healthz_bind``/``render_metrics``); only the
+    socket wiring here is pragma-excluded.
+    """
+    from aiohttp import web
+
+    if token is None:
+        token = node.config.health.token
+    validate_healthz_bind(host, token)
+    metrics_enabled, metrics_path, metrics_format = _resolve_metrics_options(
+        node, metrics_enabled, metrics_path, metrics_format
+    )
+    app = build_healthz_app(
+        node,
+        token=token,
+        metrics_enabled=metrics_enabled,
+        metrics_path=metrics_path,
+        metrics_format=metrics_format,
+    )
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, host, port).start()

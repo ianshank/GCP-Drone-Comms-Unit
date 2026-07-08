@@ -3,7 +3,7 @@
 import pytest
 
 from meshsa import NodeConfig, build_node, health_snapshot
-from meshsa.health import _resolve_metrics_options, render_metrics
+from meshsa.health import _resolve_metrics_options, render_metrics, validate_healthz_bind
 
 
 def _node(health: dict | None = None):
@@ -41,9 +41,27 @@ def test_health_config_defaults():
     assert cfg.health.enabled is False
     assert cfg.health.host == "127.0.0.1"
     assert cfg.health.port == 8088
+    assert cfg.health.token is None
     assert cfg.health.metrics_enabled is False
     assert cfg.health.metrics_path == "/metrics"
     assert cfg.health.metrics_format == "prometheus"
+
+
+def test_validate_healthz_bind_allows_loopback_without_token():
+    # Default posture: loopback bind needs no token (backward compatible).
+    validate_healthz_bind("127.0.0.1", None)
+    validate_healthz_bind("localhost", None)
+
+
+def test_validate_healthz_bind_allows_non_loopback_with_token():
+    # A token makes an off-loopback bind acceptable (the /metrics surface is then gated).
+    validate_healthz_bind("0.0.0.0", "s3cr3t")
+
+
+def test_validate_healthz_bind_rejects_non_loopback_without_token():
+    # Fail closed: /metrics discloses counters, so a tokenless off-loopback bind is refused.
+    with pytest.raises(ValueError, match="meshsa-healthz"):
+        validate_healthz_bind("0.0.0.0", None)
 
 
 def test_health_snapshot_shape():
