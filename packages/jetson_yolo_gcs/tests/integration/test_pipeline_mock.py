@@ -118,6 +118,7 @@ def test_full_step_publishes_capture_time_from_frame_t() -> None:
             enable_landing_target=True,
             require_heartbeat=False,
             capture_time_source="capture",
+            timesync_enabled=True,
         ),
         connection=conn,
         timesync=TimeSync(offset_us=250_000),
@@ -431,6 +432,23 @@ def test_snapshot_reports_heartbeat_freshness() -> None:
 
     no_gate = Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()))
     assert no_gate.snapshot()["landing_target_heartbeat_fresh"] is None  # no bridge
+
+
+def test_snapshot_reports_suppression_by_reason() -> None:
+    # Gate on, no heartbeat ever delivered -> every publish suppresses as "no_heartbeat". The
+    # snapshot exposes the bridge's per-reason breakdown alongside the (unchanged) total, so an
+    # operator can tell a dead autopilot link from a missing/unprojectable pose.
+    conn = _RecordingConn()  # no heartbeats -> gate stays stale
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn, require_heartbeat=True),
+    )
+    assert pipeline.step() is True
+    assert conn.mav.calls == []  # suppressed -> nothing sent
+    snap = pipeline.snapshot()
+    assert snap["landing_target_suppressed"] == 1  # total, backward-compatible
+    assert snap["landing_target_suppressed_by_reason"] == {"no_heartbeat": 1}
 
 
 @pytest.mark.parametrize(

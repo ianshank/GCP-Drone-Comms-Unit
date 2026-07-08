@@ -160,13 +160,31 @@ def test_compute_time_usec_publish_default_uses_clock() -> None:
 def test_compute_time_usec_capture_uses_frame_time_plus_offset() -> None:
     conn = _FakeConn()
     bridge = LandingTargetBridge(
-        MavlinkSettings(enable_landing_target=True, capture_time_source="capture"),
+        MavlinkSettings(
+            enable_landing_target=True, capture_time_source="capture", timesync_enabled=True
+        ),
         connection=conn,
         clock=FakeClock(times=[7.0]),
         heartbeat=_fresh_monitor(),
         timesync=TimeSync(offset_us=500_000),
     )
     assert bridge._compute_time_usec(capture_t=5.0) == 5_500_000
+
+
+def test_compute_time_usec_capture_timesync_disabled_ignores_offset() -> None:
+    # timesync_enabled is load-bearing: with a TimeSync wired but the flag OFF, the capture
+    # path must use the RAW capture timestamp (no offset) — proving the flag actually gates it.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, capture_time_source="capture", timesync_enabled=False
+        ),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+        timesync=TimeSync(offset_us=500_000),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 5_000_000  # offset NOT applied
 
 
 def test_compute_time_usec_capture_without_timesync_uses_raw_capture_t() -> None:
@@ -248,6 +266,7 @@ def test_local_ned_suppresses_when_no_pose() -> None:
     det, result = _result_with((315, 235, 325, 245))
     assert bridge.publish(det, result) is False
     assert conn.mav.calls == []  # fail-safe: never send position_valid=1 without a pose
+    assert bridge.suppressed_snapshot() == {"no_pose": 1}  # counted distinctly by reason
 
 
 def test_local_ned_suppresses_when_ray_unprojectable() -> None:
@@ -267,6 +286,54 @@ def test_local_ned_suppresses_when_ray_unprojectable() -> None:
     det, result = _result_with((315, 235, 325, 245))
     assert bridge.publish(det, result) is False
     assert conn.mav.calls == []
+    assert bridge.suppressed_snapshot() == {"unprojectable": 1}
+
+
+def test_ned_suppression_accumulates_by_reason_and_logs_reason() -> None:
+    # Two consecutive no-pose suppressions: the 1st logs (throttle streak == 1) and records
+    # reason="no_pose"; the 2nd takes the throttle's don't-log branch. Both are counted in the
+    # per-reason snapshot, disambiguating this cause from a heartbeat-gate suppression.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
+        connection=conn,
+        clock=FakeClock(times=[3.0, 4.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(None),
+    )
+    det, result = _result_with((95, 95, 105, 105))
+    with capture_logs() as logs:
+        assert bridge.publish(det, result) is False  # 1st: logs
+        assert bridge.publish(det, result) is False  # 2nd: throttle don't-log branch
+    assert bridge.suppressed_snapshot() == {"no_pose": 2}
+    ned_warnings = [e for e in logs if e.get("reason") == "no_pose"]
+    assert len(ned_warnings) == 1  # exactly the 1st logged, carrying the disambiguating reason
+    assert conn.mav.calls == []
+
+
+def test_suppressed_snapshot_disambiguates_heartbeat_from_pose() -> None:
+    # One bridge, two distinct suppression causes: a stale heartbeat (gate) then a fresh
+    # heartbeat with no pose (local_ned). The snapshot must key them separately, not conflate
+    # them into one opaque total the way the pre-hardening single counter did.
+    clk = SettableClock(100.0)
+    mon = HeartbeatMonitor(clk, max_age_s=2.0)  # no beat yet -> stale
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
+        connection=conn,
+        clock=FakeClock(times=[3.0, 4.0]),
+        heartbeat=mon,
+        pose_source=_FixedPose(None),
+    )
+    det, result = _result_with((95, 95, 105, 105))
+    assert bridge.publish(det, result) is False  # stale heartbeat -> no_heartbeat
+    mon.beat(100.0)  # now fresh -> gate opens, reaches local_ned with no pose
+    assert bridge.publish(det, result) is False  # no pose -> no_pose
+    assert bridge.suppressed_snapshot() == {"no_heartbeat": 1, "no_pose": 1}
 
 
 def test_publish_opens_connection_via_factory_when_none() -> None:

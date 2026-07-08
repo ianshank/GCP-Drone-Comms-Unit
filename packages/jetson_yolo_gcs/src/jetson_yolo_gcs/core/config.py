@@ -108,8 +108,10 @@ class MavlinkSettings(BaseSettings):
     #: offsets about the body; "local_ned" sends a projected N/E/D position (needs a PoseSource
     #: and a fresh vehicle pose — otherwise the send is fail-safe suppressed).
     frame: Literal["body_frd", "local_ned"] = "body_frd"
-    #: Align frame capture time to the vehicle clock via a TIMESYNC exchange before stamping
-    #: LANDING_TARGET.time_usec. Off by default (publish-time wall clock, prior behaviour).
+    #: Gate the TIMESYNC vehicle-clock offset on the capture-time path: when ``True`` **and** a
+    #: ``TimeSync`` is wired, ``capture_time_source="capture"`` maps the frame timestamp onto the
+    #: vehicle clock; otherwise the raw capture timestamp is used. Off by default (no offset).
+    #: The device-side TIMESYNC round-trip that populates the offset is hardware-only (deferred).
     timesync_enabled: bool = False
     #: Source of LANDING_TARGET.time_usec: "publish" (wall clock at send, default) or
     #: "capture" (per-frame capture timestamp + TIMESYNC offset when available).

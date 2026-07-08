@@ -34,7 +34,7 @@ from ..geometry.ned import CameraFov, project_pixel_to_ned
 from ..utils.log_throttle import should_log_throttled
 from .heartbeat import HeartbeatMonitor, HeartbeatReport
 from .pose import PoseSource
-from .timesync import TimeSync
+from .timesync import _USEC_PER_SEC, TimeSync
 
 ConnectionFactory = Callable[[], Any]
 
@@ -45,6 +45,12 @@ _MAV_FRAME_BODY_FRD = 12
 
 #: MAV_FRAME_LOCAL_NED — x/y/z are a projected North/East/Down position (PX4 precision-land).
 _MAV_FRAME_LOCAL_NED = 1
+
+#: LANDING_TARGET_TYPE_LIGHT_BEACON — MAVLink target-type enum for a projected point (no beacon HW).
+_LANDING_TARGET_TYPE_LIGHT_BEACON = 0
+
+#: Identity quaternion (w, x, y, z) — the "no rotation" orientation for a LANDING_TARGET.
+_IDENTITY_QUATERNION_WXYZ = [1.0, 0.0, 0.0, 0.0]
 
 #: Default throttle for the "suppressed; no fresh heartbeat" warning (1st + every Nth), sourced
 #: from the same config default as the pipeline's drop-log throttle so operators tune one knob.
@@ -114,10 +120,15 @@ class LandingTargetBridge:
             self._heartbeat = HeartbeatMonitor(max_age_s=settings.heartbeat_timeout_s)
         else:
             self._heartbeat = None
-        #: Throttle interval for the "suppressed; no fresh heartbeat" warning (operator-tunable
-        #: via ``PIPELINE_DROP_LOG_EVERY``) so a silent link never floods the log at frame rate.
+        #: Throttle interval for the suppression warnings (operator-tunable via
+        #: ``PIPELINE_DROP_LOG_EVERY``) so a silent link never floods the log at frame rate.
         self._log_every = log_every
+        #: Throttle streak across all suppression reasons (resets on a successful send) — drives
+        #: the "1st + every Nth" log cadence uniformly whether the cause is heartbeat or pose.
         self._suppressed_count = 0
+        #: Cumulative suppressions keyed by reason ("no_heartbeat"/"no_pose"/"unprojectable"),
+        #: monotonic (never reset) for observability; exposed via :meth:`suppressed_snapshot`.
+        self._suppressed: dict[str, int] = {}
         #: Last observed gate freshness, for edge-triggered lost/reacquired logging (``None``
         #: until the first observation). A fail-closed safety gate must announce transitions.
         self._last_fresh: bool | None = None
@@ -210,13 +221,11 @@ class LandingTargetBridge:
         if self._heartbeat is not None:
             report = self._heartbeat.report()  # single clock read for both fresh + reasons
             if not report.fresh:
-                self._suppressed_count += 1
-                if should_log_throttled(self._suppressed_count, self._log_every):
-                    _log.warning(
-                        "LANDING_TARGET suppressed: no fresh autopilot heartbeat (fail-closed)",
-                        suppressed=self._suppressed_count,
-                        reasons=report.reasons,
-                    )
+                self._note_suppressed(
+                    "no_heartbeat",
+                    "LANDING_TARGET suppressed: no fresh autopilot heartbeat (fail-closed)",
+                    reasons=report.reasons,
+                )
                 return False
         if self._conn is None:
             self.start()
@@ -246,13 +255,18 @@ class LandingTargetBridge:
         return True
 
     def _compute_time_usec(self, *, capture_t: float | None) -> int:
-        """LANDING_TARGET.time_usec per config: publish-time wall clock, or per-frame capture
-        time mapped to the vehicle clock via TIMESYNC when available."""
+        """LANDING_TARGET.time_usec per config: publish-time wall clock, or per-frame capture time.
+
+        The vehicle-clock offset is applied only when ``timesync_enabled`` **and** a ``TimeSync``
+        is wired — so the flag is load-bearing (flipping it actually changes the stamp) rather
+        than a silent no-op. Otherwise the capture path uses the raw capture timestamp, and the
+        default ``"publish"`` source stamps the wall clock at send time (unchanged behaviour).
+        """
         if self._settings.capture_time_source == "capture" and capture_t is not None:
-            if self._timesync is not None:
+            if self._settings.timesync_enabled and self._timesync is not None:
                 return self._timesync.to_vehicle_usec(capture_t)
-            return int(capture_t * 1_000_000)
-        return int(self._clock.now() * 1_000_000)
+            return int(capture_t * _USEC_PER_SEC)
+        return int(self._clock.now() * _USEC_PER_SEC)
 
     def _send_body_frd(
         self, angle_x: float, angle_y: float, size_x: float, size_y: float, time_usec: int
@@ -320,21 +334,35 @@ class LandingTargetBridge:
             float(ned.north_m),
             float(ned.east_m),
             float(ned.down_m),
-            [1.0, 0.0, 0.0, 0.0],  # q: identity quaternion (w, x, y, z)
-            0,  # target type = LANDING_TARGET_TYPE_LIGHT_BEACON
+            _IDENTITY_QUATERNION_WXYZ,  # q: no rotation (w, x, y, z)
+            _LANDING_TARGET_TYPE_LIGHT_BEACON,
             1,  # position_valid
         )
         return True
 
     def _log_ned_suppressed(self, reason: str) -> None:
-        """Throttled warning mirroring the heartbeat-gate suppression log style."""
+        """Record a ``local_ned`` suppression (``no_pose``/``unprojectable``) via shared accounting."""
+        self._note_suppressed(
+            reason, "LANDING_TARGET (local_ned) suppressed: no usable pose (fail-closed)"
+        )
+
+    def _note_suppressed(self, reason: str, message: str, **fields: object) -> None:
+        """Account one suppression by ``reason`` and emit a throttled warning.
+
+        Increments the monotonic per-reason counter (observability, via
+        :meth:`suppressed_snapshot`) and the shared throttle streak, then logs on the 1st and
+        every Nth suppression so a silently-suppressing link is visible without flooding at
+        frame rate. Single accounting path for both the heartbeat-gate and ``local_ned`` causes,
+        so the two are counted distinctly instead of sharing one opaque total.
+        """
+        self._suppressed[reason] = self._suppressed.get(reason, 0) + 1
         self._suppressed_count += 1
         if should_log_throttled(self._suppressed_count, self._log_every):
-            _log.warning(
-                "LANDING_TARGET (local_ned) suppressed: no usable pose (fail-closed)",
-                suppressed=self._suppressed_count,
-                reason=reason,
-            )
+            _log.warning(message, suppressed=self._suppressed_count, reason=reason, **fields)
+
+    def suppressed_snapshot(self) -> dict[str, int]:
+        """Cumulative suppression counts keyed by reason (a copy — safe to expose/serialise)."""
+        return dict(self._suppressed)
 
     def close(self) -> None:
         """Close the MAVLink connection if we own one (idempotent, best-effort)."""

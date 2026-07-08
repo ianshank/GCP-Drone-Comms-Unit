@@ -136,15 +136,21 @@ class Pipeline:
         #: that is on but has never seen a fresh heartbeat — the observable signal that a
         #: misconfigured (e.g. non-receiving) link is silently suppressing every publish.
         heartbeat_fresh: bool | None = None
+        suppressed_by_reason: dict[str, int] = {}
         if self._bridge is not None:
             status = self._bridge.heartbeat_status()
             heartbeat_fresh = None if status is None else status.fresh
+            #: Per-reason suppression breakdown from the bridge ("no_heartbeat"/"no_pose"/
+            #: "unprojectable") — disambiguates the ``landing_target_suppressed`` total so an
+            #: operator can tell a dead autopilot link from a missing/unprojectable pose.
+            suppressed_by_reason = self._bridge.suppressed_snapshot()
         return {
             "fps": round(self._fps.fps, 2),
             "dropped_detections": self.dropped_detections,
             "dropped_stream": self.dropped_stream,
             "landing_target_published": self.landing_target_published,
             "landing_target_suppressed": self.landing_target_suppressed,
+            "landing_target_suppressed_by_reason": suppressed_by_reason,
             "landing_target_cadence_violations": self.landing_target_cadence_violations,
             "landing_target_publish_failures": self.landing_target_publish_failures,
             "landing_target_heartbeat_fresh": heartbeat_fresh,

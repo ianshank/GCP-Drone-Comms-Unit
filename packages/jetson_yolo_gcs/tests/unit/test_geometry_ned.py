@@ -75,3 +75,30 @@ def test_roll_rotates_angular_offset_about_optical_axis():
     assert off.north_m == pytest.approx(expected_north, rel=1e-6)
     assert off.east_m == pytest.approx(expected_east, rel=1e-6)
     assert off.down_m == pytest.approx(100.0, abs=1e-6)
+
+
+def test_roll_and_reflection_compose_for_below_center_pixel_at_nadir():
+    """Exercises the roll rotation AND the depression>90 reflection TOGETHER — each is covered
+    alone above, but a bug in their *composition* (e.g. reflecting before rolling, or dropping
+    roll on the reflected path) would only surface here. Expected values are re-derived from
+    first principles in the module's own order (angle-off-axis -> roll -> reflect -> range),
+    not by calling the module twice, and a guard asserts the reflection branch really fires."""
+    alt, heading, pitch, roll = 100.0, 0.0, 90.0, 45.0
+    cx, cy = 320.0, 480.0  # centre column, bottom edge -> pre-roll depression > 90 (reflects)
+    yaw = math.degrees(math.atan(((2.0 * cx / CAM.img_w) - 1.0) * math.tan(CAM.h_fov_rad / 2.0)))
+    pit = math.degrees(math.atan(((2.0 * cy / CAM.img_h) - 1.0) * math.tan(CAM.v_fov_rad / 2.0)))
+    r = math.radians(roll)
+    yaw, pit = yaw * math.cos(r) - pit * math.sin(r), yaw * math.sin(r) + pit * math.cos(r)
+    depression_deg = pitch + pit
+    azimuth_deg = (heading + yaw) % 360.0
+    assert depression_deg > 90.0  # guard: this pixel+roll genuinely triggers the reflection
+    depression_deg, azimuth_deg = 180.0 - depression_deg, (azimuth_deg + 180.0) % 360.0
+    expected_range = alt / math.tan(math.radians(depression_deg))
+
+    off = project_pixel_to_ned(
+        CAM, cx, cy, alt_agl_m=alt, heading_deg=heading, pitch_deg=pitch, roll_deg=roll
+    )
+    assert off is not None
+    assert off.north_m == pytest.approx(expected_range * math.cos(math.radians(azimuth_deg)))
+    assert off.east_m == pytest.approx(expected_range * math.sin(math.radians(azimuth_deg)))
+    assert off.down_m == pytest.approx(alt)
