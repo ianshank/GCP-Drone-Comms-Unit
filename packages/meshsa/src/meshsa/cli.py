@@ -167,7 +167,12 @@ async def run(args: argparse.Namespace) -> None:  # pragma: no cover - live orch
     # (non-loopback, tokenless) observability bind fails fast and clean instead of leaking a
     # started node — /metrics discloses counters, so it must not be exposed unauthenticated.
     if node.config.health.enabled:
-        validate_healthz_bind(node.config.health.host, node.config.health.token)
+        try:
+            validate_healthz_bind(node.config.health.host, node.config.health.token)
+        except ValueError as exc:
+            # CLI-friendly fail-fast: a clean operator message, not a traceback out of
+            # asyncio.run(). Mirrors flightctl/run_commander.py's SystemExit on a bad bind.
+            raise SystemExit(str(exc)) from exc
 
     await node.start()
     health_runner = None

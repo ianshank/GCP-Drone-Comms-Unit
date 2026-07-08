@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import pytest
 
-# aiohttp ships in the [health]/[llm] extras, not [dev]; the per-PR `ci` workflow installs only
-# [dev], so skip this end-to-end suite when aiohttp is absent rather than failing collection.
+# aiohttp is in the `dev` extra (and the [health]/[llm]/[scout] extras), so this suite runs in
+# normal CI. The importorskip is a defensive guard so a minimal env without the test extras skips
+# rather than failing collection with ModuleNotFoundError.
 pytest.importorskip("aiohttp")
 
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
