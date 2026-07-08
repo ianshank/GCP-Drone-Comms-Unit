@@ -46,11 +46,12 @@ _MAV_FRAME_BODY_FRD = 12
 #: MAV_FRAME_LOCAL_NED — x/y/z are a projected North/East/Down position (PX4 precision-land).
 _MAV_FRAME_LOCAL_NED = 1
 
-#: LANDING_TARGET_TYPE_LIGHT_BEACON — MAVLink target-type enum for a projected point (no beacon HW).
+#: LANDING_TARGET_TYPE_LIGHT_BEACON — MAVLink target-type enum for a projected point (no beacon).
 _LANDING_TARGET_TYPE_LIGHT_BEACON = 0
 
-#: Identity quaternion (w, x, y, z) — the "no rotation" orientation for a LANDING_TARGET.
-_IDENTITY_QUATERNION_WXYZ = [1.0, 0.0, 0.0, 0.0]
+#: Identity quaternion (w, x, y, z) — the "no rotation" orientation for a LANDING_TARGET. A tuple
+#: (immutable) so the shared module constant can't be mutated in place by a future call site.
+_IDENTITY_QUATERNION_WXYZ = (1.0, 0.0, 0.0, 0.0)
 
 #: Default throttle for the "suppressed; no fresh heartbeat" warning (1st + every Nth), sourced
 #: from the same config default as the pipeline's drop-log throttle so operators tune one knob.
