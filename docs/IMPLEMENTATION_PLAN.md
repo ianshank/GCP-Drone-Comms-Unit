@@ -12,6 +12,18 @@
 
 Generated: 2026-06-30. Baseline verified against the tree at that date (see §1).
 
+> **Update (2026-07-08 reconciliation).** The `tiers-1-3` branch has since merged; the §1 baseline
+> ("780 passed") is stale. Current tree: **`meshsa` 957 passed / 99.16% cov, `jetson_yolo_gcs` 174 /
+> 99.34%**, all gates (`ruff`/`ruff format`/`mypy --strict`/`pytest`) green. Track status has moved:
+> **Track B (inference hardening) B.1–B.4 are all shipped** (rate limiting, structured parsing,
+> multi-model, offline fallback + `/metrics` counters) — read them as done, not "Definition"
+> despite the §Track B framing below. **Track C.1–C.3 shipped** (precision-landing heartbeat gate +
+> cadence floor, PX4 `LOCAL_NED`, TIMESYNC — software-complete, HW validation pending). **Track 0.2
+> M2 auth audit** is now authored at [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md); it surfaced and this
+> branch fixed the one fail-open HTTP surface (`/healthz`+`/metrics`). The commanding M2 gate stays
+> **closed** pending a maintainer §6 decision (per-surface, not transport-wide, auth). The stable
+> trajectory below is unchanged — this note only reconciles state, per CHARTER §6.
+
 ---
 
 ## 0. How to use this plan

@@ -44,9 +44,12 @@ Example config fragment:
 }
 ```
 
-The endpoint binds to loopback by default. If Prometheus runs on another host,
-bind to a reachable interface deliberately and protect it at the network layer;
-the endpoint has no authentication.
+The endpoint binds to loopback by default. `/healthz` is always open (liveness); `/metrics`
+discloses router/transport/inference counters. A non-loopback bind **requires a token** and the
+server refuses to start otherwise (fail-closed): set `health.token` in config or
+`MESHSA_HEALTH_TOKEN` in the environment. When a token is set, `/metrics` requires
+`Authorization: Bearer <token>`. On loopback with no token (the default) the endpoint stays open
+and unchanged.
 
 ## 2. Point Prometheus at it
 
@@ -58,6 +61,20 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["127.0.0.1:8088"]
+```
+
+If you bind off-loopback and set a token, add a bearer credential to the scrape job so it can
+authenticate:
+
+```yaml
+scrape_configs:
+  - job_name: meshsa
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials: "<MESHSA_HEALTH_TOKEN>"
+    static_configs:
+      - targets: ["<node-host>:8088"]
 ```
 
 ## 3. Import the dashboard

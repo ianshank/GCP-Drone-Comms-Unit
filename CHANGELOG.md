@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Fail-closed `/healthz`+`/metrics` bind (M2).** The observability server was the only aiohttp
+  surface that did not route through `netauth.validate_bind` — its host is operator-overridable
+  off-loopback (`MESHSA_HEALTH_HOST`), which would expose `/metrics` (router/transport/inference
+  counters) unauthenticated. New `HealthConfig.token` (env `MESHSA_HEALTH_TOKEN`) + a pure
+  `validate_healthz_bind` guard now **refuse a non-loopback bind without a token**, and `/metrics`
+  is bearer-gated when a token is set. The routing/auth lives in a new testable
+  `build_healthz_app` factory (exercised end-to-end via `TestClient`), not the pragma-excluded
+  socket wiring; the bind is validated in `cli.py` **before** `node.start()` so a misconfig fails
+  fast without leaking a started node. **Behavior change:** a deployment that binds `health.host`
+  off-loopback with no token now refuses to start (previously fail-open). Default (loopback,
+  `token=None`) is unchanged, so existing loopback deployments and `/metrics` scrapes are
+  unaffected. See [docs/AUDIT_M2_AUTH.md](docs/AUDIT_M2_AUTH.md).
+
 ### Added
+- **M2 transport/endpoint-authentication audit** ([docs/AUDIT_M2_AUTH.md](docs/AUDIT_M2_AUTH.md)).
+  Evidence-backed enumeration of all 16 network-facing surfaces and their auth/encryption posture —
+  the prerequisite the implementation plan (Track 0.2 / E.3) requires before the maintainer can rule
+  on the Initiative-C commanding M2 gate. Verdict: per-endpoint HTTP auth now fails closed on all
+  four HTTP surfaces, but auth is per-surface (not transport-wide) and transports are
+  plaintext-by-default outside opt-in TAK TLS — the gate stays closed pending a CHARTER §6 decision.
 - **Inference observability (`meshsa.inference`).** `InferenceService.as_dict()` exposes
   `offline_dropped`, `offline_queue_depth`, `intake_dropped`, and `pending_tasks` counters.
   `/metrics` now exports a matching `meshsa_inference_*` series — counters

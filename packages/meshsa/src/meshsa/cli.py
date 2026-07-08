@@ -24,7 +24,7 @@ import structlog
 
 from ._parsing import parse_float, parse_int
 from .config import NodeConfig
-from .health import serve_healthz
+from .health import serve_healthz, validate_healthz_bind
 from .models import Envelope, Position
 from .node import build_node
 
@@ -163,10 +163,26 @@ async def run(args: argparse.Namespace) -> None:  # pragma: no cover - live orch
         with contextlib.suppress(NotImplementedError):  # e.g. Windows
             loop.add_signal_handler(sig, stop.set)
 
+    # Validate the /healthz bind fail-closed BEFORE node.start(), so a misconfigured
+    # (non-loopback, tokenless) observability bind fails fast and clean instead of leaking a
+    # started node — /metrics discloses counters, so it must not be exposed unauthenticated.
+    if node.config.health.enabled:
+        try:
+            validate_healthz_bind(node.config.health.host, node.config.health.token)
+        except ValueError as exc:
+            # CLI-friendly fail-fast: a clean operator message, not a traceback out of
+            # asyncio.run(). Mirrors flightctl/run_commander.py's SystemExit on a bad bind.
+            raise SystemExit(str(exc)) from exc
+
     await node.start()
     health_runner = None
     if node.config.health.enabled:
-        health_runner = await serve_healthz(node, node.config.health.host, node.config.health.port)
+        health_runner = await serve_healthz(
+            node,
+            node.config.health.host,
+            node.config.health.port,
+            token=node.config.health.token,
+        )
         log.info("healthz up", host=node.config.health.host, port=node.config.health.port)
     log.info("bridge up", uid=args.uid, mesh_port=args.port, fts=f"{args.fts_host}:{args.fts_port}")
     try:

@@ -120,11 +120,18 @@ class NemotronConfig(BaseModel):
 
 
 class HealthConfig(BaseModel):
-    """Opt-in /healthz listener (served by ``meshsa.health``)."""
+    """Opt-in /healthz listener (served by ``meshsa.health``).
+
+    ``/metrics`` discloses router/transport/inference counters, so a non-loopback ``host`` must
+    carry a ``token`` (bearer): the server refuses to start otherwise (fail-closed, mirroring
+    ``meshsa.llm.server`` and the scout station). ``token=None`` keeps the loopback-default,
+    no-auth behaviour unchanged.
+    """
 
     enabled: bool = False
     host: str = "127.0.0.1"
     port: int = 8088
+    token: str | None = None
     metrics_enabled: bool = False
     metrics_path: str = "/metrics"
     metrics_format: Literal["prometheus", "json"] = "prometheus"
@@ -248,6 +255,7 @@ class NodeConfig(BaseModel):
             f"{prefix}HEALTH_ENABLED": ("enabled", _parse_bool),
             f"{prefix}HEALTH_HOST": ("host", _str),
             f"{prefix}HEALTH_PORT": ("port", parse_int),
+            f"{prefix}HEALTH_TOKEN": ("token", _str),
             f"{prefix}HEALTH_METRICS_ENABLED": ("metrics_enabled", _parse_bool),
             f"{prefix}HEALTH_METRICS_PATH": ("metrics_path", _str),
             f"{prefix}HEALTH_METRICS_FORMAT": ("metrics_format", _str),

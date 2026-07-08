@@ -252,8 +252,10 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
       server **fails closed** (refuses to start) on a non-loopback bind without a token.
 - [x] **[robustness] `TakMulticastTransport._recv_loop` had no error recovery** (`transports/tak.py`).
       Fixed: the recv loop now closes the wedged socket, rebuilds via the factory, and backs off.
-- [ ] **[consistency] `FlightLogger.dropped_records` omits the `"events"`/`"frames"` keys**
-      (`fpv/flight_logger.py`) so the manifest omits a `0` for them (cosmetic).
+- [x] **[consistency] `FlightLogger.dropped_records` omits the `"events"`/`"frames"` keys**
+      (`fpv/flight_logger.py`). Verified fixed (2026-07-08 reconciliation): `dropped_records` is
+      seeded via `dict.fromkeys(_HEADERS, 0)`, so all four streams (rc/telemetry/events/frames)
+      carry a `0` in the manifest.
 - [x] **[consistency] Duplicate `MonotonicClock` classes** (`protocols.py` vs `fpv/protocols.py`);
       deduplicate by importing the framework-level `MonotonicClock` in the FPV subsystem.
 - [x] **[config] `FpvSettings` and `CommanderConfig` lack `from_env()` with individual bindings**
@@ -264,8 +266,30 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
       `DEFAULT_MAX_ITERATIONS`** have no env-var bindings.
 - [ ] **[robustness] guard unguarded teardown/parse paths:** `camera.py close()` source close,
       `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions.
-- [ ] **[cleanup] drop `# pragma: no cover` on pure logic** in `fpv/crsf/rc.py` (span==0 guards)
-      and source the remaining magic numbers (`rc.py` pad=992, `monitor.py` interval) from config.
+
+### M2 auth-audit findings (2026-07-08 — see [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md))
+Full evidence-backed enumeration of all 16 network-facing surfaces and their auth/encryption
+posture (the Track 0.2 / E.3 prerequisite before the maintainer rules on the commanding M2 gate).
+- [x] **[security] `/healthz`+`/metrics` was the one fail-open aiohttp surface** (`health.py`).
+      Fixed: `HealthConfig.token` (`MESHSA_HEALTH_TOKEN`) + `validate_healthz_bind` refuse a
+      non-loopback bind without a token (validated before `node.start()`), and `/metrics` is
+      bearer-gated. Default (loopback, no token) unchanged. Auth branch lives in the testable
+      `build_healthz_app` factory (`TestClient`-covered), not the pragma'd socket wiring.
+- [ ] **[security] no bind guard on UDP ingest transports** — `detection_ingest` (UDP 8099) and
+      `mavlink_source` (`udpin:14550`) fail open on a non-loopback `host`/`endpoint` override
+      (no `validate_bind`). Loopback default is the current mitigation.
+- [ ] **[consistency] Meshtastic PSK provisioning is aspirational in code** — `_default_provisioner`
+      applies only the LoRa `region` and logs channel/psk/freq as unset (`meshtastic_radio.py:81-86`).
+      Either implement PSK provisioning or downgrade the docs/config so operators don't assume an
+      enforced PSK. **Maintainer decision** (touches deploy expectations).
+- [ ] **[cleanup] shared default port `8099`** between `detection_ingest` (UDP) and the scout
+      station (TCP) — not an OS-level collision, but a confusing default; deconflict.
+- [ ] **[docs] plaintext-by-default posture** — flag that all HTTP + MAVLink/RTP surfaces are
+      cleartext by default; TAK TLS (`:8089`) is the only wired-in transport encryption.
+- [x] **[cleanup] drop `# pragma: no cover` on pure logic** in `fpv/crsf/rc.py` (span==0 guards)
+      and source the remaining magic numbers. Verified fixed (2026-07-08 reconciliation): `rc.py`
+      has no `# pragma: no cover`, its `pad`/`count` are function parameters (not baked literals),
+      and the monitor poll interval is `settings.monitor.poll_interval_s` (config-driven).
 
 ## Vineyard SCOUT (initiative Scout — **Implemented (software); hardware validation pending**)
 > Structural-anomaly scouting for a vineyard block: a mapping survey (RGB + autopilot pose) →
