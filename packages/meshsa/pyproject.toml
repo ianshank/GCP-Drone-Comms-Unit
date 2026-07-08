@@ -103,7 +103,7 @@ meshsa = ["py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=90"
+addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=97"
 testpaths = ["tests"]
 # Make flightctl/ (the live service glue, outside the package) importable for its
 # glue tests without per-file sys.path mutation. Relative to this rootdir.
