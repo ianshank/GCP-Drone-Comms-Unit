@@ -67,6 +67,8 @@ scout-*.db
 # Inference cache
 .inference_cache/
 
-# Agent workspace
+# Agent workspace / tooling scratch — never needed in the runtime image.
 .agents/
 .gemini/
+.claude/
+.superpowers/

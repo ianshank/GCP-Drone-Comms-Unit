@@ -1091,3 +1091,105 @@ async def test_service_non_inference_exception_logged_not_queued(make_transport,
     await svc.stop()
     assert mock_router.published == []
     assert svc._offline is not None and len(svc._offline) == 0  # generic errors aren't queued
+
+
+# ── Backpressure: bound handle_message task intake (max_pending_tasks) ──────
+
+
+def _chat_envelope(text: str, *, source_uid: str) -> Envelope:
+    return Envelope(
+        schema_version=1,
+        msg_id="chat-1",
+        ts=1.0,
+        source_uid=source_uid,
+        kind=MessageKind.CHAT,
+        payload={"text": text},
+    )
+
+
+async def test_handle_message_sheds_when_pending_tasks_at_cap(make_transport, mock_router):
+    # With the cap reached, a new inbound envelope is dropped-and-counted, no task spawned.
+    cfg = NemotronConfig(enabled=True, api_key="k", max_pending_tasks=1)
+    svc = _service(cfg, mock_router, make_transport([]))
+    svc._running = True
+    # Simulate one in-flight task already occupying the only slot.
+    slow = asyncio.get_event_loop().create_future()
+    svc._bg_tasks.add(asyncio.ensure_future(slow))
+    await svc.handle_message(_chat_envelope("hello", source_uid="other"))
+    assert svc._intake_dropped == 1
+    assert len(svc._bg_tasks) == 1  # no new task added
+    slow.set_result(None)
+    await svc.stop()  # tear down the service so no in-flight state leaks into later tests
+
+
+async def test_handle_message_accepts_below_cap_then_sheds_at_cap(make_transport, mock_router):
+    # cap=3 (not the degenerate cap=1 case): below cap must accept and spawn a task;
+    # only once occupancy reaches the cap does intake shed.
+    cfg = NemotronConfig(enabled=True, api_key="k", max_pending_tasks=3)
+    svc = _service(cfg, mock_router, make_transport([]))
+    svc._running = True
+
+    # Occupy 2 of 3 slots with fake in-flight tasks (mirrors the cap=1 shed test's technique).
+    slow1 = asyncio.get_event_loop().create_future()
+    slow2 = asyncio.get_event_loop().create_future()
+    svc._bg_tasks.add(asyncio.ensure_future(slow1))
+    svc._bg_tasks.add(asyncio.ensure_future(slow2))
+
+    # len(_bg_tasks)==2 < cap==3: the envelope must be accepted (a new task scheduled),
+    # not shed — the accept-path signal, mirrored by the dropped counter staying put.
+    await svc.handle_message(_chat_envelope("hello", source_uid="other"))
+    assert svc._intake_dropped == 0
+    assert len(svc._bg_tasks) == 3  # 2 fakes + 1 newly-spawned real task
+
+    # Occupy the 3rd slot with a fake too, so occupancy is deterministically pinned at the
+    # cap (3) rather than depending on the real task above ever completing.
+    slow3 = asyncio.get_event_loop().create_future()
+    svc._bg_tasks.add(asyncio.ensure_future(slow3))
+    assert len(svc._bg_tasks) == 4  # 3 fakes + 1 real, all still in-flight
+
+    # len(_bg_tasks)==4 >= cap==3: the next envelope must now be shed.
+    await svc.handle_message(_chat_envelope("world", source_uid="other"))
+    assert svc._intake_dropped == 1
+    assert len(svc._bg_tasks) == 4  # no new task added
+
+    slow1.set_result(None)
+    slow2.set_result(None)
+    slow3.set_result(None)
+    # The below-cap accept above spawned a real _analyze_and_publish task; stop the service so it
+    # is cancelled here rather than running later and emitting unrelated log noise into other tests.
+    await svc.stop()
+
+
+async def test_handle_message_unbounded_when_cap_zero(make_transport, mock_router):
+    cfg = NemotronConfig(enabled=True, api_key="k", max_pending_tasks=0)
+    svc = _service(cfg, mock_router, make_transport([_ok("hi-reply")]))
+    svc._running = True
+    await svc.handle_message(_chat_envelope("hi", source_uid="other"))
+    assert svc._intake_dropped == 0
+    await _await_published(mock_router, 1)
+    await svc.stop()
+
+
+# ── InferenceService.as_dict(): point-in-time counters accessor ─────────────
+
+
+def test_as_dict_reports_counters(mock_router, make_transport):
+    cfg = NemotronConfig(enabled=True, api_key="k", offline_queue_max=4, max_pending_tasks=2)
+    svc = _service(cfg, mock_router, make_transport([]))
+    svc._offline_dropped = 3
+    svc._intake_dropped = 5
+    assert svc._offline is not None
+    svc._offline.append(_chat_envelope("q", source_uid="x"))  # depth 1
+    d = svc.as_dict()
+    assert d == {
+        "offline_dropped": 3,
+        "offline_queue_depth": 1,
+        "intake_dropped": 5,
+        "pending_tasks": 0,
+    }
+
+
+def test_as_dict_zero_depth_when_offline_disabled(mock_router, make_transport):
+    cfg = NemotronConfig(enabled=True, api_key="k", offline_queue_max=0)
+    svc = _service(cfg, mock_router, make_transport([]))
+    assert svc.as_dict()["offline_queue_depth"] == 0

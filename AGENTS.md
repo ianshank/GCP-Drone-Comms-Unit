@@ -45,7 +45,7 @@ package-local context.
 | Makefile equivalent | `make -f tools/Makefile test lint type build` |
 
 Targeted pytest runs use the same project coverage config; a single test file can
-fail `--cov-fail-under=90` even when its tests pass. Use the full suite for the
+fail `--cov-fail-under=97` even when its tests pass. Use the full suite for the
 final coverage gate.
 
 ## Engineering Rules

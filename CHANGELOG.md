@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Inference observability (`meshsa.inference`).** `InferenceService.as_dict()` exposes
+  `offline_dropped`, `offline_queue_depth`, `intake_dropped`, and `pending_tasks` counters.
+  `/metrics` now exports a matching `meshsa_inference_*` series — counters
+  `meshsa_inference_offline_dropped_total`/`meshsa_inference_intake_dropped_total` and gauges
+  `meshsa_inference_offline_queue_depth`/`meshsa_inference_pending_tasks` — via
+  `render_prometheus(metrics, transports, *, inference=...)` and `health.render_metrics` (both
+  json and prometheus formats), emitted only when `node.inference_service` is set. The Grafana
+  dashboard (`ops/observability/grafana-meshsa-dashboard.json`) gained an "AI Inference" row (2
+  panels), and the metric-name drift-guard test now covers all 12 series (8 router/transport + 4
+  inference).
+- **Inference task-intake backpressure.** `NemotronConfig.max_pending_tasks` (env
+  `MESHSA_INFERENCE_MAX_PENDING_TASKS`, default `0` = unbounded) bounds
+  `InferenceService.handle_message` task intake, dropping-and-counting into `_intake_dropped`
+  (mirrors the existing offline-queue drop-and-count). Default is a no-op.
+- **`jetson_yolo_gcs`: PX4 `MAV_FRAME_LOCAL_NED` `LANDING_TARGET` path.** New `MAVLINK_FRAME`
+  config (`body_frd` default | `local_ned`) frame-dispatches `LandingTargetBridge.publish`; the
+  `local_ned` path projects the current pose to N/E/D and sends `position_valid=1`. Body-FRD wire
+  output is unchanged (pin-guarded byte-identical). Three new self-contained modules (no `meshsa`
+  import): `geometry/ned.py` (pure, no-numpy `project_pixel_to_ned`, mirroring the `meshsa.cv.geo`
+  flat-ground ray-cast), `mavlink/pose.py` (`VehiclePose`, `PoseSource` protocol,
+  `MavlinkPoseSource`), and `mavlink/timesync.py` (`TimeSync` offset tracking).
+- **`jetson_yolo_gcs`: TIMESYNC + capture-time `time_usec`.** New `MAVLINK_TIMESYNC_ENABLED`
+  (default `false`) and `MAVLINK_CAPTURE_TIME_SOURCE` (`publish` default | `capture`) config
+  gates whether `LANDING_TARGET`'s `time_usec` is derived from the vehicle-synced capture time
+  instead of publish time. Both default to prior (publish-time) behavior.
+- **FTS end-to-end harness (M2).** `packages/meshsa/tests/e2e/test_fts_e2e.py` adds
+  hardware-free coverage (CotCodec encode/decode round-trip + CotFramer split-stream
+  reassembly) that always runs, plus an opt-in live-FTS roundtrip test gated behind
+  `MESHSA_FTS_E2E=1` (marked `e2e`, skipped otherwise). `.github/workflows/fts-e2e.yml` is a
+  `workflow_dispatch`-only, self-hosted-Jetson-runner job that brings up FreeTAKServer and runs
+  the live test; it does not run in normal CI pending a registered runner.
+- **`docs/BRANCHES.md`.** Documents branch disposition: `feat/tls-cot-and-fts-pacing` is fully
+  superseded (safe to close, human-gated); PR #11 `feat/fc-msp-telemetry-rc-pilot` carries
+  unique MSP-RC/M3.2 work and needs a maintainer decision (not closed).
+
+### Changed
+- **Reason-keyed `LANDING_TARGET` suppression accounting.** `LandingTargetBridge` gained
+  `_note_suppressed(reason, ...)` + `suppressed_snapshot()`, distinguishing `no_heartbeat` /
+  `no_pose` / `unprojectable` suppressions (previously one conflated counter);
+  `pipeline.py`'s `snapshot()` gained `landing_target_suppressed_by_reason` alongside the
+  existing total. The fail-closed autopilot-heartbeat gate still guards both send paths.
+- **`jetson_yolo_gcs` `MAVLINK_TIMESYNC_ENABLED` is load-bearing.** The flag now gates whether
+  the capture-time path applies the `TimeSync` offset, rather than being informational only.
+- **Coverage gates raised.** `meshsa` `--cov-fail-under` 90 → 97 (actual 99.50%);
+  `jetson_yolo_gcs` `--cov-fail-under` 85 → 96 (actual 99.34%); root and jetson `AGENTS.md`
+  updated to match.
+- **Named protocol constants replace magic literals** in the jetson MAVLink path
+  (`_USEC_PER_SEC`, `_MAV_FRAME_LOCAL_NED`, `_LANDING_TARGET_TYPE_LIGHT_BEACON`,
+  `_IDENTITY_QUATERNION_WXYZ`).
+
+### Fixed
+- **`jetson_yolo_gcs` `LOCAL_NED` path fails safe instead of risking a `ZeroDivisionError`.**
+  `LandingTargetBridge.publish` now suppresses (returns `False`, no send) rather than raising
+  when there is no `PoseSource`, no fresh pose, an unprojectable ray, or a degenerate
+  (zero-dimension) camera frame.
+- **Pre-existing order-dependent heartbeat-transition test flake.** A jetson heartbeat-gate
+  test asserted on a message that depended on prior test ordering; it now matches the
+  gate-open transition message directly.
+
 ### Fixed
 - **`meshsa.inference` Track-B gap-analysis hardening (post-review).** Scoped the offline replay
   queue to genuine connectivity/transient failures (`InferenceTransportError`, or `429`/`5xx`

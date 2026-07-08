@@ -79,6 +79,16 @@ The node optionally attaches services that are out of the hot path:
   for testability. Lazy-imports `aiohttp`; install with `[inference]`. All config via
   `MESHSA_INFERENCE_*` environment variables (13 fields incl. `backoff_max_s`). Feedback-loop
   safe: messages matching the configured insight prefix are never re-analyzed.
+  **Observability & backpressure:** `InferenceService.as_dict()` returns point-in-time
+  counters (`offline_dropped`/`intake_dropped` monotonic counters,
+  `offline_queue_depth`/`pending_tasks` gauges), surfaced on `/metrics` (both `prometheus` and
+  `json` via `health.render_metrics`) as `meshsa_inference_offline_dropped_total`,
+  `meshsa_inference_intake_dropped_total`, `meshsa_inference_offline_queue_depth`, and
+  `meshsa_inference_pending_tasks`, only when `node.inference_service` is set.
+  `NemotronConfig.max_pending_tasks` (`MESHSA_INFERENCE_MAX_PENDING_TASKS`, default `0` =
+  unbounded) bounds `handle_message` task intake on a constrained edge node: once in-flight
+  analysis tasks reach the cap, new messages are shed (drop-and-count into `_intake_dropped`),
+  mirroring the existing offline-queue drop-and-count.
 
 ### Resilient subscriber dispatch
 The router's `_pump` wraps each subscriber callback in `try/except`: a failing subscriber
@@ -92,7 +102,10 @@ scalar node fields, `MESHSA_MESH_*` (MeshConfig), `MESHSA_ROUTER_*` (RouterConfi
 `MESHSA_SCOUT_*` (ScoutConfig). Individual
 env-vars always override the JSON blob value for the same field. Parsing uses shared
 helpers (`parse_int`, `parse_float`, `_parse_bool`) that name the offending variable on
-bad values.
+bad values. `MESHSA_INFERENCE_MAX_PENDING_TASKS` binds `NemotronConfig.max_pending_tasks`
+(default `0` = unbounded) alongside the other `MESHSA_INFERENCE_*` fields. The
+`jetson_yolo_gcs` package (see "Perception subsystem" below) is a separate process with its
+own `pydantic-settings` config and is **not** read by `NodeConfig.from_env()`.
 
 ### Schema versioning
 Every `Envelope` carries `schema_version: int`. Codecs compare against
@@ -194,3 +207,61 @@ primitives rather than forking them.
   loads** — scout issues no vehicle commands and no MAVLink writes. The DEM raster read is the
   only `# pragma: no cover` glue (`[geo]`/rasterio extra); its grid-shaping and the bilinear
   math are pure and tested.
+
+## Perception subsystem (`jetson_yolo_gcs`)
+
+`jetson_yolo_gcs` (`packages/jetson_yolo_gcs/`) is a **self-contained** on-board camera
+detection process: it converts YOLO detections into an opt-in MAVLink `LANDING_TARGET` for
+advisory precision-landing guidance. It is a **separate package with its own config and test
+suite** — it does not import `meshsa` and is not part of the gateway process. Hardware
+validation of the `local_ned` path is still **pending**.
+
+- **No-`meshsa` invariant.** The package must not import `meshsa`. Where a primitive is
+  needed on both sides (georeferencing math, injectable pose/time seams), it is
+  **reimplemented independently** rather than shared, so the two packages stay decoupled and
+  deployable separately.
+- **Pure, no-numpy projection (`geometry/ned.py`).** `project_pixel_to_ned(cam, cx, cy, *,
+  alt_agl_m, heading_deg, pitch_deg, roll_deg=0.0) -> NedOffset | None` mirrors the flat-ground
+  ray-cast in `meshsa.cv.geo.project_to_ground`, reimplemented independently to preserve the
+  no-`meshsa`-import invariant. It is pure stdlib `math` (no numpy dependency, matching the
+  framework-wide no-numpy invariant) and fails safe: it returns `None` for `alt_agl_m <= 0`, a
+  degenerate `img_w`/`img_h <= 0`, or a projected ray at/above the horizon.
+- **Injectable seams (`Protocol`s, fakes-first).** `mavlink/pose.py` defines
+  `PoseSource` (`runtime_checkable` `Protocol`, `latest() -> VehiclePose | None`) with
+  `MavlinkPoseSource` reducing ATTITUDE + an injected AGL reader into a pose; `mavlink/
+  timesync.py` defines `TimeSync(offset_us=0)` + `to_vehicle_usec(local_s)` (the device-side
+  TIMESYNC round-trip, `exchange()`, is hardware-only and `# pragma: no cover`). Both seams
+  keep the bridge's angle/projection/time math unit-tested with fakes — no hardware, mirroring
+  the framework's `Transport`/`Clock`/`IdFactory` DI pattern.
+- **Frame-dispatched `LANDING_TARGET` (`mavlink/bridge.py`).** `MavlinkSettings.frame`
+  (`Literal["body_frd", "local_ned"]`, default `body_frd`) selects the wire path. `body_frd`
+  sends angular offsets about the vehicle body (byte-identical to the pre-existing wire
+  format, pin-guarded). `local_ned` projects the detection through `geometry/ned.py` using the
+  injected `PoseSource` and sends a `position_valid=1` North/East/Down position — but **only**
+  when a pose is available and the ray is projectable.
+- **Fail-safe suppression, reason-keyed.** A `local_ned` send is suppressed (no message sent)
+  rather than emitting a bogus `position_valid=1` position when there is no `PoseSource`, no
+  fresh pose, or an unprojectable ray. The fail-closed autopilot-**heartbeat** gate (a fresh
+  HEARTBEAT must have been observed via `poll_heartbeat`) guards **both** the `body_frd` and
+  `local_ned` send paths. Suppression reasons (`no_heartbeat` / `no_pose` / `unprojectable`)
+  are counted distinctly via `_note_suppressed(reason, …)` and exposed by
+  `suppressed_snapshot()`, surfaced through `Pipeline.snapshot()`'s
+  `landing_target_suppressed_by_reason` (the aggregate `landing_target_suppressed` total is
+  retained for backward compatibility).
+- **Time source.** `LANDING_TARGET.time_usec` is the capture-time-aware
+  `_compute_time_usec()`: `capture_time_source="publish"` (default) stamps the wall clock at
+  send time (unchanged behavior); `capture_time_source="capture"` stamps the frame's own
+  capture timestamp, and — only when `timesync_enabled=True` **and** a `TimeSync` is wired —
+  applies the vehicle-clock offset on top. Both flags are load-bearing (each actually changes
+  the stamp when flipped) rather than silent no-ops.
+- **Config (`MAVLINK_*` env prefix, `pydantic-settings`).** `frame`, `timesync_enabled`
+  (default `False`), and `capture_time_source` (default `"publish"`) join the existing
+  `enable_landing_target` (default `False`, the CHARTER §3 opt-in carve-out) and
+  `require_heartbeat` (default `True`, fail-closed) fields on `MavlinkSettings`. Named
+  protocol constants replace magic literals: `_MAV_FRAME_LOCAL_NED = 1`,
+  `_LANDING_TARGET_TYPE_LIGHT_BEACON = 0`, `_IDENTITY_QUATERNION_WXYZ` (identity quaternion,
+  a tuple so it can't be mutated in place).
+- **Hardware-free in tests.** As with `msp_source`/`mavlink_source` in `meshsa`, the pymavlink
+  connection is always injected (`connection` / `connection_factory`), so every line of
+  angle/projection/gating logic — including `recv_match` reads — is exercised by a fake; only
+  the real connection factory (`_default_connection_factory`) is `# pragma: no cover`.

@@ -23,6 +23,13 @@ This guide applies under `packages/meshsa`. Also follow the root
 - Tests should use fakes (`LoopbackBus`, injected connectors, `FakeClock`,
   `SeqIdFactory`) instead of live hardware or network dependencies.
 - Do not loosen strict mypy to land a feature. Fix the type boundary instead.
+- Inference observability: `InferenceService.as_dict()` (`offline_dropped`,
+  `offline_queue_depth`, `intake_dropped`, `pending_tasks`) surfaces on `/metrics`
+  as `meshsa_inference_*` counters/gauges only when `node.inference_service` is
+  set. Task intake is bounded by `NemotronConfig.max_pending_tasks` (env
+  `MESHSA_INFERENCE_MAX_PENDING_TASKS`, default `0` = unbounded), drop-and-counted
+  into `intake_dropped` past the cap — mirror this pattern if you touch either
+  drop path.
 
 ## Common Tasks
 

@@ -103,13 +103,14 @@ meshsa = ["py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=90"
+addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=97"
 testpaths = ["tests"]
 # Make flightctl/ (the live service glue, outside the package) importable for its
 # glue tests without per-file sys.path mutation. Relative to this rootdir.
 pythonpath = ["../../flightctl"]
 markers = [
     "slow: long-running soak/fuzz tests; exercised by the nightly workflow",
+    "e2e: end-to-end tests needing a live FreeTAKServer; opt-in via MESHSA_FTS_E2E=1 (never in the coverage gate)",
 ]
 
 [tool.coverage.run]

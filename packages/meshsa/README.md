@@ -111,6 +111,21 @@ a config-driven bridge e2e test: a node with a loopback mesh side (JSON) and a
 loopback TAK side (CoT) publishes a position, then bridges an inbound CoT event
 back onto the mesh as JSON.
 
+## Observability: `/metrics` + AI inference counters
+`meshsa.health.render_metrics` (and the `/healthz`+`/metrics` aiohttp server it backs) renders
+router + per-transport counters as Prometheus text or JSON. When a node has inference enabled
+(`config.inference.enabled=true`), `InferenceService.as_dict()` — `offline_dropped`,
+`offline_queue_depth`, `intake_dropped`, `pending_tasks` — is included automatically: as
+`body["inference"]` for JSON, or as `meshsa_inference_*` Prometheus series
+(`meshsa_inference_offline_dropped_total`, `meshsa_inference_intake_dropped_total` counters;
+`meshsa_inference_offline_queue_depth`, `meshsa_inference_pending_tasks` gauges). When inference
+is disabled, none of this is emitted — output is byte-identical to a node without inference.
+
+`NemotronConfig.max_pending_tasks` (env `MESHSA_INFERENCE_MAX_PENDING_TASKS`, default `0` =
+unbounded) bounds `InferenceService.handle_message` task intake: once the cap is reached, new
+messages are dropped-and-counted into `intake_dropped` (the same drop-and-count pattern already
+used for the offline queue) instead of growing task backlog without limit.
+
 ## Runnable field example (real hardware)
 `src/meshsa/examples/base_node.py` wires a **real** T-Beam (Meshtastic over USB) to a **real**
 FreeTAKServer (no fakes) and runs the JSON-mesh <-> CoT-TAK bridge, broadcasting its

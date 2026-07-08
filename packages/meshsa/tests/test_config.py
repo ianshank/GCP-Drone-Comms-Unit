@@ -168,6 +168,23 @@ def test_inference_track_b_defaults_are_no_ops():
     assert cfg.offline_queue_max == 0
 
 
+# ── Backpressure: bound handle_message task intake (max_pending_tasks) ──────
+
+
+def test_inference_max_pending_tasks_binds_from_env():
+    env = {
+        "MESHSA_UID": "n3",
+        "MESHSA_CALLSIGN": "CAP",
+        "MESHSA_INFERENCE_MAX_PENDING_TASKS": "25",
+    }
+    cfg = NodeConfig.from_env(env)
+    assert cfg.inference.max_pending_tasks == 25
+
+
+def test_inference_max_pending_tasks_defaults_to_zero():
+    assert NemotronConfig().max_pending_tasks == 0
+
+
 def test_inference_guided_json_schema_valid_object_accepted():
     cfg = NemotronConfig(guided_json_schema='{"type": "object", "properties": {}}')
     assert cfg.guided_json_schema.startswith("{")

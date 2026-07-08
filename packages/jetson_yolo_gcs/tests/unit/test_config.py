@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from jetson_yolo_gcs.core.config import (
     CameraType,
+    MavlinkSettings,
     Settings,
     StreamEncoder,
     YoloSettings,
@@ -144,3 +145,34 @@ def test_rtsp_latency_default_and_override(monkeypatch: pytest.MonkeyPatch) -> N
     assert Settings().camera.rtsp_latency_ms == 0
     monkeypatch.setenv("CAMERA_RTSP_LATENCY_MS", "200")
     assert get_settings().camera.rtsp_latency_ms == 200
+
+
+def test_mavlink_frame_defaults_body_frd_and_binds_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert MavlinkSettings().frame == "body_frd"
+    monkeypatch.setenv("MAVLINK_FRAME", "local_ned")
+    monkeypatch.setenv("MAVLINK_TIMESYNC_ENABLED", "true")
+    monkeypatch.setenv("MAVLINK_CAPTURE_TIME_SOURCE", "capture")
+    s = MavlinkSettings()
+    assert s.frame == "local_ned"
+    assert s.timesync_enabled is True
+    assert s.capture_time_source == "capture"
+
+
+def test_mavlink_frame_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAVLINK_FRAME", "galactic")
+    with pytest.raises(ValidationError):
+        MavlinkSettings()
+
+
+def test_mavlink_capture_time_source_rejects_unknown_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MAVLINK_CAPTURE_TIME_SOURCE", "bogus")
+    with pytest.raises(ValidationError):
+        MavlinkSettings()
+
+
+def test_mavlink_timesync_and_capture_time_source_defaults() -> None:
+    s = MavlinkSettings()
+    assert s.timesync_enabled is False
+    assert s.capture_time_source == "publish"

@@ -11,6 +11,8 @@ from jetson_yolo_gcs.core.config import MavlinkSettings
 from jetson_yolo_gcs.core.errors import DetectionError
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge
+from jetson_yolo_gcs.mavlink.pose import VehiclePose
+from jetson_yolo_gcs.mavlink.timesync import TimeSync
 from jetson_yolo_gcs.pipeline import Pipeline, _should_log_drop
 from jetson_yolo_gcs.streaming.camera import Frame
 from jetson_yolo_gcs.utils.fps import FpsCounter
@@ -104,6 +106,65 @@ def test_full_step_streams_and_publishes_best() -> None:
     assert len(conn.mav.calls) == 1
     # No more frames -> step returns False.
     assert pipeline.step() is False
+
+
+def test_full_step_publishes_capture_time_from_frame_t() -> None:
+    # capture_time_source="capture" + a TimeSync offset -> time_usec is derived from the
+    # source frame's captured Frame.t (not the wall clock at publish time), through the
+    # bridge's TIMESYNC-aware _compute_time_usec (Task 14).
+    conn = _RecordingConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True,
+            require_heartbeat=False,
+            capture_time_source="capture",
+            timesync_enabled=True,
+        ),
+        connection=conn,
+        timesync=TimeSync(offset_us=250_000),
+    )
+    frame_t = 42.5
+    pipeline = Pipeline(
+        camera=FakeCamera([Frame(idx=0, t=frame_t, data="frame-0")]),
+        detector=FakeDetector(_sample()),
+        bridge=bridge,
+    )
+    assert pipeline.step() is True
+    assert len(conn.mav.calls) == 1
+    time_usec = conn.mav.calls[0][0]
+    assert time_usec == int(frame_t * 1_000_000) + 250_000
+
+
+class _FixedPose:
+    """A :class:`PoseSource` fake returning a caller-supplied pose (or ``None``) forever."""
+
+    def __init__(self, pose: VehiclePose | None) -> None:
+        self._pose = pose
+
+    def latest(self) -> VehiclePose | None:
+        return self._pose
+
+
+def test_full_step_publishes_local_ned_end_to_end_with_fixed_pose() -> None:
+    # End-to-end (fakes): frame="local_ned" + a fixed pose -> one landing_target_send with
+    # MAV_FRAME_LOCAL_NED (1) and position_valid=1, wired the same way a real deployment would.
+    conn = _RecordingConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, require_heartbeat=False, frame="local_ned"),
+        connection=conn,
+        pose_source=_FixedPose(VehiclePose(alt_agl_m=100.0, heading_deg=0.0, pitch_deg=90.0)),
+    )
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=bridge,
+    )
+    assert pipeline.step() is True
+    assert len(conn.mav.calls) == 1
+    args = conn.mav.calls[0]
+    assert args[2] == 1  # MAV_FRAME_LOCAL_NED
+    assert args[-1] == 1  # position_valid
+    assert pipeline.landing_target_published == 1
 
 
 def test_run_processes_all_frames_then_stops() -> None:
@@ -265,7 +326,9 @@ def test_suppression_does_not_reset_failure_streak() -> None:
     outcomes: list[str] = ["raise", "suppress", "raise"]
 
     class _ScriptedBridge(LandingTargetBridge):
-        def publish(self, detection: Detection, result: DetectionResult) -> bool:
+        def publish(
+            self, detection: Detection, result: DetectionResult, *, capture_t: float | None = None
+        ) -> bool:
             outcome = outcomes.pop(0)
             if outcome == "raise":
                 raise RuntimeError("link down")
@@ -371,6 +434,23 @@ def test_snapshot_reports_heartbeat_freshness() -> None:
     assert no_gate.snapshot()["landing_target_heartbeat_fresh"] is None  # no bridge
 
 
+def test_snapshot_reports_suppression_by_reason() -> None:
+    # Gate on, no heartbeat ever delivered -> every publish suppresses as "no_heartbeat". The
+    # snapshot exposes the bridge's per-reason breakdown alongside the (unchanged) total, so an
+    # operator can tell a dead autopilot link from a missing/unprojectable pose.
+    conn = _RecordingConn()  # no heartbeats -> gate stays stale
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(1)),
+        detector=FakeDetector(_sample()),
+        bridge=_bridge(conn, require_heartbeat=True),
+    )
+    assert pipeline.step() is True
+    assert conn.mav.calls == []  # suppressed -> nothing sent
+    snap = pipeline.snapshot()
+    assert snap["landing_target_suppressed"] == 1  # total, backward-compatible
+    assert snap["landing_target_suppressed_by_reason"] == {"no_heartbeat": 1}
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -403,7 +483,9 @@ def test_target_class_filter_selects_named_class() -> None:
     captured: list[Detection] = []
 
     class _CapturingBridge(LandingTargetBridge):
-        def publish(self, detection: Detection, result: DetectionResult) -> bool:
+        def publish(
+            self, detection: Detection, result: DetectionResult, *, capture_t: float | None = None
+        ) -> bool:
             captured.append(detection)
             return True
 

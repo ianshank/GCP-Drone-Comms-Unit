@@ -10,16 +10,21 @@ from jetson_yolo_gcs.core.errors import MavlinkError
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge, compute_angles
 from jetson_yolo_gcs.mavlink.heartbeat import HeartbeatMonitor
+from jetson_yolo_gcs.mavlink.pose import VehiclePose
+from jetson_yolo_gcs.mavlink.timesync import TimeSync
 from tests.conftest import FakeClock
 from tests.unit.test_mavlink_heartbeat import SettableClock
 
 
 class _FakeMav:
     def __init__(self) -> None:
-        self.calls: list[tuple[object, ...]] = []
+        #: Each entry is ``(args, kwargs)`` for one ``landing_target_send`` call, so tests
+        #: can pin both the positional arity/values *and* that no kwargs snuck in (the
+        #: latter matters for the pre-NED-refactor characterization test below).
+        self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-    def landing_target_send(self, *args: object) -> None:
-        self.calls.append(args)
+    def landing_target_send(self, *args: object, **kwargs: object) -> None:
+        self.calls.append((args, kwargs))
 
 
 class _FakeMsg:
@@ -98,11 +103,237 @@ def test_publish_sends_landing_target_when_enabled() -> None:
     det, result = _result_with((140, 90, 160, 110))
     assert bridge.publish(det, result) is True
     assert len(conn.mav.calls) == 1
-    args = conn.mav.calls[0]
+    args, kwargs = conn.mav.calls[0]
+    assert kwargs == {}
     assert args[0] == 2_000_000  # time_usec from clock
     assert args[1] == 0  # target_num
     assert args[2] == 12  # MAV_FRAME_BODY_FRD
     assert args[3] == pytest.approx(0.5)  # angle_x
+
+
+def test_publish_body_frd_sends_eight_positional_args_no_position_valid() -> None:
+    # Characterization (pre-NED refactor): body_frd path sends exactly 8 positional args,
+    # frame=MAV_FRAME_BODY_FRD(12), and NO x/y/z/position_valid (defaults => position_valid=0).
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, fov_x_rad=2.0, fov_y_rad=2.0),
+        connection=conn,
+        clock=FakeClock(times=[2.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    det, result = _result_with((140, 90, 160, 110))
+    assert bridge.publish(det, result) is True
+    args, kwargs = conn.mav.calls[0]
+    assert len(args) == 8
+    assert kwargs == {}
+    assert args[2] == 12  # MAV_FRAME_BODY_FRD
+
+
+def test_publish_body_frd_unchanged_after_frame_dispatch() -> None:
+    # Task 12 guard: with frame="body_frd" (default) explicitly set, the frame-dispatch
+    # refactor must still emit exactly the pre-refactor 8-positional-arg wire format.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, frame="body_frd", fov_x_rad=2.0, fov_y_rad=2.0),
+        connection=conn,
+        clock=FakeClock(times=[2.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    det, result = _result_with((140, 90, 160, 110))
+    assert bridge.publish(det, result) is True
+    args, kwargs = conn.mav.calls[0]
+    assert len(args) == 8 and args[2] == 12  # still MAV_FRAME_BODY_FRD, 8 positional
+    assert kwargs == {}
+
+
+def test_compute_time_usec_publish_default_uses_clock() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, capture_time_source="publish"),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 7_000_000  # ignores capture_t
+
+
+def test_compute_time_usec_capture_uses_frame_time_plus_offset() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, capture_time_source="capture", timesync_enabled=True
+        ),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+        timesync=TimeSync(offset_us=500_000),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 5_500_000
+
+
+def test_compute_time_usec_capture_timesync_disabled_ignores_offset() -> None:
+    # timesync_enabled is load-bearing: with a TimeSync wired but the flag OFF, the capture
+    # path must use the RAW capture timestamp (no offset) — proving the flag actually gates it.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, capture_time_source="capture", timesync_enabled=False
+        ),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+        timesync=TimeSync(offset_us=500_000),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 5_000_000  # offset NOT applied
+
+
+def test_compute_time_usec_capture_without_timesync_uses_raw_capture_t() -> None:
+    # capture_time_source="capture" but no TimeSync injected -> use capture_t directly
+    # (no offset available), still ignoring the publish-time clock.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, capture_time_source="capture"),
+        connection=conn,
+        clock=FakeClock(times=[7.0]),
+        heartbeat=_fresh_monitor(),
+    )
+    assert bridge._compute_time_usec(capture_t=5.0) == 5_000_000
+
+
+def test_compute_time_usec_capture_falls_back_to_clock_when_capture_t_none() -> None:
+    # capture_time_source="capture" but capture_t is None (no frame timestamp available)
+    # -> fall back to the publish-time wall clock rather than crashing.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(enable_landing_target=True, capture_time_source="capture"),
+        connection=conn,
+        clock=FakeClock(times=[9.0]),
+        heartbeat=_fresh_monitor(),
+        timesync=TimeSync(offset_us=500_000),
+    )
+    assert bridge._compute_time_usec(capture_t=None) == 9_000_000
+
+
+class _FixedPose:
+    """A :class:`PoseSource` fake returning a caller-supplied pose (or ``None``) forever."""
+
+    def __init__(self, pose: VehiclePose | None) -> None:
+        self._pose = pose
+
+    def latest(self) -> VehiclePose | None:
+        return self._pose
+
+
+def test_local_ned_sends_position_valid_with_pose() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
+        connection=conn,
+        clock=FakeClock(times=[3.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(VehiclePose(alt_agl_m=100.0, heading_deg=0.0, pitch_deg=90.0)),
+    )
+    det, result = _result_with((95, 95, 105, 105))  # true centre (100,100) of the 200x200 result
+    assert bridge.publish(det, result) is True
+    assert len(conn.mav.calls) == 1
+    args, kwargs = conn.mav.calls[0]
+    assert kwargs == {}  # local_ned path sends all 14 args positionally (verified against impl)
+    assert args[2] == 1  # MAV_FRAME_LOCAL_NED
+    # nadir centre => target directly below: north=0, east=0, down=alt_agl_m.
+    # Pin the full x/y/z payload (not just frame + position_valid) so an arg-order regression
+    # (e.g. a y<->z swap) fails here instead of silently reaching the autopilot.
+    assert args[8] == pytest.approx(0.0, abs=1e-6)  # north/x
+    assert args[9] == pytest.approx(0.0, abs=1e-6)  # east/y
+    assert args[10] == pytest.approx(100.0)  # down/z == alt_agl_m
+    # position_valid is always positional at index 13 for this call site (see bridge.py's
+    # _send_local_ned docstring); read it there rather than via a kwargs-or-fallback guess.
+    assert args[13] == 1
+
+
+def test_local_ned_suppresses_when_no_pose() -> None:
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
+        connection=conn,
+        clock=FakeClock(times=[3.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(None),
+    )
+    det, result = _result_with((315, 235, 325, 245))
+    assert bridge.publish(det, result) is False
+    assert conn.mav.calls == []  # fail-safe: never send position_valid=1 without a pose
+    assert bridge.suppressed_snapshot() == {"no_pose": 1}  # counted distinctly by reason
+
+
+def test_local_ned_suppresses_when_ray_unprojectable() -> None:
+    # A pose *is* present but yields an unusable ray (alt_agl_m <= 0 is always unprojectable
+    # per project_pixel_to_ned) -> must suppress just like the no-pose case, not send a bogus
+    # position_valid=1.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
+        connection=conn,
+        clock=FakeClock(times=[3.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(VehiclePose(alt_agl_m=0.0, heading_deg=0.0, pitch_deg=90.0)),
+    )
+    det, result = _result_with((315, 235, 325, 245))
+    assert bridge.publish(det, result) is False
+    assert conn.mav.calls == []
+    assert bridge.suppressed_snapshot() == {"unprojectable": 1}
+
+
+def test_ned_suppression_accumulates_by_reason_and_logs_reason() -> None:
+    # Two consecutive no-pose suppressions: the 1st logs (throttle streak == 1) and records
+    # reason="no_pose"; the 2nd takes the throttle's don't-log branch. Both are counted in the
+    # per-reason snapshot, disambiguating this cause from a heartbeat-gate suppression.
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
+        connection=conn,
+        clock=FakeClock(times=[3.0, 4.0]),
+        heartbeat=_fresh_monitor(),
+        pose_source=_FixedPose(None),
+    )
+    det, result = _result_with((95, 95, 105, 105))
+    with capture_logs() as logs:
+        assert bridge.publish(det, result) is False  # 1st: logs
+        assert bridge.publish(det, result) is False  # 2nd: throttle don't-log branch
+    assert bridge.suppressed_snapshot() == {"no_pose": 2}
+    ned_warnings = [e for e in logs if e.get("reason") == "no_pose"]
+    assert len(ned_warnings) == 1  # exactly the 1st logged, carrying the disambiguating reason
+    assert conn.mav.calls == []
+
+
+def test_suppressed_snapshot_disambiguates_heartbeat_from_pose() -> None:
+    # One bridge, two distinct suppression causes: a stale heartbeat (gate) then a fresh
+    # heartbeat with no pose (local_ned). The snapshot must key them separately, not conflate
+    # them into one opaque total the way the pre-hardening single counter did.
+    clk = SettableClock(100.0)
+    mon = HeartbeatMonitor(clk, max_age_s=2.0)  # no beat yet -> stale
+    conn = _FakeConn()
+    bridge = LandingTargetBridge(
+        MavlinkSettings(
+            enable_landing_target=True, frame="local_ned", fov_x_rad=1.2, fov_y_rad=0.7
+        ),
+        connection=conn,
+        clock=FakeClock(times=[3.0, 4.0]),
+        heartbeat=mon,
+        pose_source=_FixedPose(None),
+    )
+    det, result = _result_with((95, 95, 105, 105))
+    assert bridge.publish(det, result) is False  # stale heartbeat -> no_heartbeat
+    mon.beat(100.0)  # now fresh -> gate opens, reaches local_ned with no pose
+    assert bridge.publish(det, result) is False  # no pose -> no_pose
+    assert bridge.suppressed_snapshot() == {"no_heartbeat": 1, "no_pose": 1}
 
 
 def test_publish_opens_connection_via_factory_when_none() -> None:
@@ -332,7 +563,12 @@ def test_poll_heartbeat_logs_lost_and_reacquired_transitions() -> None:
         bridge.poll_heartbeat()  # recv None -> stale -> lost
         bridge.poll_heartbeat()  # beat at t=105 -> reacquired
     events = [e["event"] for e in logs]
-    assert sum("acquired" in e and "reacquired" not in e for e in events) == 1  # exactly once
+    # Match the bridge's full gate-open text, not a bare "acquired" substring: HeartbeatMonitor
+    # also emits a debug-level "autopilot heartbeat acquired" on the first beat, which
+    # capture_logs() sees or drops depending on the ambient structlog level (INFO filtering is
+    # order-dependent across the suite). Matching the specific transition message asserts the
+    # edge-triggered acquisition fired exactly once, independent of that log-level state.
+    assert sum("acquired; LANDING_TARGET gate open" in e for e in events) == 1  # exactly once
     assert any("lost" in e for e in events)
     assert any("reacquired" in e for e in events)
 

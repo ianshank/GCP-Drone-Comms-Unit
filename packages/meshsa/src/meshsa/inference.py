@@ -394,6 +394,7 @@ class InferenceService:
         )
         self._offline_dropped = 0
         self._drain_lock = asyncio.Lock()
+        self._intake_dropped = 0
 
     def start(self) -> None:
         if not self.config.enabled or self._subscribed:
@@ -417,6 +418,20 @@ class InferenceService:
 
         # Avoid analyzing existing AI insights to prevent multi-node feedback loops.
         if _is_ai_insight(envelope, self.config.insight_prefix):
+            return
+
+        # Backpressure: shed (drop-and-count) rather than spawn unbounded tasks on a
+        # constrained edge node once in-flight analysis tasks reach the configured cap.
+        # 0 (the default) preserves prior, unbounded behavior.
+        cap = self.config.max_pending_tasks
+        if cap and len(self._bg_tasks) >= cap:
+            self._intake_dropped += 1
+            _log.warning(
+                "inference_intake_dropped",
+                dropped_total=self._intake_dropped,
+                pending=len(self._bg_tasks),
+                cap=cap,
+            )
             return
 
         task = asyncio.create_task(self._analyze_and_publish(envelope))
@@ -546,3 +561,18 @@ class InferenceService:
             await asyncio.gather(*self._bg_tasks, return_exceptions=True)
         self._bg_tasks.clear()
         await self.client.close()
+
+    def as_dict(self) -> dict[str, int]:
+        """Point-in-time service counters for the ``/metrics`` exporter (pure read).
+
+        Mirrors the transport counter-attribute convention consumed by
+        :func:`meshsa.health._transport_counters`. ``offline_dropped`` /
+        ``intake_dropped`` are monotonic counters; ``offline_queue_depth`` /
+        ``pending_tasks`` are instantaneous gauges.
+        """
+        return {
+            "offline_dropped": self._offline_dropped,
+            "offline_queue_depth": len(self._offline) if self._offline is not None else 0,
+            "intake_dropped": self._intake_dropped,
+            "pending_tasks": len(self._bg_tasks),
+        }

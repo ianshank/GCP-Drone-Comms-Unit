@@ -85,6 +85,10 @@ class NemotronConfig(BaseModel):
     #: Bounded offline queue depth for envelopes that failed while the API was
     #: unreachable; 0 = disabled (no queueing, prior behavior).
     offline_queue_max: int = Field(default=0, ge=0)
+    #: Max in-flight background analysis tasks; 0 = unbounded (prior behaviour). A burst of
+    #: inbound envelopes past this cap is shed (drop-and-count) rather than spawning unbounded
+    #: tasks on a constrained edge node.
+    max_pending_tasks: int = Field(default=0, ge=0)
 
     def _reject_model_not_allowed(self, model: str) -> None:
         """Raise when ``model`` is outside a configured allow-list (no-op if unset)."""
@@ -276,6 +280,7 @@ class NodeConfig(BaseModel):
             f"{prefix}INFERENCE_GUIDED_JSON_SUMMARY_FIELD": ("guided_json_summary_field", _str),
             f"{prefix}INFERENCE_MODELS": ("models", _csv_tuple),
             f"{prefix}INFERENCE_OFFLINE_QUEUE_MAX": ("offline_queue_max", parse_int),
+            f"{prefix}INFERENCE_MAX_PENDING_TASKS": ("max_pending_tasks", parse_int),
         }
         for env_key, (field, caster) in inference_scalars.items():
             if env_key in env:

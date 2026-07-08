@@ -28,6 +28,19 @@ summaries back on the mesh. Install with `meshsa[inference]`. Keep the base inst
 5. **Config-driven:** all `NemotronConfig` fields are settable via `MESHSA_INFERENCE_*` env vars
    with the standard precedence. New tunables (e.g. `min_interval_s`, `max_concurrent_requests`)
    are config fields with explicit defaults + env bindings — no literals.
+6. **Task-intake backpressure:** `NemotronConfig.max_pending_tasks` (env
+   `MESHSA_INFERENCE_MAX_PENDING_TASKS`, default `0` = unbounded) bounds
+   `InferenceService.handle_message` task intake — once the cap is hit, new tasks are
+   drop-and-counted into `_intake_dropped` rather than queued unbounded. This mirrors the
+   existing offline-replay drop-and-count (`_offline_dropped`); keep the two paths symmetric if
+   you touch either.
+7. **Observability:** `InferenceService.as_dict()` exposes `offline_dropped`,
+   `offline_queue_depth`, `intake_dropped`, `pending_tasks` (two monotonic counters, two
+   instantaneous gauges). `health.render_metrics` includes this dict as `body["inference"]`
+   (json) or folds it into the Prometheus text via `render_prometheus(..., inference=...)` as
+   `meshsa_inference_*` series, but only when `node.inference_service` is set — see
+   `.agents/skills/meshsa-observability/SKILL.md` for the exporter-side contract (series names,
+   the 12-name drift-guard test) before renaming or adding a field here.
 
 ## HTTP boundary (injectable transport — do not reintroduce aioresponses)
 
@@ -49,6 +62,9 @@ Run from `packages/meshsa` with the extra installed
 
 ## References
 
-- `packages/meshsa/src/meshsa/inference.py`, `config.py` (`MESHSA_INFERENCE_*` bindings)
+- `packages/meshsa/src/meshsa/inference.py`, `config.py` (`MESHSA_INFERENCE_*` bindings,
+  `NemotronConfig.max_pending_tasks`, `InferenceService.as_dict`)
+- `packages/meshsa/src/meshsa/health.py` (`render_metrics` inference wiring), `metrics.py`
+  (`render_prometheus(..., inference=...)`)
 - `packages/meshsa/tests/test_inference.py`, `test_inference_e2e.py`
 - `docs/specs/initiative-e-inference.md` (author from TEMPLATE before Track B work)

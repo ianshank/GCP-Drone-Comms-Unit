@@ -75,13 +75,23 @@ def render_metrics(node: Node, fmt: Literal["prometheus", "json"]) -> str | dict
     counters + per-transport counters) for ``"json"``. The aiohttp ``/metrics``
     seam serves whichever this returns; all branch logic lives here, not in the
     pragma-excluded wiring.
+
+    When ``node.inference_service`` is set (``config.inference.enabled=true``),
+    its counters (:meth:`InferenceService.as_dict`) are included as
+    ``body["inference"]`` for json or ``meshsa_inference_*`` lines for
+    Prometheus. When inference is disabled the key/lines are omitted entirely,
+    so existing callers see byte-identical output (backward compatible).
     """
+    inference = node.inference_service.as_dict() if node.inference_service else None
     if fmt == "json":
-        return {
+        body: dict[str, Any] = {
             "metrics": node.router.metrics.as_dict(),
             "transports": _transport_counters(node),
         }
-    return render_prometheus(node.router.metrics, _transport_counters(node))
+        if inference is not None:
+            body["inference"] = inference
+        return body
+    return render_prometheus(node.router.metrics, _transport_counters(node), inference=inference)
 
 
 async def serve_healthz(
