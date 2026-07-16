@@ -80,13 +80,23 @@ class NorfairTracker(TrackerBase):
     def update(self, result: DetectionResult) -> tuple[TrackedDetection, ...]:
         norfair_dets = self._to_detections(result.detections)
         tracked_objects = self._tracker.update(detections=norfair_dets)
+        # ``update`` returns every active track (``get_active_objects``), which INCLUDES
+        # coasting/predicted tracks not matched this frame — for those, ``last_detection`` is a
+        # Detection from an earlier frame. Emit only tracks matched to a detection in THIS frame
+        # (identity check against the exact objects we passed as ``data``), so ``TrackedDetection``
+        # always carries a current-frame detection, never a stale one.
+        current_ids = {id(det) for det in result.detections}
         out: list[TrackedDetection] = []
         for obj in tracked_objects:
             track_id = getattr(obj, "id", None)
             if track_id is None:
                 # Still initializing (or unassigned): no stable id this frame.
                 continue
-            out.append(TrackedDetection(detection=obj.last_detection.data, track_id=int(track_id)))
+            source = obj.last_detection.data
+            if id(source) not in current_ids:
+                # Coasting/predicted track (not matched this frame): its detection is stale.
+                continue
+            out.append(TrackedDetection(detection=source, track_id=int(track_id)))
         return tuple(out)
 
     def close(self) -> None:

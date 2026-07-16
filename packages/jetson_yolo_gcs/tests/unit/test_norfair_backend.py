@@ -67,6 +67,18 @@ def test_update_skips_initializing_object_without_id() -> None:
     assert tracker.update(result) == (TrackedDetection(car, 7),)
 
 
+def test_update_skips_coasting_track_from_earlier_frame() -> None:
+    # Norfair's update() also returns coasting/predicted tracks not matched this frame; their
+    # last_detection is from an earlier frame (not in result.detections) and must be filtered so
+    # TrackedDetection never carries a stale detection.
+    result = _result()
+    person, _ = result.detections
+    stale = Detection(class_id=9, class_name="ghost", confidence=0.4, bbox=(1, 1, 2, 2))
+    fake = _FakeNorfair([[_obj(1, person), _obj(2, stale)]])
+    tracker = NorfairTracker(TrackerSettings(), tracker=fake, to_detections=_identity)
+    assert tracker.update(result) == (TrackedDetection(person, 1),)
+
+
 def test_update_empty_when_no_tracked_objects() -> None:
     result = _result()
     fake = _FakeNorfair([[]])
