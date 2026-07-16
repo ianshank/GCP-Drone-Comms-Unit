@@ -118,14 +118,16 @@ class Pipeline:
         #: successful frames, so it reports the last good rate during an outage).
         self._last_frame_t: float | None = None
 
-        #: Confirmed tracks in the most recent frame (0 when tracking is disabled).
+        #: Confirmed-and-matched tracks in the most recent successful frame; **last-known-good**
+        #: (left unchanged on a tracker fault, like :attr:`fps` during a stall). 0 when disabled.
         self.tracks_active = 0
-        #: Distinct track ids ever seen (monotonic; 0 when tracking is disabled).
+        #: Distinct tracks ever confirmed (monotonic; 0 when tracking is disabled).
         self.tracks_total = 0
         #: Frames whose tracker update raised recoverably (advisory; never fatal).
         self.dropped_tracks = 0
-        #: Set of distinct track ids seen so far (backs :attr:`tracks_total`).
-        self._seen_track_ids: set[int] = set()
+        #: High-water mark of assigned track ids, backing :attr:`tracks_total` in O(1) memory.
+        #: Relies on the tracker assigning ids monotonically without reuse (see ``TrackerBase``).
+        self._max_track_id: int | None = None
 
     @property
     def fps(self) -> float:
@@ -301,12 +303,21 @@ class Pipeline:
         except Exception:  # noqa: BLE001 - advisory read-only path; a fault is counted, never fatal
             self.dropped_tracks += 1
             if _should_log_drop(self.dropped_tracks, self._drop_log_every):
-                _log.warning("tracker update failed; dropping", dropped=self.dropped_tracks)
+                # exc_info so a swallowed backend bug still leaves a stack trace (throttled).
+                _log.warning(
+                    "tracker update failed; dropping", dropped=self.dropped_tracks, exc_info=True
+                )
             return
         self.tracks_active = len(tracked)
+        # Count distinct tracks ever confirmed without retaining every id: track ids are assigned
+        # monotonically (TrackerBase contract), so any id above the pre-frame high-water mark is a
+        # new track. O(1) memory — no unbounded set on a long-running unit.
+        prev_max = self._max_track_id
         for t in tracked:
-            self._seen_track_ids.add(t.track_id)
-        self.tracks_total = len(self._seen_track_ids)
+            if prev_max is None or t.track_id > prev_max:
+                self.tracks_total += 1
+            if self._max_track_id is None or t.track_id > self._max_track_id:
+                self._max_track_id = t.track_id
 
     def _select_target(self, result: DetectionResult) -> Detection | None:
         if self._target_classes is None:

@@ -45,12 +45,20 @@ class TrackerBase(ABC):
     def update(self, result: DetectionResult) -> tuple[TrackedDetection, ...]:
         """Associate this frame's detections to stable track ids.
 
-        Returns one :class:`TrackedDetection` per **confirmed** track this frame; detections
-        the tracker has not (yet) confirmed are omitted. Implementations are stateful across
-        calls (they hold the track set) but must not perform any vehicle I/O.
+        Returns one :class:`TrackedDetection` per track that is **confirmed and matched to a
+        detection in this frame**; detections not yet confirmed, and confirmed-but-coasting
+        tracks with no current-frame detection, are omitted (so ``tracks_active`` may dip while
+        an object is briefly occluded even though the tracker still holds the track). At most
+        one entry per source detection.
+
+        Implementations are stateful across calls (they hold the track set) but must not perform
+        any vehicle I/O. ``track_id`` values are expected to be assigned **monotonically and
+        never reused** (the SORT/Kalman convention), which lets consumers count distinct tracks
+        in O(1) memory instead of retaining every id.
         """
         raise NotImplementedError
 
     def close(self) -> None:
-        """Release any backend resources / reset track state (default: no-op)."""
+        """Release backend resources (default: no-op). **Terminal** — after ``close()`` the
+        tracker is not reusable and :meth:`update` must not be called again."""
         return None

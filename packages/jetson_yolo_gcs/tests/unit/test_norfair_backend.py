@@ -1,20 +1,27 @@
-"""Norfair backend: id map-back and initializing-object skip, with an injected fake tracker.
+"""Norfair backend: id map-back, skip rules, and the heavy-dep adapters.
 
-The real norfair/numpy construction is behind ``# pragma: no cover`` seams
-(``_build_tracker`` / ``_to_norfair_detections``); these tests inject both a fake tracker
-and an identity ``to_detections`` so no norfair/numpy import is needed.
+The map-back tests inject a fake tracker + identity ``to_detections`` so no norfair/numpy is
+needed. The two default adapters (``_build_tracker`` / ``_to_norfair_detections``) are covered
+directly by injecting fake ``norfair``/``numpy`` into ``sys.modules`` (no ``# pragma: no cover``).
 """
 
 from __future__ import annotations
 
+import sys
 import types
 from typing import Any
+
+import pytest
 
 from jetson_yolo_gcs.core.config import TrackerSettings
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.tracking.base import TrackedDetection
 from jetson_yolo_gcs.tracking.factory import tracker_registry
-from jetson_yolo_gcs.tracking.norfair_backend import NorfairTracker
+from jetson_yolo_gcs.tracking.norfair_backend import (
+    NorfairTracker,
+    _build_tracker,
+    _to_norfair_detections,
+)
 
 
 def _result() -> DetectionResult:
@@ -77,6 +84,63 @@ def test_update_skips_coasting_track_from_earlier_frame() -> None:
     fake = _FakeNorfair([[_obj(1, person), _obj(2, stale)]])
     tracker = NorfairTracker(TrackerSettings(), tracker=fake, to_detections=_identity)
     assert tracker.update(result) == (TrackedDetection(person, 1),)
+
+
+def test_update_skips_object_with_no_last_detection() -> None:
+    # A single object with last_detection=None must be skipped, not raise (which the pipeline
+    # would swallow as a whole-frame drop) — the rest of the frame's tracks still come through.
+    result = _result()
+    person, _ = result.detections
+    no_last = types.SimpleNamespace(id=5, last_detection=None)
+    fake = _FakeNorfair([[_obj(1, person), no_last]])
+    tracker = NorfairTracker(TrackerSettings(), tracker=fake, to_detections=_identity)
+    assert tracker.update(result) == (TrackedDetection(person, 1),)
+
+
+def test_to_norfair_detections_builds_points_and_attaches_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise the real adapter (bbox-centre -> norfair.Detection with data=det ride-along) with
+    # fake norfair/numpy modules, so the production map-back seam is covered without heavy deps.
+    class _FakeNorfairDetection:
+        def __init__(self, points: Any, data: Any) -> None:
+            self.points = points
+            self.data = data
+
+    monkeypatch.setitem(
+        sys.modules, "norfair", types.SimpleNamespace(Detection=_FakeNorfairDetection)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "numpy",
+        types.SimpleNamespace(array=lambda seq, dtype=None: ("array", seq, dtype)),
+    )
+
+    det = Detection(class_id=0, class_name="person", confidence=0.9, bbox=(10, 20, 30, 40))
+    out = _to_norfair_detections([det])
+    assert len(out) == 1
+    assert out[0].data is det  # source rides along for map-back
+    cx, cy = det.center  # (20.0, 30.0)
+    assert out[0].points == ("array", [[cx, cy]], float)
+
+
+def test_build_tracker_constructs_norfair_tracker_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The real _build_tracker forwards every config field to norfair.Tracker (fake-injected).
+    class _FakeNorfairTracker:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+    monkeypatch.setitem(sys.modules, "norfair", types.SimpleNamespace(Tracker=_FakeNorfairTracker))
+
+    built = _build_tracker(TrackerSettings(distance_threshold=12.0, hit_counter_max=9))
+    assert built.kwargs == {  # type: ignore[attr-defined]
+        "distance_function": "euclidean",
+        "distance_threshold": 12.0,
+        "hit_counter_max": 9,
+        "initialization_delay": 3,
+    }
 
 
 def test_update_empty_when_no_tracked_objects() -> None:

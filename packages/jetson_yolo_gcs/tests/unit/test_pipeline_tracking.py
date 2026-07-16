@@ -141,6 +141,52 @@ def test_tracker_does_not_change_published_target() -> None:
     assert published_class(with_tracker=True) == ["person"]
 
 
+def test_tracks_active_left_unchanged_on_fault() -> None:
+    # A successful frame sets tracks_active=2; a following faulting frame must leave it at 2
+    # (last-known-good, like fps during a stall), not reset it to 0, and only count the drop.
+    det = _multi().detections[0]
+
+    class _FlakyTracker(TrackerBase):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def update(self, result: DetectionResult) -> tuple[TrackedDetection, ...]:
+            self.calls += 1
+            if self.calls == 1:
+                return (TrackedDetection(det, 1), TrackedDetection(det, 2))
+            raise RuntimeError("boom")
+
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(2)), detector=FakeDetector(_multi()), tracker=_FlakyTracker()
+    )
+    assert pipeline.step() is True
+    assert pipeline.tracks_active == 2
+    assert pipeline.step() is True  # faulting frame
+    assert pipeline.tracks_active == 2  # unchanged, NOT reset to 0
+    assert pipeline.dropped_tracks == 1
+
+
+def test_tracks_total_counts_monotonic_ids_in_bounded_memory() -> None:
+    # Distinct-track counting must handle out-of-order and re-appearing ids without retaining a
+    # per-id set. Frames: {1,2} -> {2} -> {2,4,3} (4 and 3 both new, out of order) -> {2}.
+    det = _multi().detections[0]
+
+    def td(i: int) -> TrackedDetection:
+        return TrackedDetection(det, i)
+
+    tracker = _ScriptedTracker([(td(1), td(2)), (td(2),), (td(2), td(4), td(3)), (td(2),)])
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(4)), detector=FakeDetector(_multi()), tracker=tracker
+    )
+    for _ in range(4):
+        assert pipeline.step() is True
+    assert pipeline.tracks_total == 4  # distinct ids seen: {1, 2, 3, 4}
+    assert pipeline.tracks_active == 1  # last frame matched a single track
+    # Bounded memory: only an int high-water mark backs the count — no per-id set is retained.
+    assert not hasattr(pipeline, "_seen_track_ids")
+    assert pipeline._max_track_id == 4
+
+
 def test_snapshot_track_counters_default_zero_without_tracker() -> None:
     pipeline = Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_multi()))
     snap = pipeline.snapshot()
