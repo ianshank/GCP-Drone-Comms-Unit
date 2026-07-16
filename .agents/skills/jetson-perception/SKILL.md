@@ -1,6 +1,6 @@
 ---
 name: jetson-perception
-description: "Use when: working in packages/jetson_yolo_gcs — adding a detector backend (YOLO/Hailo/ONNX/TensorRT), GStreamer camera/egress pipeline, the MAVLink LANDING_TARGET bridge, precision-landing safety, or the perception pipeline failure policy."
+description: "Use when: working in packages/jetson_yolo_gcs — adding a detector backend (YOLO/Hailo/ONNX/TensorRT), a tracker backend (Norfair/SORT), GStreamer camera/egress pipeline, the MAVLink LANDING_TARGET bridge, precision-landing safety, or the perception pipeline failure policy."
 argument-hint: "The perception change and which seam/backend it touches"
 ---
 
@@ -20,17 +20,22 @@ first; gates run from that directory.
 
 1. **Add a detector via the registry, never by editing the factory:** implement `DetectorBase`,
    register with `@detector_registry.register("name")`, and add the file extension to
-   `_EXTENSION_BACKENDS` in `detection/factory.py`.
+   `_EXTENSION_BACKENDS` in `detection/factory.py`. **Add a tracker backend the same way:**
+   implement `TrackerBase` and register with `@tracker_registry.register("name")` — never edit the
+   pipeline. The tracker is **read-only/advisory** (feeds only `Pipeline.snapshot()` counters,
+   never `_select_target`/the bridge); isolate real `norfair`/`numpy` behind injectable seams
+   (`tracker`, `to_detections`) so tests need no heavy deps and no `# pragma: no cover`.
 2. **DI via seams:** `CameraSource`, `StreamWriter`, `DetectorBase`, the injectable pymavlink
    connection, and injectable `clock`/`sleep` mean tests use fakes and need **no**
    GPU/camera/autopilot. Only real device/encoder/model construction is `# pragma: no cover`.
 3. **Lazy hardware imports:** import `ultralytics`/`cv2`/`pymavlink`/`hailo_platform` *inside*
    factories, never at module top (locked by `tests/unit/test_imports_clean.py`).
 4. **No magic numbers:** every environment-varying value is a `*Settings` field with an explicit
-   default and an env prefix (`YOLO_`, `CAMERA_`, `STREAM_`, `MAVLINK_`, `PIPELINE_`, `APP_`).
-   Fixed protocol/encoder constants are named module constants, not config.
+   default and an env prefix (`YOLO_`, `CAMERA_`, `STREAM_`, `MAVLINK_`, `TRACKER_`, `PIPELINE_`,
+   `APP_`). Fixed protocol/encoder constants are named module constants, not config.
 5. **Respect the per-path pipeline failure policy** (do not collapse into one catch):
    detection error → drop-and-count + continue; stream egress → best-effort drop-and-count;
+   tracking → advisory drop-and-count (`dropped_tracks`, `exc_info` on the throttled log);
    `LANDING_TARGET` publish → **fails loud**. Other errors (CUDA OOM, real bugs) propagate.
 
 ## Precision-landing safety (the write path — treat as critical)
@@ -100,7 +105,8 @@ hardware.
 ## References
 
 - `packages/jetson_yolo_gcs/AGENTS.md` (conventions + failure policy)
-- `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/{detection,streaming,mavlink,pipeline}.py`
+- `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/{detection,tracking,streaming,mavlink,pipeline}.py`
+- `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/tracking/{base,factory,norfair_backend}.py` (read-only tracker seam)
 - `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/geometry/ned.py` (pure NED projection)
 - `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/mavlink/{pose,timesync}.py` (injectable seams)
 - `docs/specs/initiative-d-perception.md` (author from TEMPLATE before Track C work)

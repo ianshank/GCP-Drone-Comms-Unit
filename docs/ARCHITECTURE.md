@@ -261,6 +261,21 @@ validation of the `local_ned` path is still **pending**.
   protocol constants replace magic literals: `_MAV_FRAME_LOCAL_NED = 1`,
   `_LANDING_TARGET_TYPE_LIGHT_BEACON = 0`, `_IDENTITY_QUATERNION_WXYZ` (identity quaternion,
   a tuple so it can't be mutated in place).
+- **Multi-object tracker (`tracking/`, opt-in, read-only).** A `TrackerBase` ABC +
+  `tracker_registry` + `build_tracker` seam mirrors the detector seam; a Norfair backend
+  (BSD-3-Clause, Kalman-SORT; optional `[tracker]` extra, lazily imported) assigns a stable id per
+  object across frames. It runs after detection, gated by `TrackerSettings.enabled` (`TRACKER_*`,
+  default **false**), and its output feeds **only** the `Pipeline.snapshot()` counters
+  (`tracks_active` / `tracks_total` / `dropped_tracks`) — it **never** feeds `_select_target` or the
+  bridge, so `LANDING_TARGET` behavior is byte-identical with tracking on or off (pin-tested). The
+  stable id rides on a local `TrackedDetection` wrapper (the frozen `Detection` is not mutated);
+  distinct-track counting uses an O(1) monotonic high-water mark (no unbounded per-id set); a
+  tracker fault is dropped-and-counted (advisory), never fatal. Behind the CHARTER §3
+  on-board-tracking carve-out (2026-07-16); heavy-dep glue is fake-tested, no `# pragma: no cover`.
+  This backend is the **one bounded exception** to the package's no-numpy invariant: `norfair`
+  requires `numpy.ndarray` points, so `numpy` is imported lazily here as a `[tracker]`-extra-gated
+  transitive dep — the base package, pure math (`geometry/ned.py`), and `meshsa` stay numpy-free
+  (`test_imports_clean.py` locks `numpy`/`norfair` out of `import jetson_yolo_gcs`).
 - **Hardware-free in tests.** As with `msp_source`/`mavlink_source` in `meshsa`, the pymavlink
   connection is always injected (`connection` / `connection_factory`), so every line of
   angle/projection/gating logic — including `recv_match` reads — is exercised by a fake; only

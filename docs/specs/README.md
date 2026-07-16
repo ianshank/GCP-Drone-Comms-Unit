@@ -36,6 +36,7 @@ Reading order for an agent picking up work:
 | [initiative-c-commanding-design.md](initiative-c-commanding-design.md) | Supervised two-way commanding (safety/auth/audit/health) | **Implemented** (code shipped; M2-gate clearance is a maintainer decision — see banner) |
 | [initiative-e-inference.md](initiative-e-inference.md) | AI inference bridge (`meshsa.inference`) — Nemotron NIM + injectable HTTP-transport seam | **Implemented** (MVP + transport seam; Track-B hardening is Definition) |
 | [initiative-scout.md](initiative-scout.md) | Vineyard structural-anomaly scouting: georef fusion + field map + offline survey export (`meshsa.scout`) | **Implemented** (fakes-first; §3 offline-export carve-out ratified 2026-07-05; hardware validation pending) |
+| [initiative-d-perception.md](initiative-d-perception.md) | On-board multi-object tracker (`jetson_yolo_gcs`; read-only, advisory) | **Implemented** (fakes-first; §3 on-board-tracking carve-out ratified 2026-07-16; on-device validation pending) |
 
 ## Specs to author (tracked in the implementation plan)
 
@@ -44,7 +45,7 @@ These are queued by [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md). Auth
 
 | Planned spec | Track | Purpose |
 | ------------ | ----- | ------- |
-| `initiative-d-perception.md` | C | `jetson_yolo_gcs` hardening — **precision-landing safety section is mandatory** |
+| `initiative-d-perception.md` | C | `jetson_yolo_gcs` hardening — **precision-landing safety section is mandatory** (started: on-board tracker section landed 2026-07-16; C.1–C.6 hardening sections still to author) |
 | `m3-richer-tracks.md` | D | SPI/FoV CoT + stable multi-UAS UIDs (M3.2; M3.1 already shipped additively) |
 | `detection-cot-bridge.md` (retro) | 0.2 | Back-fill the shipped detection→CoT MARKER bridge |
 | `observability-metrics.md` (retro) | 0.2 / A.1 | Back-fill metrics export + Grafana golden-signal dashboard |

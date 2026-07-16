@@ -7,6 +7,7 @@ grouped and overridable from the environment or a ``.env`` file:
 * ``CAMERA_*``  — capture source / geometry
 * ``STREAM_*``  — GCS video egress
 * ``MAVLINK_*`` — LANDING_TARGET publisher (disabled by default)
+* ``TRACKER_*`` — multi-object tracker (disabled by default; read-only, advisory)
 * ``APP_*``     — top-level (logging)
 
 The :class:`StreamEncoder` / :class:`CameraType` enums live here (core) so both the
@@ -145,6 +146,34 @@ class PipelineSettings(BaseSettings):
     publish_failure_tolerance: int = Field(default=3, ge=0)
 
 
+class TrackerSettings(BaseSettings):
+    """Multi-object tracker (Norfair) config. Disabled by default; read-only and advisory.
+
+    When enabled, the tracker assigns a stable id to each detection across frames and the
+    pipeline surfaces track-continuity counters in its health snapshot. It **never** feeds
+    ``LANDING_TARGET`` target selection (the safety write path) — see
+    ``docs/specs/initiative-d-perception.md`` (tracking section).
+    """
+
+    model_config = SettingsConfigDict(env_prefix="TRACKER_", env_file=_ENV_FILE, extra="ignore")
+
+    #: Master gate. Off => the tracker is never built and behaviour is byte-identical to a
+    #: build without tracking (snapshot track counters stay 0).
+    enabled: bool = False
+    #: Registry key of the tracker backend.
+    backend: str = "norfair"
+    #: Norfair distance function. The built-in ``"euclidean"`` compares bbox-centre points in
+    #: **raw pixel** coordinates (no normalisation).
+    distance_function: str = "euclidean"
+    #: Max association distance, in **pixels**, for the euclidean distance (Norfair's own
+    #: quick-start uses 20). Required by Norfair (it has no upstream default).
+    distance_threshold: float = Field(default=20.0, gt=0.0)
+    #: Frames a track survives without a match before it is dropped (Norfair default 15).
+    hit_counter_max: int = Field(default=15, gt=0)
+    #: Frames before a tentative track is confirmed and assigned a stable id.
+    initialization_delay: int = Field(default=3, ge=0)
+
+
 class Settings(BaseSettings):
     """Top-level settings composing every domain (each reads its own env prefix)."""
 
@@ -157,6 +186,7 @@ class Settings(BaseSettings):
     stream: StreamSettings = Field(default_factory=StreamSettings)
     mavlink: MavlinkSettings = Field(default_factory=MavlinkSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
+    tracker: TrackerSettings = Field(default_factory=TrackerSettings)
 
 
 def get_settings() -> Settings:
