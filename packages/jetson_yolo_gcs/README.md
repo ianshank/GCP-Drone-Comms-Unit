@@ -2,7 +2,7 @@
 
 On-board perception for a Jetson edge node: **YOLO/Hailo object detection → video
 stream to a Ground Control Station (QGroundControl) → opt-in MAVLink `LANDING_TARGET`**
-precision-landing guidance.
+precision-landing guidance, with an optional read-only **multi-object tracker**.
 
 This package is part of the
 [GCP-Drone-Comms-Unit](https://github.com/ianshank/GCP-Drone-Comms-Unit) monorepo
@@ -16,12 +16,13 @@ logging, a `Clock` Protocol, an open/closed `Registry`, and an injectable
 
 | Concern | How |
 |---|---|
-| Config | `pydantic-settings` v2, per-domain env prefixes (`YOLO_`, `CAMERA_`, `STREAM_`, `MAVLINK_`); no hardcoded values |
+| Config | `pydantic-settings` v2, per-domain env prefixes (`YOLO_`, `CAMERA_`, `STREAM_`, `MAVLINK_`, `TRACKER_`); no hardcoded values |
 | Detection backends | `DetectorBase` ABC + a registry; backend auto-selected by model extension (`.pt`/`.engine`/`.onnx` → Ultralytics, `.hef` → Hailo stub) |
+| Tracking | `TrackerBase` ABC + a registry; Norfair Kalman-SORT backend (opt-in `[tracker]` extra). **Read-only/advisory, off by default** — feeds only health-snapshot counters, never `LANDING_TARGET` selection |
 | Camera / streaming | Pure GStreamer pipeline builders (USB/CSI/RTSP capture; `x264` CPU vs `nvv4l2` HW encode) behind injectable I/O seams |
 | MAVLink | `pymavlink` `LANDING_TARGET` publisher — **advisory, disabled by default**; never arms or flies; `frame` selects `body_frd` (default) or opt-in PX4 `local_ned` |
-| Testing | All hardware (GPU, camera, autopilot) is injected and faked; unit suite runs on a stock runner at ≥90% coverage |
-| Import safety | `import jetson_yolo_gcs` pulls no heavy/hardware deps; ultralytics/opencv/pymavlink load lazily inside factories |
+| Testing | All hardware (GPU, camera, autopilot) and the tracker's heavy deps are injected and faked; unit suite runs on a stock runner at ≥96% coverage |
+| Import safety | `import jetson_yolo_gcs` pulls no heavy/hardware deps; ultralytics/opencv/pymavlink/norfair/numpy load lazily inside factories |
 
 ## First run
 
@@ -37,7 +38,28 @@ For on-device use, add the runtime extras you need:
 
 ```bash
 pip install -e ".[ultralytics,camera,mavlink]"   # YOLO + OpenCV/GStreamer + pymavlink
+pip install -e ".[tracker]"                       # + Norfair multi-object tracker (numpy<2)
 ```
+
+## Multi-object tracker (opt-in, read-only)
+`TrackerSettings` (env `TRACKER_*`, disabled by default) enables a
+[Norfair](https://github.com/tryolabs/norfair) Kalman-SORT tracker that assigns a stable id to
+each detected object across frames. It runs after detection in the pipeline and its output feeds
+**only** the health snapshot — `tracks_active`, `tracks_total`, `dropped_tracks` — so one physical
+object is one stable id rather than per-frame churn.
+
+- **Advisory / read-only.** It **never** influences `LANDING_TARGET` target selection (which stays
+  highest-confidence, byte-identical with tracking on or off — pin-tested) and issues no vehicle
+  writes. A tracker fault is dropped-and-counted, never fatal. Behind the
+  [`docs/CHARTER.md`](../../docs/CHARTER.md) §3 on-board-tracking carve-out.
+- **Registry seam.** Add a backend via `@tracker_registry.register("name")` (implement
+  `TrackerBase`) — never by editing the pipeline. The stable id rides on a `TrackedDetection`
+  wrapper; the frozen `Detection` is not mutated.
+- **Config (no magic numbers).** `TRACKER_ENABLED` (default `false`), `TRACKER_BACKEND`
+  (`norfair`), `TRACKER_DISTANCE_FUNCTION` (`euclidean`), `TRACKER_DISTANCE_THRESHOLD` (px,
+  default `20`), `TRACKER_HIT_COUNTER_MAX` (`15`), `TRACKER_INITIALIZATION_DELAY` (`3`).
+- **Import-light.** `norfair`/`numpy` are pulled only by the `[tracker]` extra and imported lazily
+  inside the backend, so `import jetson_yolo_gcs` stays clean (locked by `test_imports_clean.py`).
 
 ## LANDING_TARGET frame: `body_frd` (default) vs opt-in `local_ned`
 `MavlinkSettings.frame` (env `MAVLINK_FRAME`, default `"body_frd"`) selects the wire shape of

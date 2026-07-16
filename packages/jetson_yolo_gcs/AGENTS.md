@@ -24,9 +24,12 @@ GStreamer video to a GCS → opt-in MAVLink `LANDING_TARGET`). Read the repo-roo
 2. **DI via Protocols/seams.** `CameraSource`, `StreamWriter`, `DetectorBase`, the injectable
    pymavlink connection, and injectable `clock`/`sleep` mean unit tests use fakes and need **no**
    GPU/camera/autopilot. Only real device/encoder/model construction is `# pragma: no cover`.
-3. **Lazy hardware imports.** `ultralytics`/`cv2`/`pymavlink`/`hailo_platform` import *inside*
-   factories, never at module top, so `import jetson_yolo_gcs` stays light
-   (locked by `tests/unit/test_imports_clean.py`).
+3. **Lazy hardware imports.** `ultralytics`/`cv2`/`pymavlink`/`hailo_platform`/`norfair`/`numpy`
+   import *inside* factories, never at module top, so `import jetson_yolo_gcs` stays light
+   (locked by `tests/unit/test_imports_clean.py`). **`numpy` is confined to the optional Norfair
+   tracker backend** (`tracking/norfair_backend.py`) as a lazy, `[tracker]`-extra-gated transitive
+   dep of `norfair`; it is never in `[project.dependencies]` and never used in the base package or
+   the pure math (`geometry/ned.py` stays no-numpy). numpy anywhere else is a regression.
 4. **Add a detector backend via the registry**, never by editing the factory: implement
    `DetectorBase`, register a factory with `@detector_registry.register("name")`, and add the
    file extension to `_EXTENSION_BACKENDS` in `detection/factory.py`.

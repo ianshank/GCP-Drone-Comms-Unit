@@ -27,14 +27,17 @@ C4Container
   Container(cli, "cli", "Python", "Entry point: --health-check, export-model, run")
   Container(pipeline, "pipeline", "Python", "Orchestrator: camera → detector → stream + mavlink")
   Container(detection, "detection", "Python", "DetectorBase + registry + ultralytics/hailo backends")
+  Container(tracking, "tracking", "Python", "TrackerBase + registry + Norfair backend (opt-in, read-only)")
   Container(streaming, "streaming", "Python", "Camera source + GStreamer pipeline builders")
   Container(mavlink, "mavlink", "Python", "LANDING_TARGET publisher (pymavlink)")
   Container(core, "core", "Python", "config (pydantic-settings), logging, clock, registry")
   Rel(cli, pipeline, "builds & runs")
   Rel(pipeline, detection, "detect(frame)")
+  Rel(pipeline, tracking, "update(result) → track counters")
   Rel(pipeline, streaming, "read_frame / write")
   Rel(pipeline, mavlink, "publish(detection)")
   Rel(detection, core, "config / registry")
+  Rel(tracking, core, "config / registry")
   Rel(streaming, core, "config")
   Rel(mavlink, core, "config / clock")
 ```
@@ -56,6 +59,22 @@ C4Component
   Rel(hailo, base, "implements")
 ```
 
+## Level 3 — Components (tracking, opt-in)
+
+```mermaid
+C4Component
+  title Components — multi-object tracker (read-only, off by default)
+  Component(tfactory, "build_tracker", "func", "Builds the configured backend via registry")
+  Component(tregistry, "tracker_registry", "Registry[TrackerBase]", "Open/closed backend registration")
+  Component(tbase, "TrackerBase", "ABC", "update(result) -> tuple[TrackedDetection, ...]; close()")
+  Component(norfair, "NorfairTracker", "backend", "Norfair Kalman-SORT (lazy norfair/numpy); injectable seams")
+  Component(snap, "Pipeline.snapshot()", "counters", "tracks_active / tracks_total / dropped_tracks")
+  Rel(tfactory, tregistry, "create(name)")
+  Rel(tregistry, norfair, "registers")
+  Rel(norfair, tbase, "implements")
+  Rel(norfair, snap, "confirmed tracks → counters (read-only)")
+```
+
 ## Level 4 — Code / key seams
 
 - **Dependency-injection seams (Protocols):** `core.clock.Clock`,
@@ -66,5 +85,12 @@ C4Component
   `streaming.gstreamer.build_stream_pipeline`, `mavlink.bridge.compute_angles`,
   `utils.fps.FpsCounter`, `utils.jetson.parse_tegrastats`, and `cli.health_report`.
 - **Config:** `core.config.Settings` composes `YoloSettings` / `CameraSettings` /
-  `StreamSettings` / `MavlinkSettings`, each a `pydantic-settings` `BaseSettings` with its own
-  env prefix. `MavlinkSettings.enable_landing_target` defaults to **false**.
+  `StreamSettings` / `MavlinkSettings` / `TrackerSettings`, each a `pydantic-settings`
+  `BaseSettings` with its own env prefix. `MavlinkSettings.enable_landing_target` and
+  `TrackerSettings.enabled` both default to **false**.
+- **Tracker seam (read-only, advisory):** `tracking.base.TrackerBase` (ABC) +
+  `tracking.factory.tracker_registry` mirror the detector seam; `NorfairTracker` isolates the real
+  `norfair`/`numpy` construction behind two injectable seams (`tracker`, `to_detections`) so the id
+  map-back is fake-tested with no heavy import (removing the need for `# pragma: no cover`). The
+  tracker never feeds `_select_target`/the bridge; `Pipeline` counts distinct tracks with an O(1)
+  monotonic high-water mark.

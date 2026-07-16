@@ -46,9 +46,14 @@ argument-hint: "Branch diff and verification gates to run"
    - Quality/lint/type errors found (if any), per package.
    - Recommended documentation updates (CHANGELOG.md, README.md, C4.md, ARCHITECTURE.md, NEXTSTEPS.md).
 5. **Verify zero hardcoded values**: Confirm all operational values are config fields with default values and env-var bindings.
-6. **No-numpy invariant**: if the diff touches `packages/jetson_yolo_gcs`, confirm no new `numpy`
-   import was introduced (`tests/unit/test_imports_clean.py` locks this, but check the diff
-   directly too — a numpy dependency in this package is always a regression, not a judgment call).
+6. **No-numpy invariant (bounded exception: the tracker backend)**: the base package and all pure
+   logic (e.g. `geometry/ned.py`) stay numpy-free. The **sole** permitted numpy use is inside the
+   optional Norfair tracker backend (`tracking/norfair_backend.py`), where numpy is a lazy,
+   `[tracker]`-extra-gated **transitive** dep of `norfair` (never declared in `dependencies`, never
+   imported at package import — `tests/unit/test_imports_clean.py` locks both `numpy` and
+   `norfair` out of `import jetson_yolo_gcs`). Any numpy import **outside** that backend, or any
+   `numpy` added to `[project.dependencies]`, is a regression, not a judgment call. Confirm the
+   diff introduces no such import and that base `import jetson_yolo_gcs` stays clean.
 
 ## References
 
