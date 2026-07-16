@@ -22,6 +22,7 @@ from .detection.base import Detection, DetectionResult, DetectorBase
 from .mavlink.bridge import LandingTargetBridge
 from .streaming.camera import CameraSource
 from .streaming.gstreamer import StreamWriter
+from .tracking.base import TrackerBase
 from .utils.fps import FpsCounter
 from .utils.log_throttle import should_log_throttled
 
@@ -58,6 +59,7 @@ class Pipeline:
         detector: DetectorBase,
         stream: StreamWriter | None = None,
         bridge: LandingTargetBridge | None = None,
+        tracker: TrackerBase | None = None,
         target_classes: frozenset[str] | None = None,
         fps: FpsCounter | None = None,
         clock: Clock | None = None,
@@ -83,6 +85,7 @@ class Pipeline:
         self._detector = detector
         self._stream = stream
         self._bridge = bridge
+        self._tracker = tracker
         self._target_classes = target_classes
         self._clock: Clock = clock or MonotonicClock()
         self._fps = fps or FpsCounter(clock=self._clock)
@@ -114,6 +117,15 @@ class Pipeline:
         #: Drives liveness — ``fps`` alone cannot detect a stall (it only ticks on
         #: successful frames, so it reports the last good rate during an outage).
         self._last_frame_t: float | None = None
+
+        #: Confirmed tracks in the most recent frame (0 when tracking is disabled).
+        self.tracks_active = 0
+        #: Distinct track ids ever seen (monotonic; 0 when tracking is disabled).
+        self.tracks_total = 0
+        #: Frames whose tracker update raised recoverably (advisory; never fatal).
+        self.dropped_tracks = 0
+        #: Set of distinct track ids seen so far (backs :attr:`tracks_total`).
+        self._seen_track_ids: set[int] = set()
 
     @property
     def fps(self) -> float:
@@ -154,6 +166,9 @@ class Pipeline:
             "landing_target_cadence_violations": self.landing_target_cadence_violations,
             "landing_target_publish_failures": self.landing_target_publish_failures,
             "landing_target_heartbeat_fresh": heartbeat_fresh,
+            "tracks_active": self.tracks_active,
+            "tracks_total": self.tracks_total,
+            "dropped_tracks": self.dropped_tracks,
             "last_frame_age_s": None if last_age is None else round(last_age, 3),
             "live": live,
         }
@@ -186,6 +201,11 @@ class Pipeline:
             if _should_log_drop(self.dropped_detections, self._drop_log_every):
                 _log.warning("detection failed; dropping frame", dropped=self.dropped_detections)
             return True
+
+        # Tracking is advisory and read-only: it runs independent of the stream/bridge and
+        # feeds ONLY the health snapshot counters. It never influences target selection.
+        if self._tracker is not None:
+            self._update_tracks(result)
 
         if self._stream is not None:
             try:
@@ -267,6 +287,27 @@ class Pipeline:
                     )
         self._last_publish_t = now
 
+    def _update_tracks(self, result: DetectionResult) -> None:
+        """Run the tracker and update read-only track-continuity counters.
+
+        A tracker fault is **counted and swallowed** (drop-and-count, like a recoverable
+        detection failure) — it never crashes the camera/stream loop and never touches
+        target selection. ``tracks_active`` reflects the last successful update; on a fault
+        it is left unchanged and ``dropped_tracks`` is incremented.
+        """
+        assert self._tracker is not None  # guarded by the caller
+        try:
+            tracked = self._tracker.update(result)
+        except Exception:  # noqa: BLE001 - advisory read-only path; a fault is counted, never fatal
+            self.dropped_tracks += 1
+            if _should_log_drop(self.dropped_tracks, self._drop_log_every):
+                _log.warning("tracker update failed; dropping", dropped=self.dropped_tracks)
+            return
+        self.tracks_active = len(tracked)
+        for t in tracked:
+            self._seen_track_ids.add(t.track_id)
+        self.tracks_total = len(self._seen_track_ids)
+
     def _select_target(self, result: DetectionResult) -> Detection | None:
         if self._target_classes is None:
             return result.best()
@@ -307,8 +348,8 @@ class Pipeline:
         return processed
 
     def close(self) -> None:
-        """Release camera, detector, stream, and bridge resources (best-effort, idempotent)."""
-        for closer in (self._camera, self._detector, self._stream, self._bridge):
+        """Release camera, detector, stream, bridge, and tracker resources (best-effort)."""
+        for closer in (self._camera, self._detector, self._stream, self._bridge, self._tracker):
             if closer is None:
                 continue
             try:
@@ -337,11 +378,17 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
     if settings.mavlink.enable_landing_target:
         bridge = LandingTargetBridge(settings.mavlink, log_every=settings.pipeline.drop_log_every)
         bridge.start()
+    tracker: TrackerBase | None = None
+    if settings.tracker.enabled:
+        from .tracking.factory import build_tracker
+
+        tracker = build_tracker(settings.tracker)
     return Pipeline(
         camera=camera,
         detector=detector,
         stream=stream,
         bridge=bridge,
+        tracker=tracker,
         target_classes=settings.mavlink.target_class_set,
         liveness_timeout_s=settings.pipeline.liveness_timeout_s,
         drop_log_every=settings.pipeline.drop_log_every,

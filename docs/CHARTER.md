@@ -117,6 +117,24 @@ TAK server.
 > This remains a bounded offline planning aid, not a general GCS or an autonomy platform; every
 > other §3 non-goal still stands.
 
+> **Carve-out (deliberate amendment — ratified by the maintainer on 2026-07-16 per §6):
+> on-board multi-object tracking (read-only, advisory).** The `jetson_yolo_gcs` package MAY run an
+> on-board **multi-object tracker** that assigns a stable id to detected objects across frames.
+> This extends the 2026-06-20 perception carve-out; it adds **no** vehicle write path. Constraints
+> (all required):
+> - **Read-only and advisory; off by default.** The tracker is gated behind `TrackerSettings.enabled`
+>   (default **false**) and its output feeds **only** the pipeline health snapshot
+>   (`tracks_active`/`tracks_total`). It **never** influences `LANDING_TARGET` target selection or
+>   any command, and issues no MAVLink writes. A tracker fault is dropped-and-counted, never fatal.
+> - **Same invariants as the rest of the repo.** Added behind a registry/`Protocol` seam
+>   (`tracker_registry`, `TrackerBase`) with no pipeline dispatch edits; the stable id rides on a
+>   local `TrackedDetection` wrapper (the frozen `Detection` is not mutated); every operational value
+>   is a `TRACKER_*` config field with a default; unit tests use fakes and need no `norfair`/GPU;
+>   gates stay green at the ≥96% floor; no runtime dependency on `meshsa`.
+>
+> This does **not** ratify autonomous target-following, terminal guidance, or feeding tracks into the
+> write path — those remain out of scope pending a separate amendment. Every other §3 non-goal stands.
+
 ## 4. Invariants (must not drift — enforce in review)
 1. **Open/closed extensibility.** New mediums and wire formats are added through
    `transport_registry` / `codec_registry`; the router, node, and models are not edited for

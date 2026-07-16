@@ -40,6 +40,12 @@ camera = [
 mavlink = [
     "pymavlink>=2.4",
 ]
+# Multi-object tracker (BSD-3-Clause). Note: norfair pins numpy<2.0.0 transitively
+# (also pulls scipy/filterpy/rich) — verify compatibility with the [ultralytics] extra
+# before co-installing on a device image.
+tracker = [
+    "norfair>=2.3,<3",
+]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
@@ -102,6 +108,8 @@ module = [
     "hailo_platform.*",
     "pymavlink.*",
     "cv2.*",
+    "norfair.*",
+    "numpy.*",
 ]
 ignore_missing_imports = true
 

@@ -83,6 +83,16 @@
       in `<contact>`/`<remarks>`). `meshsa.cv.geo` does the pure pixel→ground projection. Config:
       `flightctl/configs/jetson_gateway.yolo.json`. Hardware-free + fully tested. **Remaining:**
       the DeepStream/YOLO11 device pieces (install, FP16 engine, pyds probe) — later phases.
+- [x] **On-board multi-object tracker (read-only, advisory):** new `tracking/` seam
+      (`TrackerBase` + `tracker_registry` + `build_tracker`) with a Norfair backend
+      (BSD-3-Clause, Kalman-SORT) assigns a stable id across frames. Runs after detection,
+      **off by default** (`TRACKER_ENABLED=false`); output feeds **only** the health snapshot
+      (`tracks_active`/`tracks_total`/`dropped_tracks`) and **never** touches `LANDING_TARGET`
+      selection (regression-pinned). Id rides on a local `TrackedDetection` (frozen `Detection`
+      unchanged); a tracker fault is dropped-and-counted, not fatal. Optional `[tracker]` extra,
+      lazy import. CHARTER §6 carve-out (2026-07-16); spec
+      [docs/specs/initiative-d-perception.md](specs/initiative-d-perception.md). **Remaining:**
+      on-device validation with a real feed + confirm `numpy<2` co-installs with the inference extra.
 - [ ] **Real Hailo-8 `.hef` inference** (preferred offload; TensorRT GPU is the fallback).
       `.pt`→ONNX→`.hef` is built on an **x86 Ubuntu host only** (Hailo DFC is not ARM); the
       `.hef` is an offline artifact. Add a `[hailo]` extra + model-prep note.

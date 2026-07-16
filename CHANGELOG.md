@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **On-board multi-object tracker (`jetson_yolo_gcs`; read-only, advisory).** A new `tracking/`
+  seam (`TrackerBase` ABC + `tracker_registry` + `build_tracker`) with a Norfair backend
+  (BSD-3-Clause; Kalman-SORT) assigns a stable id to detected objects across frames. It runs in the
+  pipeline after detection, **off by default** (`TRACKER_ENABLED=false`), and its output feeds
+  **only** the health snapshot (`tracks_active`/`tracks_total`/`dropped_tracks`) — it never
+  influences `LANDING_TARGET` target selection (pinned by a regression test) and issues no vehicle
+  writes. The stable id rides on a local `TrackedDetection` wrapper; the frozen `Detection` is
+  unchanged. A tracker fault is dropped-and-counted (advisory), never fatal. Norfair is an optional
+  `[tracker]` extra with a lazy import (package import stays light; `numpy<2` transitive pin noted).
+  Behind CHARTER §6 carve-out (ratified 2026-07-16); design in
+  [docs/specs/initiative-d-perception.md](docs/specs/initiative-d-perception.md). No wire/schema
+  change. Coverage 99.3% (≥96% floor).
+
 ### Security
 - **Fail-closed `/healthz`+`/metrics` bind (M2).** The observability server was the only aiohttp
   surface that did not route through `netauth.validate_bind` — its host is operator-overridable

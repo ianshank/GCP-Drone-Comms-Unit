@@ -18,9 +18,9 @@ GStreamer video to a GCS → opt-in MAVLink `LANDING_TARGET`). Read the repo-roo
 ## Conventions (keep these invariant)
 
 1. **No magic numbers.** Every environment-varying value is a `*Settings` field with an
-   explicit default and an env prefix: `YOLO_`, `CAMERA_`, `STREAM_`, `MAVLINK_`, `PIPELINE_`,
-   `APP_`. Fixed protocol/codec constants (RTP payload type, encoder tuning) are named module
-   constants, **not** config. Add new operator-tunable values to config, not as literals.
+   explicit default and an env prefix: `YOLO_`, `CAMERA_`, `STREAM_`, `MAVLINK_`, `TRACKER_`,
+   `PIPELINE_`, `APP_`. Fixed protocol/codec constants (RTP payload type, encoder tuning) are
+   named module constants, **not** config. Add new operator-tunable values to config, not as literals.
 2. **DI via Protocols/seams.** `CameraSource`, `StreamWriter`, `DetectorBase`, the injectable
    pymavlink connection, and injectable `clock`/`sleep` mean unit tests use fakes and need **no**
    GPU/camera/autopilot. Only real device/encoder/model construction is `# pragma: no cover`.
@@ -40,6 +40,10 @@ GStreamer video to a GCS → opt-in MAVLink `LANDING_TARGET`). Read the repo-roo
   (`dropped_detections`, rate-limited log) and the loop continues. Any *other* error (CUDA OOM,
   a real bug) **propagates** so it surfaces.
 - **Stream egress** — best-effort: a write failure is dropped-and-counted (`dropped_stream`).
+- **Tracking** — advisory/read-only: an `update()` fault is dropped-and-counted (`dropped_tracks`)
+  and the loop continues. The tracker feeds only the health snapshot (`tracks_active`/`tracks_total`)
+  and **never** influences `LANDING_TARGET` target selection. Add a tracker backend via
+  `@tracker_registry.register("name")` (like detector backends), never by editing the pipeline.
 - **`LANDING_TARGET` publish** — **fails loud**: exceptions propagate and stop the run. This is
   the safety write path; silently never-publishing must never look healthy.
 
