@@ -124,7 +124,7 @@ TAK server.
 > (all required):
 > - **Read-only and advisory; off by default.** The tracker is gated behind `TrackerSettings.enabled`
 >   (default **false**) and its output feeds **only** the pipeline health snapshot
->   (`tracks_active`/`tracks_total`). It **never** influences `LANDING_TARGET` target selection or
+>   (`tracks_active`/`tracks_total`/`dropped_tracks`). It **never** influences `LANDING_TARGET` target selection or
 >   any command, and issues no MAVLink writes. A tracker fault is dropped-and-counted, never fatal.
 > - **Same invariants as the rest of the repo.** Added behind a registry/`Protocol` seam
 >   (`tracker_registry`, `TrackerBase`) with no pipeline dispatch edits; the stable id rides on a
