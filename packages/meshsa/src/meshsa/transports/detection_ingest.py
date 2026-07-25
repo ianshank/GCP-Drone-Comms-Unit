@@ -18,6 +18,7 @@ from typing import Any
 
 import structlog
 
+from ..netauth import is_loopback, validate_bind
 from ..registry import transport_registry
 from .base import AbstractTransport
 
@@ -48,10 +49,20 @@ class DetectionIngestTransport(AbstractTransport):
         host: str = "127.0.0.1",
         port: int = 8099,
         queue_maxsize: int = 1000,
+        token: str | None = None,
         **_options: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)
+        # Fail closed at wiring time (AUDIT_M2_AUTH surface #10): a non-loopback bind
+        # without a token previously slipped through silently on operator override.
+        validate_bind(
+            host,
+            token,
+            service="the detection ingest transport",
+            remedy="set a 'token' in the transport options, or bind to 127.0.0.1",
+        )
         self._host = host
+        self._token = token
         self._port = int(port)
         self._endpoint: asyncio.DatagramTransport | None = None
         #: Actual bound UDP port (resolved after start; useful when port=0 picks one).
@@ -67,6 +78,16 @@ class DetectionIngestTransport(AbstractTransport):
         self._endpoint = endpoint
         sock = endpoint.get_extra_info("socket")
         self.bound_port = sock.getsockname()[1] if sock is not None else self._port
+        if not is_loopback(self._host):
+            # Plain UDP has nowhere to present the token, so until the
+            # TransportAuthPolicy signing seam gains an implementation the token only
+            # gates the *bind* decision — be loud that payloads are unauthenticated.
+            _log.warning(
+                "detection ingest bound non-loopback; datagrams are not authenticated "
+                "(token gates the bind only until datagram signing lands)",
+                host=self._host,
+                port=self.bound_port,
+            )
         _log.info("detection ingest listening", host=self._host, port=self.bound_port)
 
     async def stop(self) -> None:

@@ -19,7 +19,7 @@ logging, a `Clock` Protocol, an open/closed `Registry`, and an injectable
 | Config | `pydantic-settings` v2, per-domain env prefixes (`YOLO_`, `CAMERA_`, `STREAM_`, `MAVLINK_`, `TRACKER_`); no hardcoded values |
 | Detection backends | `DetectorBase` ABC + a registry; backend auto-selected by model extension (`.pt`/`.engine`/`.onnx` → Ultralytics, `.hef` → Hailo stub) |
 | Tracking | `TrackerBase` ABC + a registry; Norfair Kalman-SORT backend (opt-in `[tracker]` extra). **Read-only/advisory, off by default** — feeds only health-snapshot counters, never `LANDING_TARGET` selection |
-| Camera / streaming | Pure GStreamer pipeline builders (USB/CSI/RTSP capture; `x264` CPU vs `nvv4l2` HW encode) behind injectable I/O seams |
+| Camera / streaming | Pure GStreamer pipeline builders (USB/CSI/RTSP capture; `x264` CPU vs `nvv4l2` HW encode) behind injectable I/O seams. Egress is **opt-in, off by default** (`STREAM_ENABLED=true`) — RTP carries no auth, so activation is an explicit operator choice and logs a WARNING with the destination |
 | MAVLink | `pymavlink` `LANDING_TARGET` publisher — **advisory, disabled by default**; never arms or flies; `frame` selects `body_frd` (default) or opt-in PX4 `local_ned` |
 | Testing | All hardware (GPU, camera, autopilot) and the tracker's heavy deps are injected and faked; unit suite runs on a stock runner at ≥96% coverage |
 | Import safety | `import jetson_yolo_gcs` pulls no heavy/hardware deps; ultralytics/opencv/pymavlink/norfair/numpy load lazily inside factories |

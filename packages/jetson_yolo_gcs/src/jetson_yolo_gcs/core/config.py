@@ -66,7 +66,11 @@ class CameraSettings(BaseSettings):
 class StreamSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="STREAM_", env_file=_ENV_FILE, extra="ignore")
 
-    enabled: bool = True
+    #: Master gate for GCS video egress. RTP/UDP carries **no authentication or encryption**,
+    #: so plaintext egress must be explicit operator opt-in (``STREAM_ENABLED=true``) — off by
+    #: default per ``docs/AUDIT_M2_AUTH.md`` surface #14. Activation emits one WARNING naming
+    #: the destination host/port.
+    enabled: bool = False
     host: str = "127.0.0.1"
     port: int = Field(default=5600, gt=0, le=65535)
     encoder: StreamEncoder = StreamEncoder.X264

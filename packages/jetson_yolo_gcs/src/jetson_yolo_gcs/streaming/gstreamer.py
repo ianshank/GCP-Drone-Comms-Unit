@@ -6,14 +6,22 @@ hardware) and renders an ``appsrc -> encode -> RTP/H.264 -> udpsink`` pipeline f
 GCS (QGroundControl) to receive. The real ``cv2.VideoWriter`` egress
 (:class:`GStreamerWriter`) is constructed lazily and ``# pragma: no cover``; the
 pipeline plumbs frames through the :class:`StreamWriter` seam so tests inject a fake.
+
+:func:`create_stream_writer` is the single activation gate: streaming is **opt-in**
+(``STREAM_ENABLED=true``; unauthenticated RTP egress, ``docs/AUDIT_M2_AUTH.md`` #14),
+so it returns ``None`` when disabled and logs one loud WARNING when enabled.
 """
 
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+import structlog
+
 from ..core.config import StreamEncoder, StreamSettings
 from ..core.errors import StreamError
+
+_log = structlog.get_logger("jetson_yolo_gcs.streaming.gstreamer")
 
 #: Fixed RTP/H.264 payload constants (protocol-defined, not operator-tunable):
 #: 96 is the standard dynamic payload type; config-interval=1 re-sends SPS/PPS each IDR.
@@ -63,6 +71,45 @@ def build_stream_pipeline(settings: StreamSettings) -> str:
         f"rtph264pay config-interval={_RTP_CONFIG_INTERVAL} pt={_RTP_PAYLOAD_TYPE} ! "
         f"udpsink host={settings.host} port={settings.port}"
     )
+
+
+class StreamWriterFactory(Protocol):
+    """Constructor seam for the real egress writer (tests inject a fake)."""
+
+    def __call__(
+        self, settings: StreamSettings, *, width: int, height: int, fps: float
+    ) -> StreamWriter:
+        """Build a :class:`StreamWriter` for the given settings and frame geometry."""
+        ...
+
+
+def create_stream_writer(
+    settings: StreamSettings,
+    *,
+    width: int,
+    height: int,
+    fps: float,
+    writer_factory: StreamWriterFactory | None = None,
+) -> StreamWriter | None:
+    """Build the egress writer iff ``settings.enabled``; ``None`` => no stream exists.
+
+    RTP/UDP carries no authentication or encryption, so egress is operator opt-in
+    (``STREAM_ENABLED=true``; ``docs/AUDIT_M2_AUTH.md`` surface #14): the default-off
+    path short-circuits before any pipeline is constructed, and the opt-in path emits
+    exactly one WARNING at activation (never per frame) naming the destination.
+    """
+    if not settings.enabled:
+        return None
+    _log.warning(
+        "unauthenticated plaintext RTP egress enabled by operator config "
+        "(STREAM_ENABLED=true); anyone on the network path can receive this video",
+        host=settings.host,
+        port=settings.port,
+    )
+    factory: StreamWriterFactory = (
+        writer_factory if writer_factory is not None else _default_stream_writer
+    )
+    return factory(settings, width=width, height=height, fps=fps)
 
 
 def _default_stream_writer(

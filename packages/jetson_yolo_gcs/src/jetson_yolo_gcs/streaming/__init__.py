@@ -1,7 +1,7 @@
 """Camera capture and GStreamer egress (pure pipeline builders + injectable I/O)."""
 
 from .camera import CameraSource, Frame, build_capture_pipeline
-from .gstreamer import StreamWriter, build_stream_pipeline
+from .gstreamer import StreamWriter, build_stream_pipeline, create_stream_writer
 
 __all__ = [
     "CameraSource",
@@ -9,4 +9,5 @@ __all__ = [
     "StreamWriter",
     "build_capture_pipeline",
     "build_stream_pipeline",
+    "create_stream_writer",
 ]

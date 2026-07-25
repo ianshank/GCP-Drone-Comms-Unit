@@ -67,8 +67,18 @@ def test_validate_bind_loopback_ok_without_token():
 
 
 def test_validate_bind_exposed_without_token_fails_closed():
-    with pytest.raises(SystemExit, match="without MESHSA_CMD_TOKEN"):
+    with pytest.raises(SystemExit, match="refusing to bind the command service") as excinfo:
         run_commander.validate_bind("0.0.0.0", None)
+    # The operator-facing message must name the env var that fixes it.
+    assert run_commander.ENV_TOKEN in str(excinfo.value)
+
+
+def test_validate_bind_exposed_with_empty_token_fails_closed():
+    # Regression: the historical local guard used `token is None`, so an empty
+    # MESHSA_CMD_TOKEN slipped through when validate_bind was called directly.
+    # Delegating to meshsa.netauth.validate_bind refuses it like every other surface.
+    with pytest.raises(SystemExit, match="refusing to bind the command service"):
+        run_commander.validate_bind("0.0.0.0", "")
 
 
 def test_validate_bind_exposed_with_token_ok():

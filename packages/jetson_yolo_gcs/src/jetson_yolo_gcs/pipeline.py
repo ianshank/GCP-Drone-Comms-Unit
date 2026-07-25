@@ -373,18 +373,18 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
     """Wire a :class:`Pipeline` from settings using real backends/devices."""
     from .detection.factory import build_detector
     from .streaming.camera import _default_camera_factory
-    from .streaming.gstreamer import _default_stream_writer
+    from .streaming.gstreamer import create_stream_writer
 
     camera = _default_camera_factory(settings.camera)()
     detector = build_detector(settings.yolo)
-    stream: StreamWriter | None = None
-    if settings.stream.enabled:
-        stream = _default_stream_writer(
-            settings.stream,
-            width=settings.camera.width,
-            height=settings.camera.height,
-            fps=float(settings.camera.fps),
-        )
+    # Opt-in gate (AUDIT_M2_AUTH #14): ``None`` when disabled => no egress is ever built;
+    # when enabled, ``create_stream_writer`` logs the one loud activation WARNING.
+    stream: StreamWriter | None = create_stream_writer(
+        settings.stream,
+        width=settings.camera.width,
+        height=settings.camera.height,
+        fps=float(settings.camera.fps),
+    )
     bridge: LandingTargetBridge | None = None
     if settings.mavlink.enable_landing_target:
         bridge = LandingTargetBridge(settings.mavlink, log_every=settings.pipeline.drop_log_every)

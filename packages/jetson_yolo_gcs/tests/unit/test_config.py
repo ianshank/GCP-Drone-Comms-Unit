@@ -10,6 +10,7 @@ from jetson_yolo_gcs.core.config import (
     MavlinkSettings,
     Settings,
     StreamEncoder,
+    StreamSettings,
     YoloSettings,
     get_settings,
 )
@@ -22,6 +23,18 @@ def test_defaults() -> None:
     assert s.stream.encoder is StreamEncoder.X264
     # LANDING_TARGET is off by default per the charter carve-out.
     assert s.mavlink.enable_landing_target is False
+    # Unauthenticated RTP egress is off by default (AUDIT_M2_AUTH surface #14).
+    assert s.stream.enabled is False
+
+
+def test_stream_disabled_by_default() -> None:
+    # RTP carries no auth, so egress must be operator opt-in (AUDIT_M2_AUTH surface #14).
+    assert StreamSettings().enabled is False
+
+
+def test_stream_enabled_env_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STREAM_ENABLED", "true")
+    assert get_settings().stream.enabled is True
 
 
 def test_env_prefixes_override(monkeypatch: pytest.MonkeyPatch) -> None:
