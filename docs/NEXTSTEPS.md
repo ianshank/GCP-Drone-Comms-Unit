@@ -68,8 +68,9 @@
 > support **both ArduPilot and PX4**.
 >
 > ⚠️ **Current safety posture:** `LANDING_TARGET` is advisory and **off by default**
-> (`MAVLINK_ENABLE_LANDING_TARGET=false`). Today there is **no autopilot-heartbeat gate and
-> no cadence floor** — the operator owns that risk until the hardening items below land.
+> (`MAVLINK_ENABLE_LANDING_TARGET=false`). The autopilot-heartbeat gate and cadence floor
+> **have landed** (see the checked publish-gating item below) — when enabled, publishes are
+> suppressed fail-closed without a fresh HEARTBEAT.
 
 - [x] **MVP + hardening** (PR #20): detection factory (ext→backend), pure GStreamer pipeline
       builders, pymavlink `LANDING_TARGET` bridge, DI pipeline with path-specific error policy
@@ -278,16 +279,21 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
       `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions.
 
 ### M2 auth-audit findings (2026-07-08 — see [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md))
-Full evidence-backed enumeration of all 16 network-facing surfaces and their auth/encryption
-posture (the Track 0.2 / E.3 prerequisite before the maintainer rules on the commanding M2 gate).
+Full evidence-backed enumeration of the 16-row surface inventory (12 network-bound; the rest
+serial / non-network / nonexistent) and its auth/encryption posture (the Track 0.2 / E.3
+prerequisite before the maintainer rules on the commanding M2 gate).
 - [x] **[security] `/healthz`+`/metrics` was the one fail-open aiohttp surface** (`health.py`).
       Fixed: `HealthConfig.token` (`MESHSA_HEALTH_TOKEN`) + `validate_healthz_bind` refuse a
       non-loopback bind without a token (validated before `node.start()`), and `/metrics` is
       bearer-gated. Default (loopback, no token) unchanged. Auth branch lives in the testable
       `build_healthz_app` factory (`TestClient`-covered), not the pragma'd socket wiring.
-- [ ] **[security] no bind guard on UDP ingest transports** — `detection_ingest` (UDP 8099) and
-      `mavlink_source` (`udpin:14550`) fail open on a non-loopback `host`/`endpoint` override
-      (no `validate_bind`). Loopback default is the current mitigation.
+- [x] **[security] bind guard on `detection_ingest`** (2026-07-24, `gcp-drone-m2-agent-hardening`):
+      construction now routes through `netauth.validate_bind` — a non-loopback bind without a
+      `token` option fails closed; non-loopback + token binds with a loud unauthenticated-datagram
+      warning. Same change unified the commander's local guard onto `netauth.validate_bind`
+      (empty token now refused) and defaulted Jetson RTP egress off (surface #14).
+- [ ] **[security] no bind guard on `mavlink_source`** (`udpin:14550`) — still fails open on a
+      non-loopback `endpoint` override. Loopback default is the current mitigation.
 - [ ] **[consistency] Meshtastic PSK provisioning is aspirational in code** — `_default_provisioner`
       applies only the LoRa `region` and logs channel/psk/freq as unset (`meshtastic_radio.py:81-86`).
       Either implement PSK provisioning or downgrade the docs/config so operators don't assume an

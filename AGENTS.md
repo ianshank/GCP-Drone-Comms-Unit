@@ -112,3 +112,17 @@ larger tasks:
 - `meshsa-commanding.agent.md` for the supervised command path (safety layer foregrounded).
 - `meshsa-ops.agent.md` for deployment/runbook changes.
 - `meshsa-review.agent.md` for review and risk analysis.
+
+## Subagent roster (collaborate by default)
+
+The M2-hardening roster in [.claude/agents](.claude/agents) delegates
+proactively — do not work a multi-part task solo when a roster mandate fits.
+Each entry declares its relationship to the skills/agents above
+(`tools/validate_workforce.py` enforces the format). Binding rule: the
+**security-reviewer** agent reviews every diff touching `packages/` or any
+transport *before* a PR is opened. Mechanical governance backs this up:
+`.claude/governance.yaml` drives the scope-freeze PreToolUse hook and the
+`bind_guard` CI check (`tools/claude_hooks/`); the Initiative-C command path
+stays frozen while `c_gate_met` is false. Change bundles live under
+`openspec/changes/` (additive to `docs/specs/`, which stays authoritative for
+initiative specs).
