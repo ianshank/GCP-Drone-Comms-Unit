@@ -126,7 +126,10 @@ def _canonical_aliases(tree: ast.Module, symbol: str, canonical_module: str) -> 
         if not isinstance(node, ast.ImportFrom):
             continue
         module = node.module or ""
-        if module != canonical_module and module.rsplit(".", 1)[-1] != tail:
+        is_canonical = (node.level == 0 and module == canonical_module) or (
+            node.level > 0 and module.rsplit(".", 1)[-1] == tail
+        )
+        if not is_canonical:
             continue
         for alias in node.names:
             if alias.name == symbol:
