@@ -32,3 +32,13 @@ python -m pip install --quiet -e "packages/jetson_yolo_gcs[dev]"
 #   ruff check .  |  ruff format --check .  |  python -m mypy src  |  python -m pytest
 echo "meshsa[dev] + jetson_yolo_gcs[dev] toolchains ready."
 echo "Gates (run from the package dir): ruff check . | python -m mypy src | python -m pytest"
+
+# Governance visibility: surface the current M2 gap state from the auth audit so
+# every session starts knowing how many surfaces still fail open. Guarded so a
+# missing audit file (or zero matches, where grep exits 1) never trips
+# `set -euo pipefail`.
+audit_file="$ROOT/docs/AUDIT_M2_AUTH.md"
+if [ -f "$audit_file" ]; then
+  fail_open_count="$(grep -ci 'fails open' "$audit_file" || true)"
+  echo "M2 fail-open surfaces (AUDIT_M2_AUTH.md): ${fail_open_count:-0}"
+fi

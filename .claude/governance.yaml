@@ -1,0 +1,50 @@
+# Initiative-C / M2 governance policy — the single config source for the Claude
+# Code hook tooling under tools/claude_hooks/ (scope_freeze.py, bind_guard.py).
+#
+# All keys are required and unknown keys are rejected by the loader
+# (tools/claude_hooks/governance.py, Pydantic v2 extra="forbid").
+
+# CHARTER §6 M2 gate for Initiative-C commanding. Human-set only: flipping this
+# to true is a maintainer decision recorded against docs/AUDIT_M2_AUTH.md —
+# never set by automation. While false, Write/Edit tool calls targeting
+# command_emission_globs are denied by scope_freeze.py.
+c_gate_met: false
+
+# Environment variable that, when set non-empty, bypasses a scope_freeze denial.
+# Every override is logged to stderr with the path and the denial reason.
+override_env_var: "MESHSA_GOVERNANCE_OVERRIDE"
+
+# The Initiative-C command send path — frozen while c_gate_met is false, per
+# NEXTSTEPS.md: "do not ship a command surface before TLS + auth land".
+command_emission_globs:
+  - "packages/meshsa/src/meshsa/command/**"
+  - "flightctl/run_commander.py"
+
+# Out-of-scope M3/M4 work that must not appear during M2 (currently the M4
+# federation and store-and-forward modules). Additions to this list are a
+# maintainer decision — do not extend it from automation or on inference;
+# propose changes in review instead.
+scope_widening_globs:
+  - "packages/meshsa/src/meshsa/federation/**"
+  - "packages/meshsa/src/meshsa/storeforward/**"
+
+# bind_guard.py policy: any scanned file that creates a network listener must
+# route through the single audited primitive (meshsa.netauth.validate_bind) or
+# be declared as an exception here, with a rationale.
+bind_guard:
+  required_symbol: "validate_bind"
+  canonical_module: "meshsa.netauth"
+  exceptions:
+    - path: "packages/meshsa/src/meshsa/transports/tak.py"
+      rationale: >-
+        Multicast CoT binds all interfaces — inherent to the protocol; tracked
+        as a live gap in docs/AUDIT_M2_AUTH.md (surface #2), not waived.
+    - path: "packages/meshsa/src/meshsa/scout/cli.py"
+      rationale: >-
+        The station serve loop calls web.run_app, but the fail-closed guard runs
+        first inside scout/station/app.py::build_app (which imports and calls the
+        canonical validate_bind before any route is wired). Guarded transitively;
+        the file-granularity linter cannot see across the module boundary.
+    # transports/meshtastic_radio.py is deliberately NOT listed: it opens no
+    # listening network socket (serial/BLE links; its TCP mode is an outbound
+    # TCPInterface client connect, not a bind).
