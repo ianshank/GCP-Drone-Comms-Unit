@@ -24,7 +24,7 @@ from .detection.factory import backend_for_path, build_detector, detector_regist
 from .mavlink.bridge import LandingTargetBridge, compute_angles
 from .pipeline import Pipeline, build_pipeline
 from .streaming.camera import CameraSource, Frame, build_capture_pipeline
-from .streaming.gstreamer import StreamWriter, build_stream_pipeline
+from .streaming.gstreamer import StreamWriter, build_stream_pipeline, create_stream_writer
 from .utils.fps import FpsCounter
 
 __version__ = "0.1.0"
@@ -57,6 +57,7 @@ __all__ = [
     "build_capture_pipeline",
     "StreamWriter",
     "build_stream_pipeline",
+    "create_stream_writer",
     "FpsCounter",
     "__version__",
 ]

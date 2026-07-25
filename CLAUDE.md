@@ -15,3 +15,6 @@ Claude-specific notes:
   narrower playbook.
 - For final verification, run package commands from `packages/meshsa` so mypy
   reads the package-local `pyproject.toml`.
+- Delegate per the subagent roster in [.claude/agents](.claude/agents) (see the
+  AGENTS.md "Subagent roster" section); the scope-freeze hook and
+  `.claude/governance.yaml` gate the Initiative-C command path.

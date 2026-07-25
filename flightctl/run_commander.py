@@ -8,8 +8,9 @@ confirmation gate, ACK/retry/timeout, audit, pre-arm interlock) lives in
 ``run_gateway.py``.
 
 Security posture (matches the §-gate in docs/specs/initiative-c-commanding-design.md):
-  * Binds **loopback by default**; refuses a non-loopback bind without a token
-    (``MESHSA_CMD_TOKEN``) — fail-closed, reusing the ``meshsa.llm`` auth pattern.
+  * Binds **loopback by default**; refuses a non-loopback bind without a non-empty
+    token (``MESHSA_CMD_TOKEN``) — fail-closed via ``meshsa.netauth.validate_bind``,
+    the repo's single audited bind-guard primitive.
   * The command channel can be MAVLink2-signed (``MESHSA_CMD_SIGNING_KEY_FILE``).
   * Default allow-list is whitelist-first (``set_mode``, ``rtl``); arm/disarm and
     ``goto`` are opt-in; force-disarm needs its own flag **and** a force confirm.
@@ -53,7 +54,8 @@ from meshsa.command.errors import (
     CommandNotAllowedError,
     ForceDisarmDisabledError,
 )
-from meshsa.llm.server import authorize, is_loopback
+from meshsa.netauth import authorize
+from meshsa.netauth import validate_bind as _netauth_validate_bind
 from meshsa.protocols import MonotonicClock, SystemClock, UuidFactory
 from pydantic import ValidationError
 
@@ -156,13 +158,26 @@ def build_service(
 
 
 def validate_bind(host: str, token: str | None) -> None:
-    """Fail closed: refuse a non-loopback bind without a token (command surface!)."""
-    if not is_loopback(host) and token is None:
-        raise SystemExit(
-            f"refusing to bind the command service to {host!r} without {ENV_TOKEN} set. "
-            "A command endpoint must never be exposed unauthenticated. Set "
-            f"{ENV_TOKEN} to a strong secret, or bind to 127.0.0.1."
+    """Fail closed: refuse a non-loopback bind without a non-empty token (command surface!).
+
+    Thin adapter over :func:`meshsa.netauth.validate_bind` — the single audited
+    bind-guard primitive — converting its ``ValueError`` into the operator-facing
+    ``SystemExit`` this entry point uses throughout. Delegating (rather than
+    re-implementing the predicate) means an empty token is refused here exactly as it
+    is on every other guarded surface: an empty credential is no credential.
+    """
+    try:
+        _netauth_validate_bind(
+            host,
+            token,
+            service="the command service",
+            remedy=(
+                f"a command endpoint must never be exposed unauthenticated; set {ENV_TOKEN} "
+                "to a strong secret, or bind to 127.0.0.1"
+            ),
         )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def build_app(service: CommandService, token: str | None) -> Any:

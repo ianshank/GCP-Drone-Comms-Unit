@@ -31,7 +31,11 @@ Partially. There is **one shared HTTP auth primitive**, `meshsa/netauth.py`: `is
 **four** aiohttp surfaces — the LLM server, the commander, the scout station, and now the
 `/healthz`+`/metrics` server. Everything else is per-protocol and mostly optional: TAK uses TLS,
 Meshtastic relies on an out-of-band device PSK, and MAVLink2 signing is wired only on the commander
-leg. There is **no transport-wide endpoint-auth framework**.
+leg. There is **no transport-wide endpoint-auth framework**. This branch adds the
+`TransportAuthPolicy` seam (`netauth.py`) — a thin protocol the four HTTP surfaces already satisfy
+via the default policy — so non-HTTP surfaces (detection UDP, MAVLink ingest) have a defined place
+to plug datagram signing later; the seam is **not** an implementation, and the framework gap stands
+until one lands.
 
 ## Surface inventory
 
@@ -42,15 +46,15 @@ leg. There is **no transport-wide endpoint-auth framework**.
 | 3 | `Pacer` — `transports/pacing.py:19` | **Not network-facing** (token-bucket timing helper) | n/a | n/a | n/a | n/a |
 | 4 | `MeshtasticTransport` — `transports/meshtastic_radio.py:89` | Bidirectional (LoRa serial/TCP/BLE) | `connection="serial"`; no IP bind | **Link PSK claimed but NOT applied in code** — `_default_provisioner` sets only `region`, logs channel/psk/freq as device-provisioned (`meshtastic_radio.py:81-86`) | LoRa PHY only; PSK not enforced here | Fails open |
 | 5 | `meshsa-llm` server — `llm/server.py` | Inbound listener | `127.0.0.1:8090` | Bearer `MESHSA_LLM_TOKEN` on `/chat`; default off, loopback; `/`+`/healthz` open | Plaintext HTTP | **Fails closed** (`validate_bind`) |
-| 6 | Commander HTTP — `flightctl/run_commander.py`, `command/config.py` | Inbound listener | `127.0.0.1:8095` | Bearer `MESHSA_CMD_TOKEN` on `/command/*`; default off, loopback. **MAVLink2 signing** optional on the autopilot leg (`MESHSA_CMD_SIGNING_KEY_FILE`) | Plaintext HTTP | **Fails closed** (`SystemExit` on bad bind) |
+| 6 | Commander HTTP — `flightctl/run_commander.py`, `command/config.py` | Inbound listener | `127.0.0.1:8095` | Bearer `MESHSA_CMD_TOKEN` on `/command/*`; default off, loopback. **MAVLink2 signing** optional on the autopilot leg (`MESHSA_CMD_SIGNING_KEY_FILE`) | Plaintext HTTP | **Fails closed** — **NOW** delegates to `netauth.validate_bind` (this branch; its former local guard used `token is None`, so an empty token passed when called directly) |
 | 7 | `/healthz`+`/metrics` — `health.py`, `config.py:122` | Inbound listener | `127.0.0.1:8088`, `enabled=False` | **NOW** bearer `MESHSA_HEALTH_TOKEN` gating `/metrics`; default off, loopback; `/healthz` open | Plaintext HTTP | **NOW fails closed** (`validate_healthz_bind`, this branch) — *was fail-open* |
 | 8 | Nemotron inference — `inference.py` | Outbound client | `base_url` from config; `/chat/completions` | API key `Authorization: Bearer`; call skipped if no key | Depends on `base_url` scheme (https expected) | n/a (outbound) |
 | 9 | Scout station — `scout/station/app.py`, `config.py:162` | Inbound listener | `127.0.0.1:8099`, token `""` | Bearer on data/mutation routes; default off, loopback; `/healthz` open. **XSS-hardened** (`_html.py` JSON-encoded token, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`validate_bind`) |
-| 10 | `DetectionIngestTransport` UDP — `transports/detection_ingest.py:44` | Inbound listener (UDP) | `127.0.0.1:8099` | **None** (any local process may inject) | None / plaintext | Loopback-default; **no bind guard** (fails open on override) |
+| 10 | `DetectionIngestTransport` UDP — `transports/detection_ingest.py` | Inbound listener (UDP) | `127.0.0.1:8099` | **None on datagrams** (any local process may inject); `token` transport option gates the bind | None / plaintext | **NOW fails closed** (`netauth.validate_bind` at construction, this branch) — *was fail-open on override*; non-loopback + token binds with a loud unauthenticated-datagram warning |
 | 11 | `MavlinkSourceTransport` — `transports/mavlink_source.py` | Inbound (receive-only) | `udpin:127.0.0.1:14550` | **None** (no MAVLink2 signing on ingest) | Plaintext | Loopback-default; fails open on override |
 | 12 | `MspSourceTransport` — `transports/msp_source.py` | Inbound (serial poll) | `/dev/ttyACM0` — serial, no network bind | None (physical) | n/a | n/a |
 | 13 | `CrsfSourceTransport` — `transports/crsf_source.py` | Inbound (serial poll) | pyserial — serial, no network bind | None (physical) | n/a | n/a |
-| 14 | Jetson GStreamer egress — `streaming/gstreamer.py`, `core/config.py:65` | Outbound (RTP/UDP) | `127.0.0.1:5600`, `enabled=True` | **None** (RTP has no auth) | None / plaintext RTP/H.264 | Fails open (unauth video egress, on by default) |
+| 14 | Jetson GStreamer egress — `streaming/gstreamer.py`, `core/config.py` | Outbound (RTP/UDP) | `127.0.0.1:5600`, **`enabled=False`** (this branch) | **None** (RTP has no auth) — control is default-off + `STREAM_ENABLED=true` opt-in | None / plaintext RTP/H.264 | **NOW fails closed** (default-off; single WARNING with destination at activation) — *was on by default* |
 | 15 | Jetson `LandingTargetBridge` — `mavlink/bridge.py`, `core/config.py:75` | Bidirectional MAVLink | `udpout:127.0.0.1:14550` | **None** (no signing on this leg) | Plaintext UDP | Feature off by default; when on, **safety** fail-closed via heartbeat gate (not an auth control) |
 | 16 | Jetson health listener | — | **Does not exist** (only the gstreamer udpsink; `--health-check` is a CLI self-test) | n/a | n/a | n/a |
 
@@ -74,8 +78,9 @@ leg. There is **no transport-wide endpoint-auth framework**.
   setting them (`meshtastic_radio.py:81-86`). The mesh PSK must be pre-provisioned out-of-band.
 - **Telemetry-ingest transports trust their source.** `mavlink_source` (`udpin:14550`),
   `detection_ingest` (UDP 8099), and the serial MSP/CRSF sources perform no authentication on
-  inbound frames. Loopback / physical-serial defaults are the mitigation, but none carry a
-  `validate_bind`-style guard, so a non-loopback override fails open.
+  inbound frames. Loopback / physical-serial defaults are the mitigation. `detection_ingest`
+  **now carries `validate_bind`** (this branch) so a non-loopback override without a token fails
+  closed; `mavlink_source` still has no guard and fails open on override.
 - **Shared default port number 8099.** `detection_ingest` (UDP, `detection_ingest.py:49`) and the
   scout station (TCP, `config.py:163`) both default to `8099`. Different protocols → not an OS-level
   collision, but a confusing default worth deconflicting.
@@ -106,7 +111,8 @@ satisfies §3, or whether transport-wide auth is required first.
 
 ## Follow-up backlog (deferred — see [NEXTSTEPS.md](NEXTSTEPS.md))
 
-1. Fail-closed bind guard for `detection_ingest` / `mavlink_source` on a non-loopback `host`/`endpoint`.
+1. Fail-closed bind guard for `mavlink_source` on a non-loopback `endpoint`
+   (`detection_ingest` done on this branch via `netauth.validate_bind`).
 2. Implement Meshtastic PSK provisioning, or downgrade the docs/config so operators don't assume an
    enforced PSK.
 3. Deconflict the shared `8099` default between `detection_ingest` and the scout station.

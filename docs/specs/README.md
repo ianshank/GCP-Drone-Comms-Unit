@@ -37,6 +37,7 @@ Reading order for an agent picking up work:
 | [initiative-e-inference.md](initiative-e-inference.md) | AI inference bridge (`meshsa.inference`) — Nemotron NIM + injectable HTTP-transport seam | **Implemented** (MVP + transport seam; Track-B hardening is Definition) |
 | [initiative-scout.md](initiative-scout.md) | Vineyard structural-anomaly scouting: georef fusion + field map + offline survey export (`meshsa.scout`) | **Implemented** (fakes-first; §3 offline-export carve-out ratified 2026-07-05; hardware validation pending) |
 | [initiative-d-perception.md](initiative-d-perception.md) | On-board multi-object tracker (`jetson_yolo_gcs`; read-only, advisory) | **Implemented** (fakes-first; §3 on-board-tracking carve-out ratified 2026-07-16; on-device validation pending) |
+| [m2-soak-fuzz.md](m2-soak-fuzz.md) | Link-loss resilience soak/fuzz (availability, not auth): interlock fail-closed, bounded retries, clean recovery | **Implemented** (simulated soak + nightly fuzz; on-radio bench §8 pending → Validated) |
 
 ## Specs to author (tracked in the implementation plan)
 
@@ -50,6 +51,6 @@ These are queued by [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md). Auth
 | `detection-cot-bridge.md` (retro) | 0.2 | Back-fill the shipped detection→CoT MARKER bridge |
 | `observability-metrics.md` (retro) | 0.2 / A.1 | Back-fill metrics export + Grafana golden-signal dashboard |
 | `m2-fts-e2e.md` | A.2 | Automated FreeTAKServer end-to-end CI job (non-coverage) |
-| `m2-soak-fuzz.md` | A.3 | Soak/fuzz on real radios + MAVLink 2 signing research |
+| `m2-soak-fuzz.md` | A.3 | ~~Soak/fuzz~~ **authored 2026-07-24** (link-loss soak shipped; on-radio bench pending). MAVLink 2 signing research remains queued with the `TransportAuthPolicy` seam |
 | `m4-store-and-forward.md` | F.1 | Meshtastic store-and-forward (research semantics first) |
 | `m5-packaging.md` | F.2 | Reproducible multi-arch image + signed releases |

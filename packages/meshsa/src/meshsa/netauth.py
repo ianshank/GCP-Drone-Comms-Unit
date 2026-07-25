@@ -9,6 +9,7 @@ not fork the proven primitives) that both services re-export.
 from __future__ import annotations
 
 import hmac
+from typing import Protocol, runtime_checkable
 
 #: Hosts treated as loopback-only (safe to serve without a bearer token).
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -46,3 +47,37 @@ def validate_bind(host: str, token: str | None, *, service: str, remedy: str) ->
     """
     if not is_loopback(host) and not token:
         raise ValueError(f"refusing to bind {service} to {host!r} without a token: {remedy}")
+
+
+@runtime_checkable
+class TransportAuthPolicy(Protocol):
+    """Transport-wide auth seam (AUDIT_M2_AUTH: auth is per-surface today, not transport-wide).
+
+    Surfaces that cannot carry a bearer header (UDP ingest, future signed datagram
+    transports) get a defined place to plug an authentication scheme without each one
+    growing an ad-hoc guard. Deliberately thin: bind validation + request authorisation
+    only. A signing implementation is a separate, gated change; until it lands the
+    default policy below is the whole framework.
+    """
+
+    def validate_bind(self, host: str, token: str | None, *, service: str, remedy: str) -> None:
+        """Fail closed on a non-loopback bind without a credential (raises ``ValueError``)."""
+        ...
+
+    def authorize(self, token: str | None, auth_header: str | None) -> bool:
+        """Whether a request presenting ``auth_header`` may proceed."""
+        ...
+
+
+class NetAuthPolicy:
+    """Default :class:`TransportAuthPolicy`: this module's audited primitives, unchanged."""
+
+    def validate_bind(self, host: str, token: str | None, *, service: str, remedy: str) -> None:
+        validate_bind(host, token, service=service, remedy=remedy)
+
+    def authorize(self, token: str | None, auth_header: str | None) -> bool:
+        return authorize(token, auth_header)
+
+
+#: Shared default policy instance; surfaces that take a policy default to this one.
+DEFAULT_POLICY: TransportAuthPolicy = NetAuthPolicy()

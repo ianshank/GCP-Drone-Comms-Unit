@@ -62,9 +62,10 @@ await node.publish_position(Position(lat=37.0, lon=-122.0))
 from meshsa.registry import transport_registry
 from meshsa.transports.base import AbstractTransport
 
+
 @transport_registry.register("meshtastic")
 def _make(name="meshtastic", port="/dev/ttyUSB0", **kw):
-    return MeshtasticTransport(name=name, port=port, **kw)   # your impl
+    return MeshtasticTransport(name=name, port=port, **kw)  # your impl
 ```
 Then reference `{"name": "lora", "type": "meshtastic", "options": {"port": "..."}}`
 in the node config. Same pattern for a HaLow/IP transport or a CoT codec.
