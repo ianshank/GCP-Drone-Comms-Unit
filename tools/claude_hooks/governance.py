@@ -135,12 +135,14 @@ def to_repo_relative(path: str, repo_root: Path) -> str | None:
     outside ``repo_root`` — such paths can never match repo-relative globs.
     """
     normalized = path.replace("\\", "/")
-    if os.path.isabs(normalized):
-        try:
-            return Path(normalized).resolve().relative_to(repo_root.resolve()).as_posix()
-        except ValueError:
-            return None
-    return PurePosixPath(posixpath.normpath(normalized)).as_posix()
+    root = repo_root.resolve()
+    candidate = Path(normalized)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    try:
+        return candidate.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return None
 
 
 def match_globs(rel_path: str, patterns: Iterable[str]) -> str | None:
