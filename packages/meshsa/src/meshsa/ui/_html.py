@@ -2,12 +2,15 @@
 
 Kept as a module constant (data, not logic) so it needs no packaged static files and the
 tested aiohttp handlers own all behaviour — the ``scout.station._html`` pattern. MapLibre
-GL is loaded from a CDN pinned to the station's major; for fully offline field use, vendor
-the assets and point the ``<script>``/``<link>`` (and ``ui.map_style_url``) at local copies.
+GL is loaded from a CDN **pinned to an exact version with subresource integrity** (the
+page JSON-injects a bearer token, so a silently swapped CDN artifact must not be able to
+execute in that scope); for fully offline field use, vendor the assets and point the
+``<script>``/``<link>`` (and ``ui.map_style_url``) at local copies.
 
-XSS posture: the token, panel manifest, and page settings are injected **JSON-encoded**
-(valid JS literals that cannot break out of their string), and the page builds DOM nodes
-with ``textContent``/``createTextNode`` only — no ``innerHTML`` sink anywhere.
+XSS posture: the token, panel manifest, and page settings are injected as JSON-encoded JS
+literals with ``<``/``>``/``&`` additionally escaped to ``\\uXXXX`` (``json.dumps`` alone
+would let a ``</script>`` inside a value terminate the script block), and the page builds
+DOM nodes with ``textContent``/``createTextNode`` only — no ``innerHTML`` sink anywhere.
 """
 
 from __future__ import annotations
@@ -16,6 +19,17 @@ import json
 from typing import Any
 
 __all__ = ["render_page"]
+
+
+def _js_literal(value: Any) -> str:
+    """JSON-encode ``value`` for safe embedding inside a ``<script>`` block.
+
+    ``json.dumps`` does not escape ``<``/``>``/``&``, so a string containing
+    ``</script>`` would otherwise close the block and inject markup. The ``\\uXXXX``
+    forms are valid JSON, so the decoded JS value is byte-identical.
+    """
+    return json.dumps(value).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
 
 #: Serve-time placeholders, each replaced with a JSON-encoded value.
 _TOKEN_PLACEHOLDER = "__UI_TOKEN__"
@@ -43,10 +57,10 @@ def render_page(
         "map_style_url": map_style_url,
     }
     return (
-        PAGE_HTML.replace(_TOKEN_PLACEHOLDER, json.dumps(token))
-        .replace(_MANIFEST_PLACEHOLDER, json.dumps(manifest))
-        .replace(_SETTINGS_PLACEHOLDER, json.dumps(settings))
-        .replace(_TITLE_PLACEHOLDER, json.dumps(title))
+        PAGE_HTML.replace(_TOKEN_PLACEHOLDER, _js_literal(token))
+        .replace(_MANIFEST_PLACEHOLDER, _js_literal(manifest))
+        .replace(_SETTINGS_PLACEHOLDER, _js_literal(settings))
+        .replace(_TITLE_PLACEHOLDER, _js_literal(title))
     )
 
 
@@ -56,8 +70,12 @@ PAGE_HTML = """<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>meshsa operator</title>
-<link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
-<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"
+  integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V"
+  crossorigin="anonymous" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"
+  integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj"
+  crossorigin="anonymous"></script>
 <style>
   body { margin: 0; font-family: system-ui, sans-serif; }
   #map { position: absolute; inset: 0; }
