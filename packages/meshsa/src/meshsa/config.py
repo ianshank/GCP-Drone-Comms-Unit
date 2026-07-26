@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ._parsing import parse_float, parse_int
 from .models import NodeTier
+from .ui.config import UIConfig
 
 
 def _parse_bool(name: str, v: str) -> bool:
@@ -183,6 +184,7 @@ class NodeConfig(BaseModel):
     transports: list[TransportConfig] = Field(default_factory=list)
     inference: NemotronConfig = Field(default_factory=NemotronConfig)
     scout: ScoutConfig = Field(default_factory=ScoutConfig)
+    ui: UIConfig = Field(default_factory=UIConfig)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> NodeConfig:
@@ -328,5 +330,31 @@ class NodeConfig(BaseModel):
                 scout[field] = caster(env_key, env[env_key])
         if scout:
             data["scout"] = scout
+
+        # --- ui (UIConfig) env-var bindings ---
+        ui: dict[str, Any] = dict(data.get("ui", {}))
+        ui_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+            f"{prefix}UI_ENABLED": ("enabled", _parse_bool),
+            f"{prefix}UI_HOST": ("host", _str),
+            f"{prefix}UI_PORT": ("port", parse_int),
+            f"{prefix}UI_TOKEN": ("token", _str),
+            f"{prefix}UI_MAP_STYLE_URL": ("map_style_url", _str),
+            f"{prefix}UI_POLL_INTERVAL_S": ("poll_interval_s", parse_float),
+            f"{prefix}UI_TRACK_STALE_S": ("track_stale_s", parse_float),
+            f"{prefix}UI_DETECTION_STALE_S": ("detection_stale_s", parse_float),
+            f"{prefix}UI_MAX_TRACKS": ("max_tracks", parse_int),
+            f"{prefix}UI_MAX_DETECTIONS": ("max_detections", parse_int),
+            f"{prefix}UI_CHAT_ENABLED": ("chat_enabled", _parse_bool),
+            f"{prefix}UI_LOG_RING_ENABLED": ("log_ring_enabled", _parse_bool),
+            f"{prefix}UI_LOG_RING_SIZE": ("log_ring_size", parse_int),
+            f"{prefix}UI_LOG_RING_LEVEL": ("log_ring_level", _str),
+            f"{prefix}UI_METRICS_FORMAT": ("metrics_format", _str),
+            f"{prefix}UI_TITLE": ("title", _str),
+        }
+        for env_key, (field, caster) in ui_scalars.items():
+            if env_key in env:
+                ui[field] = caster(env_key, env[env_key])
+        if ui:
+            data["ui"] = ui
 
         return cls.model_validate(data)
