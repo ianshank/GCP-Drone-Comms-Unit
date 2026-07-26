@@ -452,3 +452,42 @@ def test_build_sources_gating() -> None:
         log_ring=ring,
     )
     assert on.chat is not None and on.logs is ring and on.fpv is not None
+
+
+# ── review regressions: token-override normalisation, no-store, script escaping ──
+
+
+def test_whitespace_token_override_fails_closed() -> None:
+    # A whitespace override is no credential: the non-loopback bind must be refused.
+    with pytest.raises(ValueError):
+        build_ui_app(_sources(), UIConfig(), host="0.0.0.0", token="   ")
+
+
+async def test_whitespace_token_override_means_no_auth() -> None:
+    # Explicit empty override disables auth (loopback posture), never a guessable "   ".
+    client = await _client(build_ui_app(_sources(), UIConfig(token="s3cret"), token="   "))
+    try:
+        assert (await client.get("/api/tracks")).status == 200
+    finally:
+        await client.close()
+
+
+async def test_index_sends_no_store() -> None:
+    client = await _client(build_ui_app(_sources(), UIConfig(token="s3cret")))
+    try:
+        page = await client.get("/", params={"token": "s3cret"})
+        assert page.status == 200
+        assert page.headers["Cache-Control"] == "no-store"
+    finally:
+        await client.close()
+
+
+async def test_page_values_cannot_close_script_block() -> None:
+    evil = "</script><script>alert(1)</script>"
+    client = await _client(build_ui_app(_sources(), UIConfig(title=evil)))
+    try:
+        text = await (await client.get("/")).text()
+        assert "</script><script>" not in text.replace("\n", "")
+        assert "\\u003c/script\\u003e" in text  # JSON-escaped, decodes to the same string
+    finally:
+        await client.close()
