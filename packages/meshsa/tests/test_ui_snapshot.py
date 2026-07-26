@@ -348,3 +348,37 @@ def test_store_never_exceeds_caps_or_serves_stale(
         # Upsert idempotence per key: no duplicate uids among tracks.
         uids = [f["properties"]["uid"] for f in tracks]
         assert len(uids) == len(set(uids))
+
+
+# ── review regressions: non-finite floats + counters sweep ────────────────────
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_coordinates_dropped_and_counted(bad: float) -> None:
+    store = _store(FakeClock())
+    store.handle(_pli("a", lat=bad))
+    store.handle(_pli("b", lon=bad))
+    assert store.tracks_geojson()["features"] == []
+    assert store.counters()["dropped_invalid"] == 2
+
+
+def test_nonfinite_scalar_property_excluded() -> None:
+    store = _store(FakeClock())
+    store.handle(_pli("a", speed=float("nan")))
+    (feature,) = store.tracks_geojson()["features"]
+    # NaN/inf are not valid JSON: excluded from properties, counted like non-scalars.
+    assert "speed" not in feature["properties"]
+    assert store.counters()["ignored_nonscalar_keys"] == 1
+
+
+def test_counters_sweeps_expired_before_reporting_live() -> None:
+    clock = FakeClock()
+    store = _store(clock, track_stale_s=10.0, detection_stale_s=10.0)
+    store.handle(_pli("a"))
+    store.handle(_marker("a", msg_id="d1", track_id=1))
+    clock.t = 50.0  # both entries are now past their TTL
+    counters = store.counters()  # health-only poll: no GeoJSON read first
+    assert counters["tracks_live"] == 0
+    assert counters["detections_live"] == 0
+    assert counters["tracks_expired"] == 1
+    assert counters["detections_expired"] == 1
