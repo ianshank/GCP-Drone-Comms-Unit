@@ -16,7 +16,7 @@ Reading order: [CHARTER.md](CHARTER.md) → [ROADMAP.md](ROADMAP.md) → [NEXTST
 
 | Dimension | Result |
 | --------- | ------ |
-| HTTP control surfaces (LLM, commander, scout, **healthz**) | Share one audited primitive (`netauth.py`); all now **fail closed** on a non-loopback bind without a token |
+| HTTP control surfaces (LLM, commander, scout, **healthz**, **operator UI**) | Share one audited primitive (`netauth.py`); all now **fail closed** on a non-loopback bind without a token |
 | Observability `/healthz`+`/metrics` | **Fixed on this branch** — was the one fail-open HTTP surface; now routed through `netauth.validate_bind` + bearer-gated `/metrics` |
 | Transport encryption default | **Plaintext everywhere by default**; TAK mutual TLS (`:8089`) is the only wired-in transport encryption (opt-in) |
 | Transport-layer auth | Ad hoc / per-protocol; no transport-wide framework |
@@ -28,11 +28,12 @@ Reading order: [CHARTER.md](CHARTER.md) → [ROADMAP.md](ROADMAP.md) → [NEXTST
 Partially. There is **one shared HTTP auth primitive**, `meshsa/netauth.py`: `is_loopback`
 (`netauth.py:17`), constant-time bearer `authorize` (`netauth.py:22`, `hmac.compare_digest` at
 `:37`), and fail-closed `validate_bind` (`netauth.py:40-48`). As of this branch it is reused by
-**four** aiohttp surfaces — the LLM server, the commander, the scout station, and now the
-`/healthz`+`/metrics` server. Everything else is per-protocol and mostly optional: TAK uses TLS,
+**five** aiohttp surfaces — the LLM server, the commander, the scout station, the
+`/healthz`+`/metrics` server, and the operator console (`meshsa.ui`). Everything else is
+per-protocol and mostly optional: TAK uses TLS,
 Meshtastic relies on an out-of-band device PSK, and MAVLink2 signing is wired only on the commander
 leg. There is **no transport-wide endpoint-auth framework**. This branch adds the
-`TransportAuthPolicy` seam (`netauth.py`) — a thin protocol the four HTTP surfaces already satisfy
+`TransportAuthPolicy` seam (`netauth.py`) — a thin protocol the five HTTP surfaces already satisfy
 via the default policy — so non-HTTP surfaces (detection UDP, MAVLink ingest) have a defined place
 to plug datagram signing later; the seam is **not** an implementation, and the framework gap stands
 until one lands.
@@ -57,6 +58,7 @@ until one lands.
 | 14 | Jetson GStreamer egress — `streaming/gstreamer.py`, `core/config.py` | Outbound (RTP/UDP) | `127.0.0.1:5600`, **`enabled=False`** (this branch) | **None** (RTP has no auth) — control is default-off + `STREAM_ENABLED=true` opt-in | None / plaintext RTP/H.264 | **NOW fails closed** (default-off; single WARNING with destination at activation) — *was on by default* |
 | 15 | Jetson `LandingTargetBridge` — `mavlink/bridge.py`, `core/config.py:75` | Bidirectional MAVLink | `udpout:127.0.0.1:14550` | **None** (no signing on this leg) | Plaintext UDP | Feature off by default; when on, **safety** fail-closed via heartbeat gate (not an auth control) |
 | 16 | Jetson health listener | — | **Does not exist** (only the gstreamer udpsink; `--health-check` is a CLI self-test) | n/a | n/a | n/a |
+| 17 | Operator console — `ui/app.py`, `ui/config.py` | Inbound listener | `127.0.0.1:8100`, `enabled=False` | Bearer `MESHSA_UI_TOKEN` on `/api/*`; `?token=` gate on `/`; default off, loopback; `/healthz` open. Read-only (`GET` + non-command `POST /api/chat`). XSS-hardened (JSON-encoded injection, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`netauth.validate_bind` inside `build_ui_app`) |
 
 ## Gap summary
 
@@ -88,7 +90,7 @@ until one lands.
 ## What is done well
 
 - One audited primitive (`netauth.py`) with constant-time bearer comparison (`:37`) and consistent
-  fail-closed bind validation, now shared by all four HTTP surfaces.
+  fail-closed bind validation, now shared by all five HTTP surfaces.
 - The commander adds MAVLink2 signing on the autopilot leg and a fail-closed pre-arm heartbeat gate
   (`command/health.py`).
 - The scout station is deliberately XSS-hardened (JSON-encoded token injection, `textContent`/DOM
@@ -99,7 +101,7 @@ until one lands.
 ## Verdict for the maintainer (CHARTER §6 M2 gate)
 
 M2's transport-encryption building block (TAK mutual TLS) exists, and per-endpoint HTTP auth now
-exists and **fails closed on all four HTTP surfaces**. But this is **per-surface** auth, **not
+exists and **fails closed on all five HTTP surfaces**. But this is **per-surface** auth, **not
 transport-wide endpoint authentication**: the wire transports (Meshtastic, MAVLink/MSP/CRSF ingest,
 detection UDP, TAK multicast, Jetson RTP/MAVLink) carry no endpoint auth, and encryption is
 plaintext-by-default outside opt-in TAK TLS. The CHARTER §3 commanding carve-out requires that "no

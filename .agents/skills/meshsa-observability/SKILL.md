@@ -46,6 +46,11 @@ Prometheus exposition is hand-rolled in `metrics.py`.
    inference=...)`. The Grafana dashboard's "AI Inference" row (2 panels: drops-per-second from
    the counters, and a saturation panel from the two gauges) follows the same
    variables-not-baked-values convention as the rest of the dashboard.
+7. **Operator console (`meshsa.ui`) reads, never re-implements, these seams:** its
+   `/api/health` route merges `SnapshotStore.counters()` (bound/drop observability) with
+   `NodeHealthSource` (`health_snapshot` + `render_metrics`). When adding a metric, extend the
+   canonical seams in `health.py`/`metrics.py` — the console picks it up for free; never add a
+   parallel counter path inside `meshsa/ui/`.
 
 ## Procedure (gates)
 

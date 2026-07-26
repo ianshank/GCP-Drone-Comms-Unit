@@ -45,6 +45,13 @@ bind_guard:
         first inside scout/station/app.py::build_app (which imports and calls the
         canonical validate_bind before any route is wired). Guarded transitively;
         the file-granularity linter cannot see across the module boundary.
+    - path: "packages/meshsa/src/meshsa/ui/cli.py"
+      rationale: >-
+        The operator-console serve loop starts a TCPSite, but the fail-closed
+        guard runs first inside ui/app.py::build_ui_app (which imports and calls
+        the canonical validate_bind before any route is wired). Guarded
+        transitively; the file-granularity linter cannot see across the module
+        boundary.
     # transports/meshtastic_radio.py is deliberately NOT listed: it opens no
     # listening network socket (serial/BLE links; its TCP mode is an outbound
     # TCPInterface client connect, not a bind).

@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Operator console (`meshsa.ui`).** A local, **read-only, fail-closed** aiohttp console for a
+  drone edge node: MapLibre map of live PLI tracks + MARKER detections, node health/metrics panel,
+  and optional FPV link-health, read-only assistant chat, and bounded log-tail panels. Off by
+  default (`ui.enabled=false`), loopback-only (`127.0.0.1:8100`), bearer-gated when
+  `MESHSA_UI_TOKEN` is set, and a non-loopback bind without a token **refuses to start**
+  (`netauth.validate_bind` inside `build_ui_app`). The console is a pure *service*: it registers
+  no transport/codec and attaches via `Node.on_message` into a bounded `SnapshotStore` (per-kind
+  caps + TTL sweep-on-read under an injected `Clock`; detections keyed by the composite
+  `(source_uid, detection.track_id)` with `msg_id` fallback). Read-only contract is mechanical:
+  every route is `GET` except the non-command `POST /api/chat` (reuses the llm `chat_reply`
+  policy — generic 502, detail logged server-side). Unknown *scalar* payload keys pass through to
+  GeoJSON properties (M3 additive-optional pattern); non-scalar unknowns are ignored and counted.
+  Opt-in `LogRing` structlog processor (scalar-only entries, bounded deque). All tunables are
+  `UIConfig` fields with `MESHSA_UI_*` env bindings (no magic numbers). Install with the `[ui]`
+  extra; CLI `meshsa-ui`. Spec: [docs/specs/operator-ui.md](docs/specs/operator-ui.md); audit
+  surface #17 in [docs/AUDIT_M2_AUTH.md](docs/AUDIT_M2_AUTH.md). Coverage 99.3% package-wide
+  (100% on all ui modules except the pragma'd CLI serve glue).
 - **On-board multi-object tracker (`jetson_yolo_gcs`; read-only, advisory).** A new `tracking/`
   seam (`TrackerBase` ABC + `tracker_registry` + `build_tracker`) with a Norfair backend
   (BSD-3-Clause; Kalman-SORT) assigns a stable id to detected objects across frames. It runs in the

@@ -43,6 +43,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.command.errors`         | `CommandError(MeshSAError)` + typed refusal sub-hierarchy             |
 | `meshsa.cv.geo`                 | Pure pixel→lat/lon projection (`project_to_ground`, `Terrain` seam, covariance error) |
 | `meshsa.scout`                  | Vineyard scouting: georef fusion, dedup, store, survey/mission export, `aiohttp` station (`[scout]` extra) |
+| `meshsa.ui`                     | Local read-only operator console: bounded `SnapshotStore` + MapLibre map, health/FPV/chat/log panels (`[ui]` extra) |
 | `meshsa.examples.base_node`     | Thin re-export of `meshsa.cli` (demonstrative only)                 |
 
 ## Patterns
@@ -66,6 +67,9 @@ re-encodes when forwarding between transports of different codecs.
 The node optionally attaches services that are out of the hot path:
 - **`meshsa.health`**: `/healthz` + `/metrics` aiohttp listener (install with `[health]`).
 - **`meshsa.llm`**: read-only situational-awareness assistant over telemetry + TAK tracks.
+- **`meshsa.ui`**: local, read-only, fail-closed operator console (install with `[ui]`).
+  Attaches via `Node.on_message` — no transport/codec registration, no router/model edits;
+  spec: [specs/operator-ui.md](specs/operator-ui.md).
 - **`meshsa.inference`**: NVIDIA Nemotron NIM AI bridge — subscribes to Router messages,
   sends traffic to the NIM API for tactical analysis, and broadcasts AI insight summaries
   (configurable prefix via `NemotronConfig.insight_prefix`). The HTTP boundary is an injectable
@@ -98,8 +102,8 @@ from receiving messages. This ensures the message-delivery hot path is fault-tol
 ### Env-var bindings
 `NodeConfig.from_env()` reads `MESHSA_*` environment variables for all config sections:
 scalar node fields, `MESHSA_MESH_*` (MeshConfig), `MESHSA_ROUTER_*` (RouterConfig),
-`MESHSA_HEALTH_*` (HealthConfig), `MESHSA_INFERENCE_*` (NemotronConfig), and
-`MESHSA_SCOUT_*` (ScoutConfig). Individual
+`MESHSA_HEALTH_*` (HealthConfig), `MESHSA_INFERENCE_*` (NemotronConfig),
+`MESHSA_SCOUT_*` (ScoutConfig), and `MESHSA_UI_*` (UIConfig — the operator console). Individual
 env-vars always override the JSON blob value for the same field. Parsing uses shared
 helpers (`parse_int`, `parse_float`, `_parse_bool`) that name the offending variable on
 bad values. `MESHSA_INFERENCE_MAX_PENDING_TASKS` binds `NemotronConfig.max_pending_tasks`

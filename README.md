@@ -48,6 +48,12 @@ real time.
   (QGC `.plan` / ArduPilot `.waypoints` for a human to load, under a CHARTER §3 carve-out —
   no autonomy). `meshsa-scout` CLI (`replay`/`gen-mission`/`run-station`/`--health-check`);
   install `pip install "meshsa[scout]"`; config via `MESHSA_SCOUT_*`.
+- **Local operator console (`meshsa.ui`):** an opt-in, **read-only, fail-closed** aiohttp
+  console on the edge node — MapLibre map of live tracks/detections, health/metrics panel,
+  and optional FPV link-health, read-only assistant chat, and log-tail panels. Off by
+  default, loopback-only (`127.0.0.1:8100`); a non-loopback bind without `MESHSA_UI_TOKEN`
+  refuses to start. `meshsa-ui` CLI; install `pip install -e "packages/meshsa[ui]"`;
+  config via `MESHSA_UI_*` ([spec](docs/specs/operator-ui.md)).
 - **Modular & backward-compatible by construction:** new transports/codecs register via an
   open/closed registry; every wire envelope is `schema_version`-gated; a node tolerates
   configs written for newer/older builds.

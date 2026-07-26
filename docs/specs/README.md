@@ -38,6 +38,7 @@ Reading order for an agent picking up work:
 | [initiative-scout.md](initiative-scout.md) | Vineyard structural-anomaly scouting: georef fusion + field map + offline survey export (`meshsa.scout`) | **Implemented** (fakes-first; §3 offline-export carve-out ratified 2026-07-05; hardware validation pending) |
 | [initiative-d-perception.md](initiative-d-perception.md) | On-board multi-object tracker (`jetson_yolo_gcs`; read-only, advisory) | **Implemented** (fakes-first; §3 on-board-tracking carve-out ratified 2026-07-16; on-device validation pending) |
 | [m2-soak-fuzz.md](m2-soak-fuzz.md) | Link-loss resilience soak/fuzz (availability, not auth): interlock fail-closed, bounded retries, clean recovery | **Implemented** (simulated soak + nightly fuzz; on-radio bench §8 pending → Validated) |
+| [operator-ui.md](operator-ui.md) | Local, read-only, fail-closed operator console (`meshsa.ui`): map + health + optional FPV/chat/log panels | **Implemented** (fakes-first; field validation pending) |
 
 ## Specs to author (tracked in the implementation plan)
 
