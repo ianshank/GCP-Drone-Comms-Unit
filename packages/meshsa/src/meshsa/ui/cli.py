@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -23,33 +24,43 @@ from .logring import LogRing
 from .snapshot import SnapshotStore
 from .sources import AgentChatBackend, NodeHealthSource, UISources
 
+if TYPE_CHECKING:
+    from ..node import Node
+    from .sources import LinkHealthMonitorLike
+
 _log = structlog.get_logger("meshsa.ui.cli")
 
 __all__ = ["build_sources", "main"]
 
 
 def build_sources(
-    node: object,
+    node: Node,
     snapshot: SnapshotStore,
     config: UIConfig,
     *,
-    fpv_monitor: object | None = None,
-    chat_agent: object | None = None,
+    fpv_monitor: LinkHealthMonitorLike | None = None,
+    chat_agent: Any | None = None,
     log_ring: LogRing | None = None,
 ) -> UISources:
     """Wire the source set from config flags + available collaborators (pure, tested).
 
-    A panel's source is created only when its flag is on **and** its collaborator is
-    available — construction-time gating (design D-7); ``build_ui_app`` then treats
-    presence as truth. ``node``/``fpv_monitor``/``chat_agent`` are duck-typed seams so
-    this stays testable with fakes and imports no optional extra.
+    Gating rules (design D-7; ``build_ui_app`` then treats presence as truth):
+
+    * health — always wired (the node is a required collaborator);
+    * fpv — wired iff ``fpv_monitor`` is provided (embedder-owned; no config flag);
+    * chat — requires ``config.chat_enabled`` **and** a ``chat_agent``;
+    * logs — requires ``config.log_ring_enabled`` **and** a ``log_ring``.
+
+    ``fpv_monitor`` is a structural Protocol and ``chat_agent`` is the llm agent seam
+    (typed ``Any`` in :class:`AgentChatBackend` too), so this stays testable with fakes
+    and imports no optional extra.
     """
     from .sources import FpvLinkSource  # local: keeps the optional adapters together
 
     return UISources(
         snapshot=snapshot,
-        health=NodeHealthSource(node, metrics_format=config.metrics_format),  # type: ignore[arg-type]
-        fpv=FpvLinkSource(fpv_monitor) if fpv_monitor is not None else None,  # type: ignore[arg-type]
+        health=NodeHealthSource(node, metrics_format=config.metrics_format),
+        fpv=FpvLinkSource(fpv_monitor) if fpv_monitor is not None else None,
         chat=AgentChatBackend(chat_agent)
         if config.chat_enabled and chat_agent is not None
         else None,
