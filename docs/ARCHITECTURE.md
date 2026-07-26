@@ -102,8 +102,8 @@ from receiving messages. This ensures the message-delivery hot path is fault-tol
 ### Env-var bindings
 `NodeConfig.from_env()` reads `MESHSA_*` environment variables for all config sections:
 scalar node fields, `MESHSA_MESH_*` (MeshConfig), `MESHSA_ROUTER_*` (RouterConfig),
-`MESHSA_HEALTH_*` (HealthConfig), `MESHSA_INFERENCE_*` (NemotronConfig), and
-`MESHSA_SCOUT_*` (ScoutConfig). Individual
+`MESHSA_HEALTH_*` (HealthConfig), `MESHSA_INFERENCE_*` (NemotronConfig),
+`MESHSA_SCOUT_*` (ScoutConfig), and `MESHSA_UI_*` (UIConfig — the operator console). Individual
 env-vars always override the JSON blob value for the same field. Parsing uses shared
 helpers (`parse_int`, `parse_float`, `_parse_bool`) that name the offending variable on
 bad values. `MESHSA_INFERENCE_MAX_PENDING_TASKS` binds `NemotronConfig.max_pending_tasks`
