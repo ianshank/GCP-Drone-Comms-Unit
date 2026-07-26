@@ -171,6 +171,27 @@
 - [ ] Keep `meshsa.llm` **read-only by default**; any future command tool must be
       gated behind explicit human confirmation, never autonomous model issuance.
 
+## Operator console (`meshsa.ui` — **Implemented (software); field validation pending**)
+> Local, read-only, fail-closed aiohttp console per [specs/operator-ui.md](specs/operator-ui.md):
+> MapLibre map (PLI tracks + MARKER detections from a bounded `SnapshotStore`), health/metrics
+> panel, optional FPV/chat/log-tail panels. Off by default, `127.0.0.1:8100`, `MESHSA_UI_*`
+> config, `[ui]` extra, `meshsa-ui` CLI. Audit surface #17.
+
+- [x] `UIConfig` + full `MESHSA_UI_*` env map (no magic numbers; empty token → no token)
+- [x] `SnapshotStore` (caps + TTL sweep-on-read, composite `(source_uid, track_id)` detection
+      key with `msg_id` fallback, M3 additive scalar passthrough, drop/evict counters)
+- [x] Fail-closed `build_ui_app` (bearer `/api/*`, `?token=` page gate, open `/healthz`,
+      generic-502 policy, 404-by-absence for optional panels; GET-only except `POST /api/chat`)
+- [x] Opt-in `LogRing` structlog processor (bounded, scalar-only, idempotent `install()`)
+- [x] Tests: auth matrix, route-method inventory, golden GeoJSON, Hypothesis cap/TTL
+      invariants (100% cov on ui modules except pragma'd CLI glue)
+- [ ] Field validation on the edge node (spec §8 exit criteria): live map under real mesh
+      traffic; verify poll cadence vs. CPU budget on a Pi/Jetson
+- [ ] Offline map assets: vendor MapLibre JS/CSS + a local style/tile source for
+      disconnected field use (`ui.map_style_url` already configurable)
+- [ ] Optional systemd unit + env example under `flightctl/systemd/` once a deployment
+      wants the console at boot
+
 ## Near-term (M2 hardening)
 - [x] **Hardware-free FTS e2e harness:** `packages/meshsa/tests/e2e/test_fts_e2e.py` — CotCodec
       encode→decode round-trip + CotFramer split-stream reassembly, always run (no hardware, adds
