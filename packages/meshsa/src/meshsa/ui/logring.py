@@ -13,12 +13,13 @@ whitelists shapes, not content.
 from __future__ import annotations
 
 import collections
+import math
 from collections.abc import MutableMapping
 from typing import Any
 
 from ..protocols import Clock, SystemClock
 
-__all__ = ["LogRing"]
+__all__ = ["LogRing", "VALID_LEVELS"]
 
 #: structlog method names -> numeric severity (stdlib ``logging`` scale).
 _LEVELS = {
@@ -36,6 +37,11 @@ _LEVELS = {
 #: possibly-severe event below the floor.
 _UNKNOWN_LEVEL = 20
 
+#: Accepted (case-insensitive) level names — the config-time validation contract
+#: (``UIConfig.log_ring_level``) checks against this same set, so a bad level fails at
+#: config parse, not at wiring time.
+VALID_LEVELS: frozenset[str] = frozenset(_LEVELS)
+
 _SCALAR_TYPES = (str, int, float, bool)
 
 #: event_dict keys handled explicitly (not repeated as bound values).
@@ -43,6 +49,9 @@ _RESERVED_KEYS = frozenset({"event", "logger", "level", "timestamp"})
 
 
 def _is_scalar(value: Any) -> bool:
+    """JSON-safe scalar: NaN/inf floats are rejected — they are not valid JSON."""
+    if isinstance(value, float):
+        return math.isfinite(value)
     return value is None or isinstance(value, _SCALAR_TYPES)
 
 
