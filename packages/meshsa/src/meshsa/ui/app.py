@@ -91,10 +91,12 @@ def build_ui_app(
     When ``host`` is given, the fail-closed bind rule is enforced **inside** the factory
     (the scout pattern: the guarantee travels with the app, so embedders inherit it).
     ``token`` overrides ``config.token`` when set; both empty/whitespace forms mean "no
-    token" (``UIConfig`` normalises at load). Routes for absent optional sources are not
-    registered at all — 404 by absence, not an error state.
+    token" (``UIConfig`` normalises at load, and the override is normalised here the same
+    way — a whitespace credential must not satisfy the fail-closed bind check). Routes for
+    absent optional sources are not registered at all — 404 by absence, not an error state.
     """
-    effective_token = token if token is not None else config.token
+    # Mirror UIConfig._empty_token_is_none: an empty credential is no credential.
+    effective_token = (token.strip() or None) if token is not None else config.token
     if host is not None:
         validate_bind(host, effective_token)
     from aiohttp import web
@@ -127,7 +129,11 @@ def build_ui_app(
             map_style_url=config.map_style_url,
             title=config.title,
         )
-        return web.Response(text=page, content_type="text/html")
+        # The page embeds the bearer token and is reached via ``?token=``: keep it out of
+        # the browser's disk cache (history retention is inherent to the station pattern).
+        return web.Response(
+            text=page, content_type="text/html", headers={"Cache-Control": "no-store"}
+        )
 
     async def healthz(_request: Any) -> Any:
         return web.json_response({"status": "ok"})
