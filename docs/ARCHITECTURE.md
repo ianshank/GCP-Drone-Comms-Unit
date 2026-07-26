@@ -43,6 +43,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.command.errors`         | `CommandError(MeshSAError)` + typed refusal sub-hierarchy             |
 | `meshsa.cv.geo`                 | Pure pixel→lat/lon projection (`project_to_ground`, `Terrain` seam, covariance error) |
 | `meshsa.scout`                  | Vineyard scouting: georef fusion, dedup, store, survey/mission export, `aiohttp` station (`[scout]` extra) |
+| `meshsa.ui`                     | Local read-only operator console: bounded `SnapshotStore` + MapLibre map, health/FPV/chat/log panels (`[ui]` extra) |
 | `meshsa.examples.base_node`     | Thin re-export of `meshsa.cli` (demonstrative only)                 |
 
 ## Patterns
@@ -66,6 +67,9 @@ re-encodes when forwarding between transports of different codecs.
 The node optionally attaches services that are out of the hot path:
 - **`meshsa.health`**: `/healthz` + `/metrics` aiohttp listener (install with `[health]`).
 - **`meshsa.llm`**: read-only situational-awareness assistant over telemetry + TAK tracks.
+- **`meshsa.ui`**: local, read-only, fail-closed operator console (install with `[ui]`).
+  Attaches via `Node.on_message` — no transport/codec registration, no router/model edits;
+  spec: [specs/operator-ui.md](specs/operator-ui.md).
 - **`meshsa.inference`**: NVIDIA Nemotron NIM AI bridge — subscribes to Router messages,
   sends traffic to the NIM API for tactical analysis, and broadcasts AI insight summaries
   (configurable prefix via `NemotronConfig.insight_prefix`). The HTTP boundary is an injectable
