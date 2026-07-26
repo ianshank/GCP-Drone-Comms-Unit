@@ -57,6 +57,7 @@ until one lands.
 | 14 | Jetson GStreamer egress — `streaming/gstreamer.py`, `core/config.py` | Outbound (RTP/UDP) | `127.0.0.1:5600`, **`enabled=False`** (this branch) | **None** (RTP has no auth) — control is default-off + `STREAM_ENABLED=true` opt-in | None / plaintext RTP/H.264 | **NOW fails closed** (default-off; single WARNING with destination at activation) — *was on by default* |
 | 15 | Jetson `LandingTargetBridge` — `mavlink/bridge.py`, `core/config.py:75` | Bidirectional MAVLink | `udpout:127.0.0.1:14550` | **None** (no signing on this leg) | Plaintext UDP | Feature off by default; when on, **safety** fail-closed via heartbeat gate (not an auth control) |
 | 16 | Jetson health listener | — | **Does not exist** (only the gstreamer udpsink; `--health-check` is a CLI self-test) | n/a | n/a | n/a |
+| 17 | Operator console — `ui/app.py`, `ui/config.py` | Inbound listener | `127.0.0.1:8100`, `enabled=False` | Bearer `MESHSA_UI_TOKEN` on `/api/*`; `?token=` gate on `/`; default off, loopback; `/healthz` open. Read-only (`GET` + non-command `POST /api/chat`). XSS-hardened (JSON-encoded injection, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`netauth.validate_bind` inside `build_ui_app`) |
 
 ## Gap summary
 
