@@ -9,7 +9,7 @@ PY  ?= python
 help:
 	@echo "Targets:"
 	@echo "  install   - editable install of meshsa"
-	@echo "  dev       - editable install with [dev,meshtastic] extras + pre-commit"
+	@echo "  dev       - editable install with [dev,meshtastic,ui] extras + pre-commit"
 	@echo "  test      - run pytest in $(PKG)"
 	@echo "  lint      - ruff check"
 	@echo "  format    - ruff format (write)"
