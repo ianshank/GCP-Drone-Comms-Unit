@@ -99,3 +99,11 @@ def test_install_prepends_once_and_output_unchanged(monkeypatch: pytest.MonkeyPa
         assert any(e["event"] == "ring_probe" and e.get("value") == 1 for e in ring.entries())
     finally:
         structlog.configure(processors=original)
+
+
+def test_nonfinite_float_fields_excluded() -> None:
+    ring = LogRing(4, clock=FakeClock(t=1.0))
+    _emit(ring, "info", "e", ok=1.5, bad_nan=float("nan"), bad_inf=float("inf"))
+    (entry,) = ring.entries()
+    assert entry["ok"] == 1.5
+    assert "bad_nan" not in entry and "bad_inf" not in entry  # not valid JSON
