@@ -22,7 +22,7 @@ install:
 	$(PY) -m pip install -e $(PKG)
 
 dev:
-	$(PY) -m pip install -e "$(PKG)[dev,meshtastic]"
+	$(PY) -m pip install -e "$(PKG)[dev,meshtastic,ui]"
 	pre-commit install
 
 test:
