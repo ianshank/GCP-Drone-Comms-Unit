@@ -24,6 +24,7 @@ counted, never rendered and never fatal.
 from __future__ import annotations
 
 import collections
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -47,6 +48,10 @@ _GEOMETRY_KEYS = frozenset({"lat", "lon"})
 
 
 def _is_scalar(value: Any) -> bool:
+    """JSON-safe scalar: NaN/inf floats are rejected — they are not valid JSON and would
+    break the browser's ``response.json()`` parse of the whole FeatureCollection."""
+    if isinstance(value, float):
+        return math.isfinite(value)
     return value is None or isinstance(value, _SCALAR_TYPES)
 
 
@@ -164,6 +169,8 @@ class SnapshotStore:
         lat, lon = position.get("lat"), position.get("lon")
         if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
             return None
+        if not (math.isfinite(float(lat)) and math.isfinite(float(lon))):
+            return None  # NaN/inf coordinates are invalid JSON and unmappable
         properties: dict[str, Any] = {
             "uid": envelope.source_uid,
             "ts": envelope.ts,
@@ -224,7 +231,13 @@ class SnapshotStore:
         return _collection(self._detections)
 
     def counters(self) -> dict[str, int]:
-        """Bound/drop observability (served by ``/api/health``); includes live sizes."""
+        """Bound/drop observability (served by ``/api/health``); includes live sizes.
+
+        Sweeps TTL-expired entries first so a health-only poll never reports stale
+        entries as live (the same sweep-on-read rule as the GeoJSON renders).
+        """
+        self._sweep(self._tracks, self._track_stale_s, "tracks_expired")
+        self._sweep(self._detections, self._detection_stale_s, "detections_expired")
         return {
             **self._counters,
             "tracks_live": len(self._tracks),
