@@ -1,13 +1,14 @@
 # Operator UI — local, read-only, fail-closed console for the MeshSA edge node
 
-> **Status: Definition.** (Definition → Implemented → Validated; see
+> **Status: Implemented** (fakes-first; field validation pending — §8 exit criteria).
+> (Definition → Implemented → Validated; see
 > [README.md](README.md).) Pairs with [../CHARTER.md](../CHARTER.md) (scope + invariants),
 > [../ROADMAP.md](../ROADMAP.md) (M4 "health/observability dashboards"), and
 > [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (Track F).
 > Change deliberately; code docstrings cite this spec's `§` numbers.
-> **Sequencing:** proposed while M2 is open — implementation starts only after the
-> maintainer ratification requested in
-> `openspec/changes/meshsa-operator-ui/proposal.md` (CHARTER §6 convention).
+> **Sequencing:** proposed while M2 was open and ratified via
+> `openspec/changes/meshsa-operator-ui/proposal.md` (CHARTER §6 convention); the
+> implementation ships as `meshsa.ui` behind the `[ui]` extra.
 
 **Milestone / Initiative:** M4 (Fleet & resilience) — observability surface
 **Track:** F.3 (new row; F.1/F.2 are the existing M4/M5 planned specs)
@@ -107,7 +108,7 @@ config field, not a literal.
 
 ## 3. Architecture
 
-```
+```text
                     ┌──────────────────────────────────────────────┐
  Router ──subscribe─► SnapshotStore (bounded, TTL; PLI + MARKER)   │
                     │        │ tracks_geojson() / detections_geojson()   (pure)
@@ -230,9 +231,10 @@ Normative rules:
   token: str | None = None) -> web.Application` — bind enforced inside when `host` is given;
   registers only routes whose sources exist; `aiohttp` imported inside the factory (health.py
   precedent) so `meshsa` imports clean without the extra.
-- Pure helpers unit-tested without aiohttp: `panel_manifest(sources, config)`,
-  `guard(token, header) -> Response | None`, page render (`ui/_html.py: render_page(token,
-  manifest, config)`).
+- Pure helpers unit-tested without aiohttp: `panel_manifest(sources)`,
+  `guard(token, header) -> tuple[dict, int] | None` (`None` = allowed, else a
+  `(body, 401)` pair the route turns into a JSON response), and the page render
+  (`ui/_html.py: render_page(token, manifest, *, poll_interval_s, map_style_url, title)`).
 
 ### 5.4 `ui/logring.py` — `LogRing`
 
