@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from .logring import VALID_LEVELS
+
 #: Default bind port; unclaimed in the docs/AUDIT_M2_AUTH.md inventory (and deliberately
 #: clear of the known scout-station / detection-ingest 8099 double-booking).
 DEFAULT_UI_PORT = 8100
@@ -51,3 +53,12 @@ class UIConfig(BaseModel):
             return None
         stripped = v.strip()
         return stripped or None
+
+    @field_validator("log_ring_level")
+    @classmethod
+    def _known_log_level(cls, v: str) -> str:
+        """Fail at config parse, not at wiring: ``LogRing`` accepts only these levels."""
+        normalized = v.strip().lower()
+        if normalized not in VALID_LEVELS:
+            raise ValueError(f"unknown log level {v!r}; expected one of {sorted(VALID_LEVELS)}")
+        return normalized
