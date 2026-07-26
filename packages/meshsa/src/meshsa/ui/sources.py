@@ -30,6 +30,7 @@ __all__ = [
     "NodeHealthSource",
     "FpvLinkSource",
     "AgentChatBackend",
+    "LinkHealthMonitorLike",
 ]
 
 
@@ -97,7 +98,7 @@ class NodeHealthSource:
         }
 
 
-class _LinkHealthMonitor(Protocol):
+class LinkHealthMonitorLike(Protocol):
     """Structural view of :class:`meshsa.fpv.link_health.LinkHealthMonitor` (no [fpv] import)."""
 
     def evaluate(self) -> Any: ...
@@ -107,7 +108,7 @@ class _LinkHealthMonitor(Protocol):
 class FpvLinkSource:
     """Adapter over ``LinkHealthMonitor.evaluate()`` -> a JSON-able report dict."""
 
-    monitor: _LinkHealthMonitor
+    monitor: LinkHealthMonitorLike
 
     def report(self) -> dict[str, Any]:
         report = self.monitor.evaluate()
