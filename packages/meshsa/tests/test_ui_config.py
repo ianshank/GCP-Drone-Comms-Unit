@@ -124,3 +124,13 @@ def test_config_json_blob_merges_ui() -> None:
     ui = NodeConfig.from_env(env).ui
     assert ui.enabled is True
     assert ui.port == 8103
+
+
+def test_log_ring_level_validated_at_parse() -> None:
+    with pytest.raises(ValidationError):
+        UIConfig(log_ring_level="loud")
+
+
+@pytest.mark.parametrize("raw", ["INFO", "  Warning ", "debug"])
+def test_log_ring_level_normalised(raw: str) -> None:
+    assert UIConfig(log_ring_level=raw).log_ring_level == raw.strip().lower()
