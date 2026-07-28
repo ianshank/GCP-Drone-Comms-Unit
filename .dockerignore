@@ -1,0 +1,60 @@
+# Exclude everything that is not needed for the Docker build context.
+# Keep this list tight — a large context slows every `docker build`.
+
+# ── Version control ───────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Dependencies (re-installed inside the image) ─────────────────────────────
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# ── Build output (rebuilt inside the image) ──────────────────────────────────
+dist/
+**/dist/
+build/
+**/build/
+*.tsbuildinfo
+**/*.tsbuildinfo
+coverage/
+**/coverage/
+
+# ── Python deliverables (not part of the Node.js build) ─────────────────────
+deliverables/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+
+# ── Dev tooling (not needed in production image) ─────────────────────────────
+.vitest-cache/
+.vitest/
+.eslintcache
+*.log
+
+# ── Docs ──────────────────────────────────────────────────────────────────────
+docs/
+*.md
+!artifacts/api-server/README.md
+
+# ── Replit / editor artefacts ─────────────────────────────────────────────────
+.replit
+.replitignore
+.local/
+.cache/
+.config/
+.agents/
+.idea/
+.DS_Store
+
+# ── Secrets (never in Docker context) ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── CI / scripts (not needed in image) ───────────────────────────────────────
+scripts/hooks/
+.github/
+.pre-commit-config.yaml
+.gitleaks.toml
+Makefile

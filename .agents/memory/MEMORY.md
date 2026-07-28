@@ -1,1 +1,2 @@
 - [meshsa-ui-validation](meshsa-ui-validation.md) — exception type, test self-containment, IPv6 guard rationale, watchdog math, 3 false positives + 3 missed gaps from the peer review.
+- [workspace-infrastructure](workspace-infrastructure.md) — validate-pre-pr.sh bash pitfalls, ESLint monorepo config, test structure, X-Powered-By fix.

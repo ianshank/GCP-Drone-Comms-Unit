@@ -1,49 +1,72 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# ── Node / pnpm ───────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
 
-# compiled output
-dist
-tmp
-out-tsc
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+build/
+out/
 *.tsbuildinfo
-.expo
-.expo-shared
+**/.tsbuildinfo
 
-# dependencies
-node_modules
+# ── Test & coverage ───────────────────────────────────────────────────────────
+coverage/
+.vitest-cache/
+.vitest/
+html/
+*.lcov
 
-# IDEs and editors
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
+# ── Python (deliverables/) ────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.*.example
 
-# System Files
+# ── OS artefacts ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+*~
 
-# Replit
+# ── Replit platform ───────────────────────────────────────────────────────────
 .cache/
 .local/
+.config/
+.replit
+.replitignore
+
+# ── Agent / task local state (never commit) ───────────────────────────────────
+.agents/memory/
+.local/tasks/
+
+# ── Temporary / scratch ───────────────────────────────────────────────────────
+*.tmp
+*.temp
+INSTRUCTIONS.md
