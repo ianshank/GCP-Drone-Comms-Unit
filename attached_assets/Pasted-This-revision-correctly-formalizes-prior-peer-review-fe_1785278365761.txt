@@ -1,0 +1,68 @@
+This revision correctly formalizes prior peer-review feedback into concrete, testable requirements and adopts the OpenSpec proposal/design/tasks/delta-spec structure appropriately for a brownfield change. A few structural and technical issues remain worth flagging before this is treated as execution-ready, along with a tightened rewrite below.[1][2]
+
+## Objective Assessment of the Plan
+
+The plan's self-critique is largely accurate — the listed gaps (failure-mode coverage, concurrency, soft budgets, vague soak criteria, token lifecycle, plaintext-HTTP risk, incomplete offline/systemd story, artificial sequencing) are real and were correctly converted into additive leaves rather than structural rewrites, which fits the OpenSpec "delta spec" philosophy of describing what changed without rewriting the whole system. That said, three issues need correction:[3][4]
+
+- **Unverifiable artifact claim**: The plan states a complete OpenSpec package already exists at a local path, but this cannot be verified from the repository or public web — treat this as a to-be-created deliverable, not a "landed" one, until confirmed inside the actual working directory.
+- **Coverage floor without failure-mode weighting**: A blanket "≥97% coverage on meshsa.ui" is a reasonable ceiling for a small UI module, but coverage percentage doesn't guarantee the radio-loss/concurrency scenarios are actually exercised — recommend naming those specific scenarios as required test cases in tasks.md, not just relying on an aggregate number, since 97% line coverage can still miss the one concurrency race that matters.
+- **WatchdogSec listed without Type=notify**: The plan specifies "Restart=on-failure, WatchdogSec=30" but WatchdogSec only functions if the service actively sends `sd_notify(WATCHDOG=1)` heartbeats, which requires `Type=notify` and in-app instrumentation — without that, the watchdog interval is inert and only crash-based restart works. This is the same gap flagged in the prior review and it persists unresolved in this "final" version.[5][6]
+- **ruff + mypy --strict pairing is correct and standard** — no issue there; this is the recommended pairing for Python quality gates.[7][8]
+
+## Rewritten Plan
+
+Root: Final next-steps plan for MeshSA Operator Console (meshsa.ui) validation & hardening
+
+├── Field Validation Gates (spec §8 → "Validated")
+Synthesis: Objective, automated, on-device gates proving correct behavior under good and adverse conditions, with named scenarios (not just an aggregate coverage number).
+  - Radio-loss + multi-source concurrency: inject sustained silence, confirm TTL eviction is visually distinguishable from "no threats"; feed ≥2 concurrent sources, assert no composite-key collisions.
+  - Hard resource budgets: add `UIConfig.max_cpu_pct` / `max_rss_mb`; fail validation on breach, not just log it.
+  - Concrete log-ring soak: minimum 8–12h run, automated secret/entropy scan on the dumped buffer.
+  - Rollback/kill-switch: confirm operator can freeze the update loop and leave the map in a stable last-known state.
+
+├── Security Matrix & Residual Risk
+Synthesis: Strengthen the existing netauth/bearer surface without adding TLS or changing defaults; make risk explicit rather than assumed.
+  - Malformed-header + token-replay test matrix, including a post-rotation stale-token rejection case.
+  - Explicit residual-risk acceptance note (token-over-plaintext-HTTP on non-loopback) recorded in both AUDIT and operator-ui.md.
+  - Cache-Control: no-store re-verification to confirm tokens never persist in browser disk cache.
+
+├── Offline Assets & Deployability
+Synthesis: Make the console field-usable without CDN or manual process babysitting, with a resolved (not open) tile-format decision.
+  - Vendor MapLibre JS/CSS + PMTiles as the default local tile source (browser-native range requests, no extra server process); local-first resolver falls back to CDN only if local assets are missing.
+  - systemd unit: `Type=notify`, `Restart=on-failure` + `Restart=on-watchdog`, `WatchdogSec=30` with an actual in-app `sd_notify` heartbeat, `StartLimitIntervalSec`/`StartLimitBurst` to prevent restart-loop masking, documented token generation in `.env.example`.
+  - Phone viewport acceptance: concrete pass/fail checks at 390×844 and 428×926, plus a throttled-network condition to mimic field LAN.
+
+└── Sequencing, Seam & Quality Gates
+Synthesis: Parallelize practical work, keep future scope deferred but tracked, and enforce hygiene with named scenario coverage rather than an aggregate percentage alone.
+  - Run live-traffic, radio-loss, and concurrency soaks under the new systemd unit from the start — no separate "validate then systemd" phase.
+  - Concrete multi-node seam: tracked GitHub issue + code comment naming the exact `SnapshotSource` extension point; no implementation now.
+  - Quality gate package: ruff, mypy --strict, ≥97% coverage with the four field-validation scenarios explicitly named as required test cases, zero hard-coded values, structured logging — verified green before flipping status to "Validated."
+
+## Updated Next Actions
+
+1. Confirm (don't assume) whether the OpenSpec package actually exists on disk; if not, generate it fresh using the structure above.
+2. Instrument meshsa-ui with an `sd_notify` heartbeat and set `Type=notify` before relying on WatchdogSec.
+3. Resolve PMTiles vs. MBTiles now — default to PMTiles given the single-file, server-less browser access model.[9][10]
+4. Name the four required validation scenarios explicitly in tasks.md rather than trusting an aggregate coverage floor alone.
+5. Execute phases in parallel where the plan specifies, and only flip operator-ui.md to "Validated" once every named gate — not just the percentage gate — is green.
+
+Sources
+[1] OpenSpec/docs/concepts.md at main https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md
+[2] OpenSpec: Make AI Coding Assistants Follow a Spec, Not ... https://recca0120.github.io/en/2026/03/08/openspec-sdd/
+[3] OpenSpec | Spec-Driven Development https://intent-driven.dev/knowledge/openspec/
+[4] OpenSpec - a lightweight AI-driven spec framework - Dan Clarke https://www.danclarke.com/openspec/
+[5] systemd.service https://www.freedesktop.org/software/systemd/man/systemd.service.html
+[6] How to Set Up systemd Service Watchdogs and Auto- ... https://oneuptime.com/blog/post/2026-03-04-systemd-service-watchdogs-auto-restart-rhel-9/view
+[7] FAQ | Ruff - Astral Docs https://docs.astral.sh/ruff/faq/
+[8] Using Mypy in production at Spring https://notes.crmarsh.com/using-mypy-in-production-at-spring
+[9] MBTiles and PMTiles for offline military mapping https://corvusintell.com/blog/field-apps/mbtiles-pmtiles-offline-maps/
+[10] PMTiles - Cloud-Optimized Geospatial Formats Guide https://guide.cloudnativegeo.org/pmtiles/intro.html
+[11] How are you enforcing code-quality gates automatically in ... https://www.reddit.com/r/devops/comments/1onb20l/how_are_you_enforcing_codequality_gates/
+[12] Spec-Driven Development with OpenSec https://antongubarenko.substack.com/p/spec-driven-development-with-opensec
+[13] The Python Tools I Use to Keep Code Quality Under Control https://python.plainenglish.io/the-python-tools-i-use-to-keep-code-quality-under-control-95445a5aa9f9
+[14] 🤖How to make AI follow your instructions more for free ... https://dev.to/webdeveloperhyper/how-to-make-ai-follow-your-instructions-more-for-free-openspec-2c85
+[15] Python Quality Tools for Juniors: Ruff & Mypy https://www.qpython.com/python-quality-tools-for-juniors-ruff-mypy-59af/
+[16] The Fastest Way to Boost your Code Quality: Use Ruff Linter https://www.theodo.com/en-ma/blog/the-fastest-way-to-boost-your-code-quality-use-ruff-linter
+[17] Spec-Driven Development with OpenSpec - Workflow https://www.linkedin.com/pulse/spec-driven-development-openspec-source-truth-hari-krishnan--obrfc
+[18] Python Best Practices - PEP8 Style Guide, Black, Ruff & Mypy ... https://www.youtube.com/watch?v=hqVCOlZc8AI
+[19] OpenSpec Changes Everything - No More Vibe Coding (Full ... https://www.youtube.com/watch?v=5oUmpdpbejk&vl=en
