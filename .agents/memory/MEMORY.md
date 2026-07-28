@@ -1,0 +1,1 @@
+- [meshsa-ui-validation](meshsa-ui-validation.md) — exception type, test self-containment, IPv6 guard rationale, watchdog math, 3 false positives + 3 missed gaps from the peer review.

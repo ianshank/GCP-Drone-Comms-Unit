@@ -25,25 +25,64 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Import shims — replace with direct imports once the patch lands:
-#   from meshsa.ui.cli import _send_notify, _watchdog_loop
+# Import strategy
+#
+# Try to import from the patched location first.  When the patch has NOT yet
+# been applied, fall back to reference implementations inlined below so the
+# tests still execute (and xfail correctly) rather than failing at collection
+# time with an ImportError.  The fallback must NOT be imported from a path
+# outside packages/meshsa/ — this file must be self-contained when dropped
+# into packages/meshsa/tests/.
 # ---------------------------------------------------------------------------
 
 try:
     from meshsa.ui.cli import _send_notify, _watchdog_loop  # type: ignore[attr-defined]
     _PATCH_APPLIED = True
-except ImportError:
+except (ImportError, AttributeError):
     _PATCH_APPLIED = False
-    # Provide the reference implementations from the patch module so the
-    # tests can at least run against the documented contract even before the
-    # patch lands in cli.py.
-    from cli_sdnotify_heartbeat import _send_notify, _watchdog_loop  # type: ignore[import]
+
+if not _PATCH_APPLIED:
+    # ── Reference implementations (mirrors patches/cli_sdnotify_heartbeat.py) ──
+    # These run the tests against the DOCUMENTED CONTRACT before the real code
+    # exists.  When the patch lands, these are dead code (the try-branch wins).
+
+    import logging as _logging
+
+    _ref_log = _logging.getLogger("meshsa.ui.cli._ref")
+
+    def _send_notify(message: str) -> None:  # type: ignore[misc]  # noqa: F811
+        """No-op reference implementation — graceful fallback when sdnotify absent."""
+        try:
+            import sdnotify  # type: ignore[import]
+            notifier = sdnotify.SystemdNotifier()
+            notifier.notify(message)
+        except ImportError:
+            _ref_log.debug(
+                "sdnotify not available; systemd watchdog inactive",
+                extra={"hint": "pip install sdnotify"},
+            )
+        except Exception as exc:
+            _ref_log.warning(
+                "sd_notify failed", extra={"message": message, "error": str(exc)}
+            )
+
+    async def _watchdog_loop(interval_s: float) -> None:  # type: ignore[misc]  # noqa: F811
+        """Reference implementation — sends WATCHDOG=1 every interval_s seconds."""
+        try:
+            while True:
+                _send_notify("WATCHDOG=1")
+                await asyncio.sleep(interval_s)
+        except asyncio.CancelledError:
+            _send_notify("STOPPING=1")
+            raise
+
 
 pytestmark = pytest.mark.xfail(
     not _PATCH_APPLIED,
     reason=(
         "G0.1 sd_notify patch not yet applied to meshsa.ui.cli. "
-        "Apply patches/cli_sdnotify_heartbeat.py first."
+        "Apply deliverables/meshsa-ui-validation/patches/cli_sdnotify_heartbeat.py "
+        "and re-run to flip these from xfail → xpass."
     ),
     strict=True,
 )

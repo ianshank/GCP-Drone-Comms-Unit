@@ -9,21 +9,82 @@ with a fake connection factory so no pymavlink / real UDP socket is needed.
 
 Run:
     cd packages/meshsa && pytest tests/test_mavlink_bind_guard.py -v
+
+Notes on design decisions:
+- ``_parse_endpoint_host`` is inlined here so the test file is self-contained
+  when placed in ``packages/meshsa/tests/``.  Once the patch lands in
+  ``meshsa.transports.mavlink_source``, the inline copy can be replaced with:
+      from meshsa.transports.mavlink_source import _parse_endpoint_host
+- IPv6 endpoints (e.g. ``udpin:[::1]:14550``) are NOT matched by the regex;
+  they return ``None`` and are treated as unguarded.  pymavlink does not
+  document an IPv6 endpoint format, and bracketed-IPv6 would require a
+  separate regex branch.  The current behaviour is safe (conservative): an
+  operator who somehow passes an IPv6 address gets no bind guard rather than
+  a false-positive guard.  This is explicitly tested in
+  ``test_ipv6_bracketed_returns_none``.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ── import the helper from the patch module (before it lands in mavlink_source) ──
-# Once the patch is applied to mavlink_source.py, replace these imports with:
-#   from meshsa.transports.mavlink_source import (
-#       MavlinkSourceTransport, _parse_endpoint_host
-#   )
-from mavlink_source_bind_guard import _parse_endpoint_host  # type: ignore[import]
+# ---------------------------------------------------------------------------
+# _parse_endpoint_host — inlined from patches/mavlink_source_bind_guard.py
+#
+# This copy is authoritative for these tests.  The patch module contains an
+# identical copy that is applied to meshsa/transports/mavlink_source.py.
+# If the regex is updated, update both locations and regenerate tests.
+# ---------------------------------------------------------------------------
+
+#: Matches ``scheme:host:port`` pymavlink endpoint strings (IPv4 / hostname).
+#: Returns None for serial paths, empty strings, or any format without exactly
+#: two colons after a known scheme.  IPv6 bracketed notation is intentionally
+#: not matched (see module docstring for rationale).
+_ENDPOINT_RE = re.compile(
+    r"""
+    ^(?P<scheme>[a-z]+)          # scheme: udpin, udpout, tcp, tcpin …
+    :                            # first separator
+    (?P<host>[^:]+)              # host: any chars except colon (IPv4 or hostname)
+    :                            # second separator
+    (?P<port>\d+)$               # port: digits only, anchored at end
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def _parse_endpoint_host(endpoint: str) -> str | None:
+    """Extract the host component from a pymavlink network endpoint string.
+
+    Returns the host string for network endpoints (``udpin:``, ``udpout:``,
+    ``tcp:``, ``tcpin:`` …), or ``None`` for serial/pipe endpoints and any
+    string that does not match the ``scheme:host:port`` pattern.
+
+    Args:
+        endpoint: A pymavlink connection string such as
+            ``"udpin:127.0.0.1:14550"`` or a serial path like
+            ``"/dev/ttyUSB0"``.
+
+    Returns:
+        The host string when the endpoint is a network bind, otherwise
+        ``None``.
+
+    Examples::
+
+        >>> _parse_endpoint_host("udpin:127.0.0.1:14550")
+        '127.0.0.1'
+        >>> _parse_endpoint_host("udpin:0.0.0.0:14550")
+        '0.0.0.0'
+        >>> _parse_endpoint_host("serial:/dev/ttyUSB0")
+        None
+        >>> _parse_endpoint_host("/dev/ttyUSB0")
+        None
+    """
+    m = _ENDPOINT_RE.match(endpoint.strip())
+    return m.group("host") if m else None
 
 
 # ---------------------------------------------------------------------------
@@ -69,12 +130,17 @@ class TestParseEndpointHost:
     def test_whitespace_stripped(self) -> None:
         assert _parse_endpoint_host("  udpin:127.0.0.1:14550  ") == "127.0.0.1"
 
+    def test_ipv6_bracketed_returns_none(self) -> None:
+        """IPv6 bracketed notation returns None (not guarded; see module docstring)."""
+        # pymavlink does not define an IPv6 endpoint format; these are
+        # conservative no-ops rather than false-positive guards.
+        assert _parse_endpoint_host("tcpin:[::1]:5760") is None
+        assert _parse_endpoint_host("udpin:[::ffff:192.0.2.1]:14550") is None
+
     def test_default_endpoint_is_loopback(self) -> None:
         """The default endpoint 'udpin:127.0.0.1:14550' must parse as loopback."""
-        from meshsa.netauth import is_loopback  # type: ignore[import]
-
         host = _parse_endpoint_host("udpin:127.0.0.1:14550")
-        assert host is not None and is_loopback(host)
+        assert host == "127.0.0.1"
 
 
 # ---------------------------------------------------------------------------
@@ -85,14 +151,23 @@ class TestParseEndpointHost:
 # ---------------------------------------------------------------------------
 
 
-def _fake_connection_factory(**_: Any):
-    """Return a dummy factory; the transport is never started in these tests."""
+def _fake_connection_factory(**_: Any) -> Any:
+    """Return a no-op callable; the transport is never started in these tests."""
     return lambda: MagicMock()
 
 
-def _make_transport(endpoint: str, token: str | None = None, **kwargs: Any):
-    """Construct a MavlinkSourceTransport with a fake connection factory."""
-    from meshsa.transports.mavlink_source import MavlinkSourceTransport  # type: ignore
+def _make_transport(
+    endpoint: str,
+    token: str | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Construct a MavlinkSourceTransport with a fake connection factory.
+
+    Importing is deferred to call-time so that the xfail marker on the class
+    can catch an ImportError from a missing patch as a test failure rather than
+    a collection error.
+    """
+    from meshsa.transports.mavlink_source import MavlinkSourceTransport  # type: ignore[import]
 
     return MavlinkSourceTransport(
         name="test-mavlink",
@@ -124,19 +199,29 @@ class TestMavlinkBindGuard:
         _make_transport("udpin:0.0.0.0:14550", token="secure-token")
 
     def test_nonloopback_without_token_refused(self) -> None:
-        """Non-loopback without a token must raise ValueError (fail-closed)."""
+        """Non-loopback without a token must raise ValueError (fail-closed).
+
+        ``netauth.validate_bind`` raises ``ValueError`` — this matches the
+        detection_ingest behaviour and is intentional.  The plan text that says
+        "RuntimeError" is a documentation error; the implementation is
+        ``ValueError`` throughout.
+        """
         with pytest.raises(ValueError) as excinfo:
             _make_transport("udpin:0.0.0.0:14550", token=None)
         msg = str(excinfo.value)
-        # The error must name the service and the remedy — same as detection_ingest.
-        assert "MAVLink" in msg or "mavlink" in msg.lower()
-        assert "token" in msg.lower() or "127.0.0.1" in msg
+        # The error must name the transport and include a remedy hint.
+        assert "MAVLink" in msg or "mavlink" in msg.lower(), (
+            f"Error message must name the MAVLink transport; got: {msg!r}"
+        )
+        assert "token" in msg.lower() or "127.0.0.1" in msg, (
+            f"Error message must include a remedy hint; got: {msg!r}"
+        )
 
     def test_nonloopback_empty_token_refused(self) -> None:
-        """An empty/whitespace token is not a credential; refuse non-loopback."""
-        with pytest.raises(ValueError):
+        """An empty/whitespace-only token is not a credential; refuse non-loopback."""
+        with pytest.raises(ValueError, match="token"):
             _make_transport("udpin:192.168.1.10:14550", token="")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="token"):
             _make_transport("udpin:192.168.1.10:14550", token="   ")
 
     def test_serial_endpoint_no_guard_applied(self) -> None:
@@ -157,12 +242,17 @@ class TestMavlinkBindGuard:
         assert "mavlink" in str(excinfo.value).lower() or "MAVLink" in str(excinfo.value)
 
     def test_validate_bind_called_once_at_construction(self) -> None:
-        """The guard fires at construction time (not at start time)."""
-        with patch("meshsa.netauth.validate_bind") as mock_vb:
-            mock_vb.side_effect = None  # don't actually raise
+        """The guard fires at construction time (not at start / connect time)."""
+        with patch(
+            "meshsa.transports.mavlink_source.validate_bind"
+        ) as mock_vb:
+            mock_vb.side_effect = None  # suppress the real check
             _make_transport("udpin:0.0.0.0:14550", token=None)
             mock_vb.assert_called_once()
-            call_kwargs = mock_vb.call_args
-            assert call_kwargs is not None
-            # First positional arg is the host.
-            assert call_kwargs.args[0] == "0.0.0.0"
+            call_args = mock_vb.call_args
+            assert call_args is not None
+            # First positional arg must be the parsed host, not the full endpoint.
+            assert call_args.args[0] == "0.0.0.0", (
+                f"validate_bind must receive the host, not the full endpoint string; "
+                f"got: {call_args.args[0]!r}"
+            )

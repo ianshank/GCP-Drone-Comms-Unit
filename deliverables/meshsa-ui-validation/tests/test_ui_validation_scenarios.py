@@ -39,6 +39,20 @@ from meshsa.ui.snapshot import SnapshotStore
 from meshsa.ui.sources import UISources
 
 # ---------------------------------------------------------------------------
+# Module-level constants — avoids magic numbers in test bodies.
+# These are chosen to be plausible field coordinates; their specific values
+# are irrelevant to the scenario outcomes (only uniqueness matters).
+# ---------------------------------------------------------------------------
+
+_DEFAULT_LAT: float = 38.5          # degrees N — NorCal area, arbitrarily chosen
+_DEFAULT_LON: float = -122.5        # degrees W
+_DEFAULT_HAE: float = 0.0           # height above ellipsoid, metres
+_DEFAULT_TRACK_STALE_S: float = 300.0
+_DEFAULT_DETECTION_STALE_S: float = 3600.0
+_DEFAULT_MAX_TRACKS: int = 64
+_DEFAULT_MAX_DETECTIONS: int = 64
+
+# ---------------------------------------------------------------------------
 # Shared fakes — local to this module; do not import from test_ui_app to keep
 # the scenarios self-contained and independently runnable.
 # ---------------------------------------------------------------------------
@@ -78,10 +92,10 @@ class _FakeSnapshot:
 def _make_store(
     clock: FakeClock,
     *,
-    max_tracks: int = 64,
-    max_detections: int = 64,
-    track_stale_s: float = 300.0,
-    detection_stale_s: float = 3600.0,
+    max_tracks: int = _DEFAULT_MAX_TRACKS,
+    max_detections: int = _DEFAULT_MAX_DETECTIONS,
+    track_stale_s: float = _DEFAULT_TRACK_STALE_S,
+    detection_stale_s: float = _DEFAULT_DETECTION_STALE_S,
 ) -> SnapshotStore:
     return SnapshotStore(
         clock,
@@ -114,11 +128,23 @@ def _pli_envelope(
     *,
     ts: float,
     msg_id: str | None = None,
-    lat: float = 38.5,
-    lon: float = -122.5,
-    hae: float = 0.0,
+    lat: float = _DEFAULT_LAT,
+    lon: float = _DEFAULT_LON,
+    hae: float = _DEFAULT_HAE,
 ) -> Envelope:
-    """Build a minimal PLI envelope with configurable position and timestamp."""
+    """Build a minimal PLI envelope with configurable position and timestamp.
+
+    Args:
+        source_uid: Unique node identifier (used as the store key).
+        ts: Envelope timestamp in seconds (monotonic or wall-clock).
+        msg_id: Optional explicit message ID; auto-generated if omitted.
+        lat: Latitude in decimal degrees (default: ``_DEFAULT_LAT``).
+        lon: Longitude in decimal degrees (default: ``_DEFAULT_LON``).
+        hae: Height above ellipsoid in metres (default: 0.0).
+
+    Returns:
+        A fully-formed :class:`~meshsa.models.Envelope` of kind ``PLI``.
+    """
     return Envelope(
         msg_id=msg_id or f"pli-{source_uid}-{ts}",
         ts=ts,
@@ -139,8 +165,29 @@ def _marker_envelope(
     track_id: int | None = None,
     label: str = "vehicle",
     confidence: float = 0.92,
+    lat: float = _DEFAULT_LAT,
+    lon: float = _DEFAULT_LON,
+    hae: float = _DEFAULT_HAE,
 ) -> Envelope:
-    """Build a minimal MARKER envelope with an optional composite track_id."""
+    """Build a minimal MARKER envelope with an optional composite track_id.
+
+    Args:
+        source_uid: Unique node identifier (used as the first half of the
+            composite store key ``(source_uid, track_id)``).
+        msg_id: Explicit message ID (required to avoid accidental upsert
+            collisions in tests that insert multiple detections).
+        ts: Envelope timestamp in seconds.
+        track_id: Optional per-source tracker number.  When ``None``, the
+            store uses a synthetic key.
+        label: Detection class label (default: ``"vehicle"``).
+        confidence: Detector confidence score in ``[0, 1]``.
+        lat: Latitude in decimal degrees (default: ``_DEFAULT_LAT``).
+        lon: Longitude in decimal degrees (default: ``_DEFAULT_LON``).
+        hae: Height above ellipsoid in metres (default: 0.0).
+
+    Returns:
+        A fully-formed :class:`~meshsa.models.Envelope` of kind ``MARKER``.
+    """
     detection: dict[str, Any] = {"label": label, "confidence": confidence}
     if track_id is not None:
         detection["track_id"] = track_id
@@ -151,7 +198,7 @@ def _marker_envelope(
         kind=MessageKind.MARKER,
         payload={
             "node": {"uid": source_uid, "callsign": source_uid.upper(), "tier": "user"},
-            "position": {"lat": 38.5, "lon": -122.5, "hae": 0.0},
+            "position": {"lat": lat, "lon": lon, "hae": hae},
             "detection": detection,
         },
     )
