@@ -25,6 +25,8 @@ deliverables/
 **/__pycache__/
 **/*.pyc
 **/.pytest_cache/
+**/.coverage
+**/.hypothesis/
 
 # ── Dev tooling (not needed in production image) ─────────────────────────────
 .vitest-cache/

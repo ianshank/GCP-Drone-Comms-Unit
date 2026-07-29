@@ -8,9 +8,9 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "LOG_LEVEL=silent vitest run --config vitest.config.ts",
-    "test:watch": "LOG_LEVEL=silent vitest watch --config vitest.config.ts",
-    "test:coverage": "LOG_LEVEL=silent vitest run --config vitest.config.ts --coverage",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest watch --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "lint": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix"
   },

@@ -107,8 +107,8 @@ pnpm --filter @workspace/api-server run test:watch
 make coverage
 ```
 
-Test files live alongside source in `__tests__/` directories.
-See [`artifacts/api-server/src/__tests__/`](artifacts/api-server/src/__tests__/).
+Test files live alongside source in `__tests__/` and package `tests/` directories.
+See [`docs/LOCAL_TESTING_PLAN.md`](docs/LOCAL_TESTING_PLAN.md) for the complete test taxonomy, setup, and execution strategy.
 
 ---
 

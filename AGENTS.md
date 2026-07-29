@@ -9,13 +9,13 @@ avoid drift. When editing inside a subfolder, also read the nearest scoped
 **Reading order to stay on track: [docs/CHARTER.md](docs/CHARTER.md) →
 [docs/ROADMAP.md](docs/ROADMAP.md) → the nearest scoped `AGENTS.md` →
 [docs/NEXTSTEPS.md](docs/NEXTSTEPS.md) → [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
-→ the relevant [docs/specs/](docs/specs/) spec.** CHARTER is the stable scope/non-goals +
+→ [docs/LOCAL_TESTING_PLAN.md](docs/LOCAL_TESTING_PLAN.md) → the relevant [docs/specs/](docs/specs/) spec.** CHARTER is the stable scope/non-goals +
 invariants that must not drift; ROADMAP is the stable milestone trajectory. Both change rarely
 and only by deliberate decision — put changeable, near-term to-dos in NEXTSTEPS, not in either.
 The IMPLEMENTATION_PLAN sequences *how* the remaining work lands (spec-driven); every
 roadmap/initiative feature gets a committed spec under `docs/specs/` before code (see
 [docs/specs/README.md](docs/specs/README.md)). Architecture detail lives in
-[docs/C4.md](docs/C4.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+[docs/C4.md](docs/C4.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Test taxonomy & local plan live in [docs/LOCAL_TESTING_PLAN.md](docs/LOCAL_TESTING_PLAN.md).
 ## Repository Map
 
 | Path | Scope |

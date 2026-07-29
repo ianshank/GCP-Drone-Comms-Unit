@@ -161,6 +161,9 @@ importers:
       '@eslint/js':
         specifier: ^9.28.0
         version: 9.39.5
+      '@rollup/rollup-win32-x64-msvc':
+        specifier: ^4.62.3
+        version: 4.62.3
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.35.1
         version: 8.65.0(@typescript-eslint/parser@8.65.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
@@ -1409,6 +1412,11 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@rollup/rollup-win32-x64-msvc@4.62.3':
+    resolution: {integrity: sha512-MOG/3gTOn4Fwf574RVOaY61I5o6P90legkFADiTyn1hyjNydT+cerU2rLUwPdZkKKyJ+iT+K9p7WXK4LM1Ka6g==}
+    cpu: [x64]
+    os: [win32]
 
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
@@ -5101,6 +5109,8 @@ snapshots:
 
   '@rollup/rollup-linux-x64-gnu@4.62.3':
     optional: true
+
+  '@rollup/rollup-win32-x64-msvc@4.62.3': {}
 
   '@rtsao/scc@1.1.0': {}
 

@@ -23,6 +23,8 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+.coverage
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/

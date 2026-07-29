@@ -49,6 +49,22 @@ def _default_connection_factory(options: dict[str, Any]) -> ConnectionFactory:  
     return factory
 
 
+def _extract_endpoint_host(endpoint: str) -> str | None:
+    """Extract host string from network endpoints like 'udpin:0.0.0.0:14550' or 'tcpin:127.0.0.1:5760'."""
+    if not endpoint:
+        return None
+    spec = endpoint
+    for prefix in ("udpin:", "udpout:", "tcpin:", "tcpout:", "udp:", "tcp:"):
+        if spec.startswith(prefix):
+            spec = spec[len(prefix) :]
+            break
+    if ":" in spec:
+        host, _, _port = spec.partition(":")
+        if host:
+            return host
+    return None
+
+
 class MavlinkSourceTransport(PollingSourceTransport):
     _thread_prefix = "mavlink"
 
@@ -68,6 +84,18 @@ class MavlinkSourceTransport(PollingSourceTransport):
         queue_maxsize: int = 1000,
         **_options: Any,
     ) -> None:
+        endpoint = str(_options.get("endpoint", "udpin:127.0.0.1:14550"))
+        token = _options.get("token")
+        host = _extract_endpoint_host(endpoint)
+        if host:
+            from ..netauth import validate_bind
+
+            validate_bind(
+                host,
+                token,
+                service="the MAVLink source transport",
+                remedy="set 'token' in transport options or bind to loopback (127.0.0.1)",
+            )
         super().__init__(
             name,
             resource=connection,

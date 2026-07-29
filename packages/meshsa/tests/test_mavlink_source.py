@@ -176,3 +176,29 @@ async def test_poll_drops_message_missing_position_fields():
     env = TelemetryCodec().decode(frame)
     assert env.msg_id == "uav-1:1"  # only the valid fix produced a frame
     assert env.payload["position"]["lat"] == pytest.approx(37.7749)
+
+
+def test_extract_endpoint_host_and_bind_validation():
+    from meshsa.transports.mavlink_source import _extract_endpoint_host
+
+    assert _extract_endpoint_host("udpin:127.0.0.1:14550") == "127.0.0.1"
+    assert _extract_endpoint_host("tcpin:0.0.0.0:5760") == "0.0.0.0"
+    assert _extract_endpoint_host("/dev/ttyACM0") is None
+    assert _extract_endpoint_host("") is None
+
+    # Non-loopback endpoint without a token fails closed
+    with pytest.raises(ValueError, match="refusing to bind"):
+        MavlinkSourceTransport(
+            name="d",
+            connection=FakeConn(),
+            endpoint="udpin:0.0.0.0:14550",
+        )
+
+    # Non-loopback endpoint with a token passes bind validation
+    t = MavlinkSourceTransport(
+        name="d",
+        connection=FakeConn(),
+        endpoint="udpin:0.0.0.0:14550",
+        token="secret-token",
+    )
+    assert t.name == "d"

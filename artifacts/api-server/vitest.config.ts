@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
+process.env["LOG_LEVEL"] = process.env["LOG_LEVEL"] || "silent";
+
 export default defineConfig({
   test: {
     // Use the Node.js environment (not jsdom) — this is a server-side package
