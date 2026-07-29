@@ -1,20 +1,82 @@
+# pre-commit hook configuration
+# Docs: https://pre-commit.com/
+#
+# Install:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manually on all files:
+#   pre-commit run --all-files
+#
+# This config covers both TypeScript (workspace) and Python (deliverables/).
+
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+
+  # ── Secret scanning ─────────────────────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
     hooks:
-      - id: end-of-file-fixer
+      - id: gitleaks
+        name: gitleaks (secret scan)
+        args: ["--config", ".gitleaks.toml", "--no-banner"]
+
+  # ── General file hygiene ────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
       - id: trailing-whitespace
+        exclude: "^deliverables/.*\\.md$"   # markdown uses trailing spaces for line breaks
+      - id: end-of-file-fixer
       - id: check-yaml
+        args: ["--unsafe"]                  # allows custom YAML tags (e.g. !!str)
+      - id: check-json
+        exclude: "tsconfig.*\\.json$"       # tsconfig uses comments (not strict JSON)
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ["--maxkb=1024"]
-      - id: mixed-line-ending
-        args: ["--fix=lf"]
+        args: ["--maxkb=500"]
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
 
+  # ── TypeScript / Node.js ────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: ts-typecheck
+        name: TypeScript type check
+        language: system
+        entry: pnpm -r run typecheck
+        pass_filenames: false
+        files: "\\.tsx?$"
+        types: [file]
+
+      - id: eslint
+        name: ESLint
+        language: system
+        entry: pnpm -r run lint
+        pass_filenames: false
+        files: "\\.tsx?$"
+        types: [file]
+
+  # ── Python (deliverables/) ──────────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.7.4
     hooks:
       - id: ruff
+        name: ruff (Python linter)
         args: ["--fix"]
+        files: "^deliverables/.*\\.py$"
       - id: ruff-format
+        name: ruff-format (Python formatter)
+        files: "^deliverables/.*\\.py$"
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        name: mypy (Python type check)
+        files: "^deliverables/.*\\.py$"
+        args: ["--ignore-missing-imports", "--no-strict-optional"]
+        additional_dependencies:
+          - pytest>=8
+          - aiohttp>=3.9

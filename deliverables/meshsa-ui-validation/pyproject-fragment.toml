@@ -1,0 +1,66 @@
+# pyproject.toml additions for Gate 0.1 (sdnotify) and Gate 1 (test deps)
+#
+# Merge the relevant sections below into packages/meshsa/pyproject.toml.
+# Do not replace the existing file — patch the specific sections only.
+
+# ── 1. Optional dependency: ui extra (add sdnotify alongside aiohttp) ─────────
+#
+# Find the existing [project.optional-dependencies] section and add/extend:
+#
+# [project.optional-dependencies]
+# ui = [
+#     "aiohttp>=3.9",
+#     "sdnotify>=0.3",    # ← ADD THIS LINE (Gate 0.1: sd_notify heartbeat)
+# ]
+
+# ── 2. Dev / test dependencies (ensure these are present) ─────────────────────
+#
+# [project.optional-dependencies]
+# dev = [
+#     "pytest>=8",
+#     "pytest-asyncio>=0.23",    # async test collection
+#     "pytest-cov>=5",           # coverage reporting
+#     "hypothesis>=6.100",       # property-based tests (already present)
+#     "aiohttp>=3.9",
+# ]
+
+# ── 3. pytest configuration (add or verify in [tool.pytest.ini_options]) ──────
+#
+# [tool.pytest.ini_options]
+# asyncio_mode = "auto"
+# addopts = [
+#     "--cov=meshsa",
+#     "--cov-report=term-missing",
+#     "--cov-fail-under=97",
+# ]
+# # Stricter xfail: an xfail that unexpectedly passes is a test failure.
+# xfail_strict = true
+
+# ── 4. Ruff / lint configuration (verify or add) ──────────────────────────────
+#
+# [tool.ruff]
+# target-version = "py311"
+# line-length = 100
+# select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM", "RUF"]
+# ignore = [
+#     "ANN101",   # missing type annotation for self
+#     "ANN102",   # missing type annotation for cls
+#     "ANN401",   # Dynamically typed expressions (Any) — needed in test fakes
+# ]
+#
+# [tool.ruff.per-file-ignores]
+# "tests/*" = [
+#     "ANN",      # type annotations optional in test files
+#     "S101",     # use of assert (expected in tests)
+# ]
+
+# ── 5. mypy configuration (add or verify) ─────────────────────────────────────
+#
+# [tool.mypy]
+# python_version = "3.11"
+# strict = true
+# ignore_missing_imports = true
+# # The sdnotify stub is not shipped with the package; suppress the missing stub:
+# [[tool.mypy.overrides]]
+# module = "sdnotify"
+# ignore_missing_imports = true

@@ -1,0 +1,123 @@
+# /etc/systemd/system/meshsa-ui.service — meshsa operator console (fail-closed, read-only)
+#
+# Installation (run as root on the Jetson/Pi):
+#   sudo install -m 640 -o root -g flightctl \
+#       flightctl/systemd/meshsa-ui.env.example /etc/flightctl/meshsa-ui.env
+#   # Edit /etc/flightctl/meshsa-ui.env — set MESHSA_UI_TOKEN to a strong secret.
+#   sudo cp flightctl/systemd/meshsa-ui.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now meshsa-ui
+#
+# The console is OFF by default (MESHSA_UI_ENABLED=false in UIConfig).
+# It only starts when the env file sets MESHSA_UI_ENABLED=true.
+#
+# Watchdog contract (Gate 0.1 from the validation plan):
+#   Type=notify tells systemd this service uses sd_notify.  The process MUST
+#   send READY=1 via sd_notify once it has bound its TCP socket and is serving
+#   requests.  After that it MUST send WATCHDOG=1 at least every WatchdogSec/2
+#   seconds (i.e. at least every 15 s with WatchdogSec=30).  Both heartbeats
+#   are sent by meshsa.ui.cli._run via the `sdnotify` Python package.
+#
+#   If the process stops sending WATCHDOG=1 (e.g. event-loop stall, OOM before
+#   kill signal, or a deadlock in the snapshot store), systemd sends SIGABRT and
+#   restarts the service.  Restart=on-watchdog ensures this path is taken even
+#   when Restart=on-failure would not otherwise trigger.
+#
+#   Without Type=notify the watchdog interval is silently inert (WatchdogSec is
+#   parsed but the sd_notify channel is never opened).  This is the gap
+#   identified in the peer review.
+#
+# StartLimitIntervalSec / StartLimitBurst (crash-loop masking prevention):
+#   If the service crashes more than 5 times in 5 minutes, systemd stops trying
+#   to restart it and emits a failure event (visible in `systemctl status`).
+#   Without this a misconfigured service (e.g. bad token, wrong venv path) can
+#   thrash indefinitely and mask the root cause in a flood of restart-loop logs.
+#
+# Resource limits:
+#   CPUQuota=15% caps steady-state CPU on a shared edge node.
+#   MemoryMax=256M caps memory; the SnapshotStore bounds are config-driven
+#   (max_tracks, max_detections, log_ring_size) — those are the primary tuning
+#   knobs, not this limit.  The memory limit is a last-resort OOM guard.
+#
+# Network isolation:
+#   RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX — the console only needs
+#   TCP (its HTTP server) and Unix sockets (sd_notify).  No raw sockets.
+#   IPAddressDeny=any + IPAddressAllow=localhost allows loopback only by
+#   default; an operator who configures a non-loopback bind must also widen
+#   IPAddressAllow in a drop-in override (see "non-loopback override" below).
+
+[Unit]
+Description=meshsa operator console (local, read-only, fail-closed)
+Documentation=https://github.com/ianshank/GCP-Drone-Comms-Unit/blob/main/docs/specs/operator-ui.md
+After=network-online.target meshsa-gateway.service
+Wants=network-online.target
+# The console subscribes to the node's router; if the gateway restarts the
+# node emits a reconnect log but the snapshot store stays valid.  The console
+# does not need to restart when the gateway does.
+
+[Service]
+# --- sd_notify watchdog (Gate 0.1) ---
+Type=notify
+NotifyAccess=main
+WatchdogSec=30
+# Watchdog timeout: SIGABRT sent if no WATCHDOG=1 arrives in 30 s.
+# The meshsa-ui poll loop sends it every ~10 s (WatchdogSec / 3).
+
+# --- restart policy ---
+Restart=on-failure
+RestartSec=5
+# Restart on watchdog timeout specifically:
+RestartMode=direct
+
+# --- crash-loop masking prevention ---
+StartLimitIntervalSec=300
+StartLimitBurst=5
+# > 5 restarts in 5 minutes → service enters failed state; ops must investigate.
+
+# --- environment (all MESHSA_UI_* vars; never put secrets inline here) ---
+EnvironmentFile=/etc/flightctl/meshsa-ui.env
+
+# --- execution ---
+# Adjust the venv path to match the deployment (Jetson NVMe, Pi, etc.).
+# For Jetson with SSD relocation (see flightctl/scripts/):
+ExecStart=/mnt/ssd/venvs/meshsa/bin/meshsa-ui
+# For Pi 5 or non-relocated installs:
+# ExecStart=/opt/meshsa/venvs/meshsa/bin/meshsa-ui
+
+# --- identity ---
+User=flightctl
+Group=flightctl
+# No extra supplementary groups needed (unlike the gateway which needs dialout).
+# If an FPV monitor source is wired, add: SupplementaryGroups=dialout
+
+# --- hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/meshsa-ui
+# Needed for the in-memory snapshot and log ring (both are stateless on restart;
+# ReadWritePaths is only required if a future extension persists to disk).
+
+# --- resource limits ---
+CPUQuota=15%
+MemoryMax=256M
+# The snapshot store bounds (max_tracks, max_detections, log_ring_size) are the
+# primary memory controls — tune them via MESHSA_UI_* before raising MemoryMax.
+
+# --- network isolation (loopback-only default; see note above for non-loopback) ---
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# IPAddressDeny=any
+# IPAddressAllow=localhost
+# Uncomment the two lines above to enforce loopback-only at the kernel level.
+# If MESHSA_UI_HOST is set to a non-loopback address, add a drop-in override:
+#   sudo systemctl edit meshsa-ui
+#   [Service]
+#   IPAddressDeny=
+#   IPAddressAllow=localhost 192.168.0.0/16   # widen to the field LAN
+
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

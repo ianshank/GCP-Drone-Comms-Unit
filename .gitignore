@@ -1,69 +1,74 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-build/
-dist/
-.venv/
-venv/
+# ── Node / pnpm ───────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
 
-# Test / coverage / type / lint caches
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+**/.tsbuildinfo
+
+# ── Test & coverage ───────────────────────────────────────────────────────────
+coverage/
+.vitest-cache/
+.vitest/
+html/
+*.lcov
+
+# ── Python (deliverables/) ────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 .pytest_cache/
-.coverage
-.coverage.*
-coverage.xml
-*.cover
-htmlcov/
 .mypy_cache/
 .ruff_cache/
-.hypothesis/
+*.egg-info/
+.venv/
 
-# IDE / OS
-.idea/
-.vscode/
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# ── OS artefacts ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# Local env files
-*.env
-!*.env.example
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+*~
 
-# Generated TLS/PKI material (gen_tak_certs.sh) — never commit private keys/certs.
-# Globs cover a custom OUT_DIR too, not just the default flightctl/certs/.
-flightctl/certs/
-*.p12
-*.key
-*.crt
-*.csr
-*.srl
+# ── Replit platform ───────────────────────────────────────────────────────────
+.cache/
+.local/
+.config/
+.replit
+.replitignore
 
-# Runtime / FPV capture artifacts (flight logger, log-convert, camera)
-*.log
-flight-logs/
-*.parquet
-*.mp4
-*.h264
-*.mkv
+# ── Replit agent & task internal state (never commit to public repos) ─────────
+.agents/
+.local/
+skills-lock.json
+attached_assets/
 
-# Scout runtime artifacts (meshsa.scout): generated missions, SQLite stores, exports.
-# DEM inputs (*.tif) are operator-supplied and intentionally not ignored here.
-*.plan
-*.waypoints
-*.sqlite
-*.sqlite3
-scout-*.db
-
-# Tooling
-.python-version
-
-# Agent / workflow scratch (superpowers SDD workspace: task briefs, review packages, ledger).
-# Self-ignored by an inner .gitignore too; listed here so it's explicit at the repo root.
-.superpowers/
-
-# Build outputs
-*.whl
-*.tar.gz
-
-# Inference / AI model cache
-.inference_cache/
+# ── Temporary / scratch ───────────────────────────────────────────────────────
+*.tmp
+*.temp
+INSTRUCTIONS.md

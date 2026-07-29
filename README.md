@@ -1,111 +1,224 @@
-# GCP-Drone-Comms-Unit
+# GCP-Drone-Comms-Unit — Development Workspace
 
-A field comms unit that bridges **drone / flight-controller telemetry** and a **mesh
-situational-awareness (SA) network** into **TAK / ATAK**. It runs on an NVIDIA Jetson
-(or a Pi) and turns MAVLink autopilots, Betaflight flight controllers, and LoRa/HaLow/IP
-mesh nodes into **Cursor-on-Target (CoT)** tracks that ATAK clients on phones can see in
-real time.
+[![Validate](https://img.shields.io/badge/validate-passing-brightgreen)](#validation)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/Node.js-24.x-brightgreen)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-workspace-orange)](https://pnpm.io/)
 
-> The importable Python framework is published as the **`meshsa`** package (mesh
-> situational awareness). This repository, **GCP-Drone-Comms-Unit**, is the framework
-> plus the deployment/ops layer (`flightctl/`) that wires it into a real comms unit.
-> Despite the name, **"GCP" here is not Google Cloud Platform** — there is no cloud
-> backend or GCP dependency; everything (including the TAK server) is self-hosted on
-> the edge device.
+pnpm monorepo: REST API server + UI component preview sandbox, with
+validation deliverables for the
+[GCP-Drone-Comms-Unit](https://github.com/ianshank/GCP-Drone-Comms-Unit)
+`meshsa.ui` operator console.
 
-## What it does
-- **Telemetry → CoT:** a MAVLink autopilot (`mavlink_source`), a Betaflight FC over MSP
-  (`msp_source`), or an FPV CRSF/ELRS feed (`crsf_source`) becomes an **air** track in ATAK,
-  with no core changes — telemetry sources self-register as transports and bridge through the
-  existing `cot` codec.
-- **Mesh SA bridge:** LoRa (Meshtastic), HaLow 802.11s, and IP mesh exchange versioned
-  position/chat envelopes; one node bridges the mesh to a TAK server (FreeTAKServer) and/or
-  the ATAK multicast SA group.
-- **FPV link health & flight logging (`meshsa.fpv`):** ingests **CRSF** telemetry from an
-  ELRS handset module over half-duplex UART, evaluates link health (LQ/RSSI/staleness),
-  logs synchronized RC + telemetry + event sessions to a versioned JSONL dataset, and
-  enforces a **pre-flight** arm interlock. Console tools: `fpv-telemetry-monitor`,
-  `fpv-log-replay`, `fpv-log-convert`. Install with the `fpv` extra:
-  `pip install -e "packages/meshsa[fpv]"`. (Pre-flight arm-gating is a deliberate, bounded
-  exception to the read-only charter — see [docs/CHARTER.md](docs/CHARTER.md) §3.)
-- **Observability & a read-only SA assistant:** opt-in `/healthz` + `/metrics`
-  (Prometheus/JSON) on the gateway; when inference is enabled, `/metrics` also exports
-  `meshsa_inference_*` counters/gauges (offline drops, intake drops, offline queue depth,
-  pending tasks). An optional, **read-only** `meshsa.llm` assistant answers operator
-  questions over live telemetry and TAK tracks (it issues no vehicle commands).
-- **AI-powered mesh inference (`meshsa.inference`):** an optional **NVIDIA Nemotron NIM**
-  bridge subscribes to mesh traffic, runs tactical AI analysis, and broadcasts
-  AI insight summaries (configurable prefix via `MESHSA_INFERENCE_INSIGHT_PREFIX`).
-  Install with `pip install meshsa[inference]`; configure via `MESHSA_INFERENCE_*`
-  environment variables (12 fields incl. backoff tuning and `MESHSA_INFERENCE_MAX_PENDING_TASKS`
-  intake backpressure, default `0` = unbounded). Thread-safe, feedback-loop
-  safe (insight messages are never re-analyzed), with configurable retry backoff.
-- **Vineyard structural-anomaly scouting (`meshsa.scout`):** an offline, **hardware-free**
-  pipeline that turns a mapping survey (RGB detections + autopilot pose) into a georeferenced,
-  deduplicated **anomaly map** — rendered on the existing TAK/CoT field map and an optional thin
-  `aiohttp`+MapLibre operator view. Reuses `cv.geo` georeferencing and the detection→MARKER→CoT
-  path; adds DEM-terrain projection, pose/AGL fusion, and offline survey/mission export
-  (QGC `.plan` / ArduPilot `.waypoints` for a human to load, under a CHARTER §3 carve-out —
-  no autonomy). `meshsa-scout` CLI (`replay`/`gen-mission`/`run-station`/`--health-check`);
-  install `pip install "meshsa[scout]"`; config via `MESHSA_SCOUT_*`.
-- **Local operator console (`meshsa.ui`):** an opt-in, **read-only, fail-closed** aiohttp
-  console on the edge node — MapLibre map of live tracks/detections, health/metrics panel,
-  and optional FPV link-health, read-only assistant chat, and log-tail panels. Off by
-  default, loopback-only (`127.0.0.1:8100`); a non-loopback bind without `MESHSA_UI_TOKEN`
-  refuses to start. `meshsa-ui` CLI; install `pip install -e "packages/meshsa[ui]"`;
-  config via `MESHSA_UI_*` ([spec](docs/specs/operator-ui.md)).
-- **Modular & backward-compatible by construction:** new transports/codecs register via an
-  open/closed registry; every wire envelope is `schema_version`-gated; a node tolerates
-  configs written for newer/older builds.
+---
 
-## Layout
+## Workspace packages
 
-| Path | What lives here |
-| ---- | --------------- |
-| [packages/meshsa](packages/meshsa) | `meshsa` Python framework (registry-based codecs + transports, src layout; includes `meshsa.scout` vineyard scouting) |
-| [flightctl](flightctl) | Flight-control + TAK **ops layer**: gateway config, systemd units, SSD/relocation + FTS setup scripts, MAVLink simulator, udev |
-| [ops/pi5-node](ops/pi5-node) | Raspberry Pi 5 user-node provisioning (`mesh-up.sh`, `setup_pi5_node.sh`) |
-| [ops/base-service](ops/base-service) | Base-node systemd service unit + install guide |
-| [hardware](hardware) | 3D-printable enclosures (GCS, user nodes, Jetson case) |
-| [docs](docs) | [Charter](docs/CHARTER.md) (stable north-star), [Roadmap](docs/ROADMAP.md) (milestone trajectory), [C4](docs/C4.md), [Architecture](docs/ARCHITECTURE.md), [Next steps](docs/NEXTSTEPS.md), [Audit](docs/AUDIT_REPORT.md) |
-| [tools](tools) | `Dockerfile`, `Makefile` |
-| [AGENTS.md](AGENTS.md) | Canonical AI agent operating guide |
-| [.github/workflows](.github/workflows) | CI + release pipelines |
+| Package | Kind | Port | Description |
+|---|---|---|---|
+| `@workspace/api-server` | API | `$PORT` | Express 5 REST server, structured logging (pino), Drizzle ORM |
+| `@workspace/mockup-sandbox` | Design | `$PORT` | React/Vite/Tailwind UI component preview environment |
+| `@workspace/db` | Library | — | Drizzle schema, migrations, client factory |
+| `@workspace/api-zod` | Library | — | Zod schemas shared between server and clients |
+| `@workspace/api-client-react` | Library | — | Type-safe React hooks for the API |
 
-## Quick start (development)
+---
+
+## Quick start
 
 ```bash
-python -m venv .venv && . .venv/bin/activate
-pip install -e "packages/meshsa[dev]"
-cd packages/meshsa && pytest          # full suite, ≥90% coverage gate (900+ tests, ~99%)
+# Install dependencies
+pnpm install
+
+# Start all services (API + sandbox)
+make dev
+
+# Or start individually
+pnpm --filter @workspace/api-server run dev
+pnpm --filter @workspace/mockup-sandbox run dev
 ```
 
-Drone/FC telemetry → CoT (no hardware needed — uses the bundled simulator):
+---
+
+## Architecture
+
+See [`docs/architecture/C4.md`](docs/architecture/C4.md) for the full C4
+context/container/component diagrams.
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  pnpm Monorepo                       │
+│                                                      │
+│  ┌──────────────┐      ┌──────────────────────────┐  │
+│  │  api-server  │      │    mockup-sandbox         │  │
+│  │  (Express 5) │      │  (React 19 / Vite 7)     │  │
+│  │  /api/*      │      │  Component preview        │  │
+│  └──────┬───────┘      └──────────────────────────┘  │
+│         │                                             │
+│  ┌──────▼─────────────────────────────────────────┐  │
+│  │            Shared Libraries                     │  │
+│  │  @workspace/db   @workspace/api-zod             │  │
+│  │  @workspace/api-client-react                   │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## Development
+
+### Prerequisites
+
+- Node.js ≥ 24
+- pnpm ≥ 9 (`npm install -g pnpm`)
+- PostgreSQL (or Replit managed DB)
+
+### Environment variables
+
+Copy and fill in secrets:
 
 ```bash
-pip install -e "packages/meshsa[mavlink]"
-python flightctl/sim/mavlink_fake.py &                 # emit fake MAVLink on udp:14550
-python flightctl/run_gateway.py --config flightctl/configs/jetson_gateway.json
+# Required for api-server
+PORT=8080             # Set by Replit automatically
+NODE_ENV=development
+LOG_LEVEL=debug       # pino log level (trace|debug|info|warn|error)
+DATABASE_URL=...      # PostgreSQL connection string
+
+# Optional
+SESSION_SECRET=...    # For future auth middleware
 ```
 
-Real Meshtastic ↔ FreeTAKServer bridge:
+> **Never commit secrets.** All sensitive values must be in environment
+> variables or Replit Secrets — never in source code or config files.
+> Run `make secrets-check` to scan for leaks before committing.
+
+---
+
+## Testing
 
 ```bash
-pip install -e "packages/meshsa[meshtastic]"
-meshsa-base --port /dev/ttyUSB0 --fts-host 127.0.0.1 --lat 37.0 --lon -122.0 --callsign BASE1
+# Run full test suite across all packages
+make test
+
+# Watch mode during development
+pnpm --filter @workspace/api-server run test:watch
+
+# Coverage report
+make coverage
 ```
+
+Test files live alongside source in `__tests__/` directories.
+See [`artifacts/api-server/src/__tests__/`](artifacts/api-server/src/__tests__/).
+
+---
+
+## Validation (pre-PR)
+
+Run the full validation gate before opening a PR:
+
+```bash
+make validate
+```
+
+This runs in order: **typecheck → lint → test → build**. All steps must pass.
+
+For detailed output of each step individually:
+
+```bash
+make typecheck   # TypeScript strict type checking
+make lint        # ESLint (no warnings permitted)
+make test        # Vitest unit + integration tests
+make build       # Production bundle (esbuild)
+make secrets-check  # gitleaks scan
+```
+
+---
+
+## Deliverables
+
+`deliverables/meshsa-ui-validation/` contains execution-ready artifacts for
+the [`GCP-Drone-Comms-Unit`](https://github.com/ianshank/GCP-Drone-Comms-Unit)
+`meshsa.ui` field validation:
+
+```
+deliverables/meshsa-ui-validation/
+├── docs/PEER_REVIEW.md          # Primary peer review document
+├── tests/                       # Named scenario tests S1–S6 (Python/pytest)
+├── patches/                     # Gate 0.1 / 0.3 source patches
+├── systemd/                     # meshsa-ui.service + env template
+└── README.md                    # Integration checklist
+```
+
+See [`deliverables/meshsa-ui-validation/README.md`](deliverables/meshsa-ui-validation/README.md)
+for the step-by-step integration guide.
+
+---
+
+## Project structure
+
+```
+.
+├── artifacts/
+│   ├── api-server/          # Express REST API
+│   │   ├── src/
+│   │   │   ├── __tests__/   # Vitest tests
+│   │   │   ├── lib/         # logger, shared utilities
+│   │   │   └── routes/      # Express route handlers
+│   │   └── build.mjs        # esbuild bundle script
+│   └── mockup-sandbox/      # React component preview
+│       └── src/
+│           ├── components/  # UI components
+│           └── hooks/       # Custom React hooks
+├── deliverables/            # External repo validation artifacts
+│   └── meshsa-ui-validation/
+├── docs/
+│   ├── architecture/        # C4 diagrams
+│   └── adr/                 # Architecture Decision Records
+├── lib/
+│   ├── api-zod/             # Shared Zod schemas
+│   ├── api-client-react/    # React API hooks
+│   └── db/                  # Drizzle ORM schema + client
+├── scripts/
+│   ├── post-merge.sh        # Post-merge setup (runs after task merges)
+│   ├── validate-pre-pr.sh   # Full pre-PR validation gate
+│   └── hooks/               # Git hook scripts
+├── Makefile                 # Developer convenience targets
+├── .gitleaks.toml           # Secret scanning configuration
+├── .pre-commit-config.yaml  # Pre-commit hook configuration
+└── pnpm-workspace.yaml      # pnpm workspace definition
+```
+
+---
 
 ## Deployment
-- **Flight-control + TAK edge node:** [flightctl/README.md](flightctl/README.md) (Jetson SSD
-  relocation, FreeTAKServer setup, mavp2p, the gateway service).
-- **Base node** (Meshtastic ↔ TAK bridge): [ops/base-service/INSTALL_base_node.md](ops/base-service/INSTALL_base_node.md).
-- **Pi 5 user node** (HaLow mesh + ADS-B): [ops/pi5-node/README_pi5_node.md](ops/pi5-node/README_pi5_node.md).
 
-## For contributors and AI agents
-Start with [docs/CHARTER.md](docs/CHARTER.md) (stable scope + invariants) and
-[docs/ROADMAP.md](docs/ROADMAP.md) (stable milestone trajectory) — neither changes per task —
-then [AGENTS.md](AGENTS.md). See [CONTRIBUTING.md](CONTRIBUTING.md),
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md); security disclosures via [SECURITY.md](SECURITY.md).
+This workspace deploys via Replit Autoscale. The `api-server` artifact is
+the deployable unit — it builds to a single `dist/index.mjs` bundle via
+esbuild and runs as a Node.js ESM process.
 
-## License
-[Apache-2.0](LICENSE).
+```bash
+# Production build (used by Replit deploy)
+pnpm --filter @workspace/api-server run build
+```
+
+See [Replit deployment docs](https://docs.replit.com/hosting/autoscale-deployments)
+for publish instructions.
+
+---
+
+## Contributing
+
+1. Branch from `main`
+2. Write tests for any new behaviour
+3. Run `make validate` — all checks must pass
+4. Open a PR with a description referencing the relevant issue or deliverable
+5. Ensure `make secrets-check` produces no findings
+
+### Conventions
+
+- **No hardcoded values** — all configuration via environment variables
+  (read with `process.env["KEY"]`, never with `process.env.KEY`)
+- **Structured logging** — use `logger` from `./lib/logger`, never `console.*`
+- **Named exports** — prefer named exports over default for testability
+- **Types first** — every function parameter and return type must be annotated
+- **Fail loudly** — throw on unexpected state; never silently return `undefined`

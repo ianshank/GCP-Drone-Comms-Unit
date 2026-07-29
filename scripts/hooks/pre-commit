@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# .git/hooks/pre-commit (managed via scripts/hooks/pre-commit)
+#
+# Runs on every `git commit`. Aborts the commit if TypeScript type checking
+# or ESLint fails on staged TypeScript files.
+#
+# Install: run scripts/hooks/install-hooks.sh once after cloning.
+# Skip:    git commit --no-verify  (use sparingly — emergencies only)
+
+set -euo pipefail
+
+BOLD=''
+GREEN=''
+RED=''
+YELLOW=''
+RESET=''
+if [ -t 1 ] && command -v tput &>/dev/null && tput colors &>/dev/null 2>&1; then
+  BOLD="$(tput bold 2>/dev/null || true)"
+  GREEN="$(tput setaf 2 2>/dev/null || true)"
+  RED="$(tput setaf 1 2>/dev/null || true)"
+  YELLOW="$(tput setaf 3 2>/dev/null || true)"
+  RESET="$(tput sgr0 2>/dev/null || true)"
+fi
+
+echo "${BOLD}[ pre-commit ]${RESET} Running checks on staged files…"
+
+# ── Check for staged TypeScript changes ──────────────────────────────────────
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+
+if [[ -z "${STAGED_TS}" ]]; then
+  echo "${YELLOW}No TypeScript files staged — skipping TS checks${RESET}"
+else
+  # TypeScript type check (full workspace — incremental, fast after first run)
+  echo "${BOLD}  TypeScript…${RESET}"
+  if ! pnpm -r run typecheck --silent 2>&1; then
+    echo "${RED}✘  TypeScript type check failed. Fix errors before committing.${RESET}"
+    echo "   Run: ${BOLD}make typecheck${RESET} for details"
+    exit 1
+  fi
+  echo "${GREEN}  ✔ TypeScript OK${RESET}"
+
+  # ESLint on staged files only (fast)
+  echo "${BOLD}  ESLint…${RESET}"
+  LINT_FILES=()
+  while IFS= read -r f; do
+    [[ -f "${f}" ]] && LINT_FILES+=("${f}")
+  done <<< "${STAGED_TS}"
+
+  if [[ ${#LINT_FILES[@]} -gt 0 ]]; then
+    if ! pnpm -r run lint 2>&1; then
+      echo "${RED}✘  ESLint failed. Run 'make lint-fix' to auto-fix.${RESET}"
+      exit 1
+    fi
+    echo "${GREEN}  ✔ ESLint OK${RESET}"
+  fi
+fi
+
+# ── Check for staged .env files (quick secret guard) ─────────────────────────
+STAGED_ENV=$(git diff --cached --name-only | grep -E '(^|/)\.env(\.|$)' || true)
+if [[ -n "${STAGED_ENV}" ]]; then
+  echo "${RED}✘  Staged .env file detected: ${STAGED_ENV}${RESET}"
+  echo "   .env files must never be committed. Add to .gitignore."
+  exit 1
+fi
+
+echo "${GREEN}${BOLD}  ✔ Pre-commit checks passed${RESET}"
+exit 0

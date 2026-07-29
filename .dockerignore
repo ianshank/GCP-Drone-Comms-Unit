@@ -1,74 +1,60 @@
-# Keep the Docker build context small and reproducible.
-# VCS / CI
+# Exclude everything that is not needed for the Docker build context.
+# Keep this list tight — a large context slows every `docker build`.
+
+# ── Version control ───────────────────────────────────────────────────────────
 .git/
-.github/
 .gitignore
-.gitattributes
 
-# Python caches / build artifacts
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-build/
+# ── Dependencies (re-installed inside the image) ─────────────────────────────
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# ── Build output (rebuilt inside the image) ──────────────────────────────────
 dist/
-*.whl
-*.tar.gz
+**/dist/
+build/
+**/build/
+*.tsbuildinfo
+**/*.tsbuildinfo
+coverage/
+**/coverage/
 
-# Test / type / lint caches + coverage
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.hypothesis/
-.coverage
-.coverage.*
-coverage.xml
-htmlcov/
+# ── Python deliverables (not part of the Node.js build) ─────────────────────
+deliverables/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
 
-# Virtualenvs
-.venv/
-venv/
-
-# Editor / OS
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-
-# Local env files (examples are kept)
-*.env
-!*.env.example
-
-# Heavy / irrelevant-to-runtime trees
-archive/
-docs/
-hardware/
-flightctl/
-ops/
-*.stl
-*.png
-*.zip
-
-# Runtime / FPV capture artifacts
+# ── Dev tooling (not needed in production image) ─────────────────────────────
+.vitest-cache/
+.vitest/
+.eslintcache
 *.log
-flight-logs/
-*.parquet
-*.mp4
-*.h264
-*.mkv
 
-# Scout runtime artifacts (generated missions / stores / exports)
-*.plan
-*.waypoints
-*.sqlite
-*.sqlite3
-scout-*.db
+# ── Docs ──────────────────────────────────────────────────────────────────────
+docs/
+*.md
+!artifacts/api-server/README.md
 
-# Inference cache
-.inference_cache/
-
-# Agent workspace / tooling scratch — never needed in the runtime image.
+# ── Replit / editor artefacts ─────────────────────────────────────────────────
+.replit
+.replitignore
+.local/
+.cache/
+.config/
 .agents/
-.gemini/
-.claude/
-.superpowers/
+.idea/
+.DS_Store
+
+# ── Secrets (never in Docker context) ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── CI / scripts (not needed in image) ───────────────────────────────────────
+scripts/hooks/
+.github/
+.pre-commit-config.yaml
+.gitleaks.toml
+Makefile
