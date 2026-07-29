@@ -47,7 +47,7 @@ class DetectionIngestTransport(AbstractTransport):
         name: str = "detections",
         *,
         host: str = "127.0.0.1",
-        port: int = 8099,
+        port: int = 8097,
         queue_maxsize: int = 1000,
         token: str | None = None,
         **_options: Any,

@@ -313,14 +313,17 @@ prerequisite before the maintainer rules on the commanding M2 gate).
       `token` option fails closed; non-loopback + token binds with a loud unauthenticated-datagram
       warning. Same change unified the commander's local guard onto `netauth.validate_bind`
       (empty token now refused) and defaulted Jetson RTP egress off (surface #14).
-- [ ] **[security] no bind guard on `mavlink_source`** (`udpin:14550`) — still fails open on a
-      non-loopback `endpoint` override. Loopback default is the current mitigation.
+- [x] **[security] bind guard on `mavlink_source`** (`udpin:14550`):
+      `MavlinkSourceTransport` now extracts the endpoint host and validates binds via
+      `netauth.validate_bind` — a non-loopback endpoint override without a `token` option fails
+      closed (`ValueError`).
 - [ ] **[consistency] Meshtastic PSK provisioning is aspirational in code** — `_default_provisioner`
       applies only the LoRa `region` and logs channel/psk/freq as unset (`meshtastic_radio.py:81-86`).
       Either implement PSK provisioning or downgrade the docs/config so operators don't assume an
       enforced PSK. **Maintainer decision** (touches deploy expectations).
-- [ ] **[cleanup] shared default port `8099`** between `detection_ingest` (UDP) and the scout
-      station (TCP) — not an OS-level collision, but a confusing default; deconflict.
+- [x] **[cleanup] deconflicted default port `8097`** for `detection_ingest` (UDP) —
+      deconflicted from the scout station (`8099`, TCP) so default ports across transports and
+      services are unique.
 - [ ] **[docs] plaintext-by-default posture** — flag that all HTTP + MAVLink/RTP surfaces are
       cleartext by default; TAK TLS (`:8089`) is the only wired-in transport encryption.
 - [x] **[cleanup] drop `# pragma: no cover` on pure logic** in `fpv/crsf/rc.py` (span==0 guards)

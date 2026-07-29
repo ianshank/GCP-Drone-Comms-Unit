@@ -11,9 +11,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 
 #### Infrastructure & Tooling
+- `docs/LOCAL_TESTING_PLAN.md` — comprehensive local test execution strategy, quality matrix, and peer review document
 - `README.md` — root project overview, quick-start, architecture, contributing guide
 - `CHANGELOG.md` — this file; standardised release tracking
 - `NEXTSTEPS.md` — prioritised action backlog for workspace and GCP-Drone-Comms-Unit integration
+
+#### Security & Hardening
+- `MavlinkSourceTransport` network bind guard — endpoint host extraction and `validate_bind` fail-closed enforcement on non-loopback overrides
+- `DetectionIngestTransport` port deconfliction — updated default UDP ingest port from `8099` to `8097` to eliminate port overlap with Scout station (`8099`)
+- Cross-platform Node script execution — replaced POSIX-only preinstall script and added `LOG_LEVEL` environment variable fallback for Vitest in `artifacts/api-server/vitest.config.ts`
 - `Makefile` — developer convenience targets: `dev`, `build`, `test`, `lint`, `typecheck`, `validate`, `clean`, `secrets-check`, `coverage`
 - `Dockerfile` — multi-stage production build for `api-server`; non-root user, health check, minimal attack surface
 - `.dockerignore` — excludes `node_modules`, `.git`, `deliverables/`, test output from Docker build context
