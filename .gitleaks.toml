@@ -1,0 +1,90 @@
+# gitleaks configuration — secret scanning for GCP-Drone-Comms-Unit workspace
+#
+# Run:  gitleaks detect --config .gitleaks.toml --source . --no-banner
+# Docs: https://github.com/gitleaks/gitleaks
+#
+# Policy:
+#   - Any credential that could authenticate to a real service must never
+#     appear in source code, commit history, or config files.
+#   - Fake/synthetic tokens used in unit tests are explicitly allowlisted below.
+#   - The allowlist is reviewed quarterly; entries must have a comment explaining
+#     why the pattern is safe.
+
+title = "GCP-Drone-Comms-Unit gitleaks config"
+
+[extend]
+# Extend the default ruleset (covers AWS keys, GCP keys, GitHub tokens, etc.)
+useDefault = true
+
+# ── Custom rules ─────────────────────────────────────────────────────────────
+
+[[rules]]
+id          = "meshsa-ui-token"
+description = "meshsa.ui bearer token (MESHSA_UI_TOKEN)"
+regex       = '''(?i)(MESHSA_UI_TOKEN\s*[=:]\s*)["']?([A-Za-z0-9_\-]{20,})["']?'''
+secretGroup = 2
+keywords    = ["MESHSA_UI_TOKEN"]
+[rules.allowlist]
+regexTarget = "line"
+# Only the env.example placeholder — NOT a real token
+regexes     = ['''MESHSA_UI_TOKEN=REPLACE_WITH_A_STRONG_RANDOM_SECRET''']
+
+[[rules]]
+id          = "session-secret"
+description = "SESSION_SECRET environment variable value"
+regex       = '''(?i)(SESSION_SECRET\s*[=:]\s*)["']?([A-Za-z0-9_\-]{20,})["']?'''
+secretGroup = 2
+keywords    = ["SESSION_SECRET"]
+
+[[rules]]
+id          = "database-url"
+description = "DATABASE_URL with embedded credentials"
+regex       = '''postgres(?:ql)?:\/\/[^:]+:[^@]+@'''
+keywords    = ["DATABASE_URL", "postgres://", "postgresql://"]
+[rules.allowlist]
+regexTarget = "line"
+regexes     = ['''^\s*#''', '''example''', '''placeholder''']
+
+# ── Global allowlist ─────────────────────────────────────────────────────────
+[allowlist]
+description = "Global allowlist for known-safe patterns in this repo"
+
+# Synthetic test tokens in deliverables/meshsa-ui-validation/tests/
+# These are obviously fake (short, dictionary words, used in pytest scenarios).
+# They cannot authenticate to any real service. Reviewed 2026-07-28.
+regexes = [
+    # S5 test token
+    '''s3cr3t-tok3n''',
+    # S6 rotation test tokens
+    '''old-tok-alpha''',
+    '''new-tok-beta''',
+    '''live-token''',
+    '''stale-token''',
+    '''secure-token''',
+    # Minimal test tokens in conftest/scenario helpers
+    '''["']tok["']''',
+    '''["']s3cr3t["']''',
+    # pytest marker strings (not tokens)
+    '''Apply deliverables''',
+    '''bearer token''',
+]
+
+# Files that contain only synthetic test data — never real credentials
+paths = [
+    "deliverables/meshsa-ui-validation/tests/",
+    "deliverables/meshsa-ui-validation/patches/",
+    "deliverables/meshsa-ui-validation/docs/",
+    ".agents/memory/",
+    ".local/tasks/",
+]
+
+# Known safe content patterns (comments, documentation, test names)
+commits = []
+stopwords = [
+    "REPLACE_WITH_A_STRONG_RANDOM_SECRET",
+    "example",
+    "placeholder",
+    "fake",
+    "synthetic",
+    "test-token",
+]
