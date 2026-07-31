@@ -495,9 +495,9 @@ async def test_s5a_no_store_on_api_get_routes(path: str) -> None:
     try:
         resp = await client.get(path, headers={"Authorization": "Bearer s3cret"})
         assert resp.status == 200, f"expected 200 on {path}, got {resp.status}"
-        assert (
-            resp.headers.get("Cache-Control") == "no-store"
-        ), f"Cache-Control: no-store missing on {path}; got {resp.headers.get('Cache-Control')!r}"
+        assert resp.headers.get("Cache-Control") == "no-store", (
+            f"Cache-Control: no-store missing on {path}; got {resp.headers.get('Cache-Control')!r}"
+        )
     finally:
         await client.close()
 
