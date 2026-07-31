@@ -14,6 +14,8 @@ from pathlib import Path
 
 from tools.claude_hooks.bind_guard import (
     LISTENER_TRIGGERS,
+    SCAN_GLOBS,
+    iter_scan_files,
     main,
     scan_file,
     scan_repo,
@@ -206,6 +208,66 @@ class TestScanRepo:
         findings, scanned = scan_repo(tmp_path, _config())
         assert findings == []
         assert scanned == 1
+
+    def test_scan_globs_cover_tools(self, tmp_path: Path) -> None:
+        # T-2.4: tools/**/*.py joined the scan scope.
+        _make_tree(tmp_path, {"tools/claude_hooks/some_hook.py": LISTENER_NO_GUARD})
+        findings, scanned = scan_repo(tmp_path, _config())
+        assert scanned == 1
+        assert {f.rel_path for f in findings} == {"tools/claude_hooks/some_hook.py"}
+
+    def test_scan_skips_tools_tests_dir(self, tmp_path: Path) -> None:
+        # T-2.4: tools/**/tests/** is excluded so the linter's own fixtures
+        # (which deliberately contain unguarded bind() calls) never self-flag.
+        _make_tree(
+            tmp_path,
+            {
+                "tools/claude_hooks/tests/test_fixture.py": LISTENER_NO_GUARD,
+                "tools/claude_hooks/real_hook.py": LISTENER_WITH_GUARD,
+            },
+        )
+        findings, scanned = scan_repo(tmp_path, _config())
+        assert scanned == 1
+        assert findings == []
+
+    def test_scan_skips_bind_guard_itself(self, tmp_path: Path) -> None:
+        # T-2.4: tools/claude_hooks/bind_guard.py is excluded by name — it
+        # redefines LISTENER_TRIGGERS/validate_bind-adjacent fixture text.
+        _make_tree(tmp_path, {"tools/claude_hooks/bind_guard.py": LISTENER_NO_GUARD})
+        findings, scanned = scan_repo(tmp_path, _config())
+        assert scanned == 0
+        assert findings == []
+
+
+class TestIterScanFiles:
+    def test_includes_tools_glob(self, tmp_path: Path) -> None:
+        assert "tools/**/*.py" in SCAN_GLOBS
+        _make_tree(tmp_path, {"tools/claude_hooks/some_hook.py": LISTENER_NO_GUARD})
+        found = {p.relative_to(tmp_path).as_posix() for p in iter_scan_files(tmp_path)}
+        assert found == {"tools/claude_hooks/some_hook.py"}
+
+    def test_excludes_any_depth_tests_dir(self, tmp_path: Path) -> None:
+        _make_tree(
+            tmp_path,
+            {
+                "tools/a/tests/test_x.py": LISTENER_NO_GUARD,
+                "tools/a/b/tests/test_y.py": LISTENER_NO_GUARD,
+                "tools/a/real.py": LISTENER_WITH_GUARD,
+            },
+        )
+        found = {p.relative_to(tmp_path).as_posix() for p in iter_scan_files(tmp_path)}
+        assert found == {"tools/a/real.py"}
+
+    def test_excludes_bind_guard_module_only(self, tmp_path: Path) -> None:
+        _make_tree(
+            tmp_path,
+            {
+                "tools/claude_hooks/bind_guard.py": LISTENER_NO_GUARD,
+                "tools/claude_hooks/governance.py": LISTENER_WITH_GUARD,
+            },
+        )
+        found = {p.relative_to(tmp_path).as_posix() for p in iter_scan_files(tmp_path)}
+        assert found == {"tools/claude_hooks/governance.py"}
 
 
 class TestCli:

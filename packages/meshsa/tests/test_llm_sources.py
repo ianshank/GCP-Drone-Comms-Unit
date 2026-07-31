@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
+import aiohttp
 import pytest
+import structlog
 
 from meshsa.llm.sources import (
     DroneState,
+    FtsTrackSource,
+    Mavlink2RestSource,
     StaticTelemetrySource,
     StaticTrackSource,
     Track,
@@ -152,3 +157,107 @@ async def test_static_track_source_roundtrip_and_copy() -> None:
 def test_ground_speed_math_is_euclidean() -> None:
     state = parse_global_position_int({"vx": 600, "vy": 800}, "x")
     assert state.ground_speed_ms == pytest.approx(math.hypot(6.0, 8.0))
+
+
+# ── HTTP source failure handling (code-hygiene-modularity T-1.6) ─────────────────────────
+#
+# Mavlink2RestSource/FtsTrackSource are "# pragma: no cover - real HTTP I/O"; these tests
+# fake aiohttp.ClientSession (patched on the aiohttp module, which the lazy `import aiohttp`
+# inside each method resolves to) to exercise the failure branch without a live server.
+# Regression: both used to swallow every exception silently; they now log a warning and
+# narrow the catch to expected network/parse failures, letting a real bug propagate.
+
+
+class _FakeAsyncCM:
+    def __init__(self, value: Any = None, exc: BaseException | None = None) -> None:
+        self._value = value
+        self._exc = exc
+
+    async def __aenter__(self) -> Any:
+        if self._exc is not None:
+            raise self._exc
+        return self._value
+
+    async def __aexit__(self, *_args: object) -> bool:
+        return False
+
+
+class _FakeSession(_FakeAsyncCM):
+    def __init__(self, get_exc: BaseException) -> None:
+        super().__init__(value=self)
+        self._get_exc = get_exc
+
+    def get(self, _url: str) -> _FakeAsyncCM:
+        return _FakeAsyncCM(exc=self._get_exc)
+
+
+def _patch_client_session(monkeypatch: pytest.MonkeyPatch, get_exc: BaseException) -> None:
+    monkeypatch.setattr(aiohttp, "ClientSession", lambda **_kwargs: _FakeSession(get_exc))
+
+
+async def test_mavlink2rest_source_degrades_and_logs_on_client_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_client_session(monkeypatch, aiohttp.ClientConnectionError("connection refused"))
+    source = Mavlink2RestSource(uid="uav-9")
+    with structlog.testing.capture_logs() as cap:
+        state = await source.drone_state()
+    assert state == DroneState(uid="uav-9", link_ok=False)
+    [entry] = [e for e in cap if e["event"] == "mavlink2rest_unreachable"]
+    assert entry["error_type"] == "ClientConnectionError"
+
+
+async def test_mavlink2rest_source_degrades_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    # asyncio.TimeoutError is a builtin TimeoutError alias on py3.11+, and asyncio's own
+    # class on 3.10 (this package's floor) — raise the asyncio name to cover both.
+    import asyncio
+
+    _patch_client_session(monkeypatch, asyncio.TimeoutError("timed out"))
+    source = Mavlink2RestSource(uid="uav-9")
+    state = await source.drone_state()
+    assert state == DroneState(uid="uav-9", link_ok=False)
+
+
+async def test_mavlink2rest_source_degrades_on_malformed_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # resp.json() raising a JSONDecodeError (a ValueError subclass) on a malformed body is
+    # part of the narrowed catch, not just network-level failures.
+    import json
+
+    _patch_client_session(monkeypatch, json.JSONDecodeError("bad json", "doc", 0))
+    source = Mavlink2RestSource(uid="uav-9")
+    state = await source.drone_state()
+    assert state == DroneState(uid="uav-9", link_ok=False)
+
+
+async def test_mavlink2rest_source_does_not_swallow_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A bug in this method (e.g. a typo'd attribute) must propagate, not be reported as a
+    # dead link — this is exactly what the narrowed except clause fixes.
+    _patch_client_session(monkeypatch, AttributeError("not a real network failure"))
+    source = Mavlink2RestSource()
+    with pytest.raises(AttributeError):
+        await source.drone_state()
+
+
+async def test_fts_track_source_degrades_and_logs_on_client_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_client_session(monkeypatch, aiohttp.ClientConnectionError("connection refused"))
+    source = FtsTrackSource()
+    with structlog.testing.capture_logs() as cap:
+        tracks = await source.tracks()
+    assert tracks == []
+    [entry] = [e for e in cap if e["event"] == "fts_tracks_unreachable"]
+    assert entry["error_type"] == "ClientConnectionError"
+
+
+async def test_fts_track_source_does_not_swallow_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_client_session(monkeypatch, RuntimeError("not a real network failure"))
+    source = FtsTrackSource()
+    with pytest.raises(RuntimeError):
+        await source.tracks()

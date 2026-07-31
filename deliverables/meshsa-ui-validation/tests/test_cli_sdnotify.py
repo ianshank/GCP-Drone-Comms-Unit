@@ -18,9 +18,9 @@ G0.1 patch is applied to ``meshsa/ui/cli.py``.  Both helpers are marked
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -37,6 +37,7 @@ import pytest
 
 try:
     from meshsa.ui.cli import _send_notify, _watchdog_loop  # type: ignore[attr-defined]
+
     _PATCH_APPLIED = True
 except (ImportError, AttributeError):
     _PATCH_APPLIED = False
@@ -50,10 +51,11 @@ if not _PATCH_APPLIED:
 
     _ref_log = _logging.getLogger("meshsa.ui.cli._ref")
 
-    def _send_notify(message: str) -> None:  # type: ignore[misc]  # noqa: F811
+    def _send_notify(message: str) -> None:  # noqa: F811
         """No-op reference implementation — graceful fallback when sdnotify absent."""
         try:
-            import sdnotify  # type: ignore[import]
+            import sdnotify  # type: ignore[import-not-found]
+
             notifier = sdnotify.SystemdNotifier()
             notifier.notify(message)
         except ImportError:
@@ -62,11 +64,9 @@ if not _PATCH_APPLIED:
                 extra={"hint": "pip install sdnotify"},
             )
         except Exception as exc:
-            _ref_log.warning(
-                "sd_notify failed", extra={"message": message, "error": str(exc)}
-            )
+            _ref_log.warning("sd_notify failed", extra={"message": message, "error": str(exc)})
 
-    async def _watchdog_loop(interval_s: float) -> None:  # type: ignore[misc]  # noqa: F811
+    async def _watchdog_loop(interval_s: float) -> None:  # noqa: F811
         """Reference implementation — sends WATCHDOG=1 every interval_s seconds."""
         try:
             while True:
@@ -128,7 +128,7 @@ class TestSendNotify:
 
     def test_missing_sdnotify_package_is_noop(self) -> None:
         """If sdnotify is not installed, _send_notify silently does nothing."""
-        with patch.dict(sys.modules, {"sdnotify": None}):  # type: ignore[dict-item]
+        with patch.dict(sys.modules, {"sdnotify": None}):
             # Must not raise — not even ImportError.
             _send_notify("READY=1")
 
@@ -177,12 +177,12 @@ class TestWatchdogLoop:
             if call_count >= 3:
                 raise asyncio.CancelledError
 
-        with patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
-            try:
-                await _watchdog_loop(interval_s=10.0)
-            except asyncio.CancelledError:
-                pass
+        with (
+            patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+            contextlib.suppress(asyncio.CancelledError),
+        ):
+            await _watchdog_loop(interval_s=10.0)
 
         watchdog_beats = [m for m in sent if m == "WATCHDOG=1"]
         assert len(watchdog_beats) >= 2, "At least 2 heartbeats expected before cancellation"
@@ -192,22 +192,24 @@ class TestWatchdogLoop:
         """STOPPING=1 is sent when the loop is cancelled (graceful shutdown)."""
         sent: list[str] = []
 
-        with patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append), \
-             patch("asyncio.sleep", side_effect=asyncio.CancelledError):
-            try:
-                await _watchdog_loop(interval_s=10.0)
-            except asyncio.CancelledError:
-                pass
+        with (
+            patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append),
+            patch("asyncio.sleep", side_effect=asyncio.CancelledError),
+            contextlib.suppress(asyncio.CancelledError),
+        ):
+            await _watchdog_loop(interval_s=10.0)
 
         assert "STOPPING=1" in sent
 
     @pytest.mark.asyncio
     async def test_reraises_cancelled_error(self) -> None:
         """CancelledError propagates so the caller's finally block runs."""
-        with patch(f"{_send_notify.__module__}._send_notify"), \
-             patch("asyncio.sleep", side_effect=asyncio.CancelledError):
-            with pytest.raises(asyncio.CancelledError):
-                await _watchdog_loop(interval_s=10.0)
+        with (
+            patch(f"{_send_notify.__module__}._send_notify"),
+            patch("asyncio.sleep", side_effect=asyncio.CancelledError),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _watchdog_loop(interval_s=10.0)
 
     @pytest.mark.asyncio
     async def test_interval_passed_to_sleep(self) -> None:
@@ -223,12 +225,12 @@ class TestWatchdogLoop:
                 raise asyncio.CancelledError
 
         expected_interval = 7.5
-        with patch(f"{_send_notify.__module__}._send_notify"), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
-            try:
-                await _watchdog_loop(interval_s=expected_interval)
-            except asyncio.CancelledError:
-                pass
+        with (
+            patch(f"{_send_notify.__module__}._send_notify"),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+            contextlib.suppress(asyncio.CancelledError),
+        ):
+            await _watchdog_loop(interval_s=expected_interval)
 
         assert all(s == expected_interval for s in sleep_calls), (
             f"asyncio.sleep must be called with {expected_interval}; got {sleep_calls}"
@@ -251,12 +253,12 @@ class TestWatchdogLoop:
             else:
                 order.append(f"after-sleep:notify:{msg}")
 
-        with patch(f"{_send_notify.__module__}._send_notify", side_effect=_record_notify), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
-            try:
-                await _watchdog_loop(interval_s=10.0)
-            except asyncio.CancelledError:
-                pass
+        with (
+            patch(f"{_send_notify.__module__}._send_notify", side_effect=_record_notify),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+            contextlib.suppress(asyncio.CancelledError),
+        ):
+            await _watchdog_loop(interval_s=10.0)
 
         assert order[0] == "notify:WATCHDOG=1", (
             "First heartbeat must be sent before the first sleep"
@@ -265,12 +267,13 @@ class TestWatchdogLoop:
     @pytest.mark.asyncio
     async def test_watchdog_interval_below_half_watchdog_sec(self) -> None:
         """Default interval (10 s) is safely below WatchdogSec (30 s) / 2 = 15 s."""
-        from meshsa.ui.config import UIConfig  # type: ignore[import]
+        from meshsa.ui.config import UIConfig
 
         cfg = UIConfig()
         watchdog_sec = 30  # from meshsa-ui.service WatchdogSec=30
-        assert cfg.watchdog_heartbeat_s < watchdog_sec / 2, (
-            f"watchdog_heartbeat_s ({cfg.watchdog_heartbeat_s}) must be < "
+        # watchdog_heartbeat_s ships with the G0.1 patch; not yet on UIConfig.
+        assert cfg.watchdog_heartbeat_s < watchdog_sec / 2, (  # type: ignore[attr-defined]
+            f"watchdog_heartbeat_s ({cfg.watchdog_heartbeat_s}) must be < "  # type: ignore[attr-defined]
             f"WatchdogSec/2 ({watchdog_sec / 2}) to guarantee heartbeat delivery"
         )
 
@@ -301,13 +304,13 @@ class TestReadyHeartbeatStoppingSequence:
         fake_sdnotify.SystemdNotifier.return_value = notifier
         notifier.notify.side_effect = sent.append
 
-        with patch.dict(sys.modules, {"sdnotify": fake_sdnotify}), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
+        with (
+            patch.dict(sys.modules, {"sdnotify": fake_sdnotify}),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+            contextlib.suppress(asyncio.CancelledError),
+        ):
             _send_notify("READY=1")
-            try:
-                await _watchdog_loop(interval_s=10.0)
-            except asyncio.CancelledError:
-                pass
+            await _watchdog_loop(interval_s=10.0)
 
         assert sent[0] == "READY=1", "READY=1 must be the first message"
         assert "WATCHDOG=1" in sent, "WATCHDOG=1 must appear after READY=1"

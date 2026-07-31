@@ -40,7 +40,7 @@ def test_health_config_defaults():
     cfg = NodeConfig(uid="u", callsign="U")
     assert cfg.health.enabled is False
     assert cfg.health.host == "127.0.0.1"
-    assert cfg.health.port == 8088
+    assert cfg.health.port == 8098  # defaults.PORT_HEALTH (moved off 8088 in T-1.4)
     assert cfg.health.token is None
     assert cfg.health.metrics_enabled is False
     assert cfg.health.metrics_path == "/metrics"

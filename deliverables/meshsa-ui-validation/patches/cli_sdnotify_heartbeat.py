@@ -69,7 +69,7 @@ def _send_notify(message: str) -> None:
         message: An sd_notify protocol message string.
     """
     try:
-        import sdnotify  # type: ignore[import]  # optional dependency
+        import sdnotify  # type: ignore[import-not-found]  # optional dependency
 
         notifier = sdnotify.SystemdNotifier()
         notifier.notify(message)
@@ -157,7 +157,7 @@ class TestSendNotifyPatch:
         notifier.notify.assert_called_once_with("READY=1")
 
     def test_missing_package_is_noop(self) -> None:
-        with mock.patch.dict(__import__("sys").modules, {"sdnotify": None}):  # type: ignore[dict-item]
+        with mock.patch.dict(__import__("sys").modules, {"sdnotify": None}):
             _send_notify("READY=1")  # must not raise
 
     def test_notify_error_swallowed(self) -> None:
@@ -183,17 +183,21 @@ class TestWatchdogLoopPatch:
             if call_count >= 2:
                 raise asyncio.CancelledError
 
-        with mock.patch(f"{__name__}._send_notify", side_effect=sent.append), \
-             mock.patch("asyncio.sleep", side_effect=_fake_sleep):
-            with pytest.raises(asyncio.CancelledError):
-                await _watchdog_loop(interval_s=10.0)
+        with (
+            mock.patch(f"{__name__}._send_notify", side_effect=sent.append),
+            mock.patch("asyncio.sleep", side_effect=_fake_sleep),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _watchdog_loop(interval_s=10.0)
 
         assert "WATCHDOG=1" in sent
         assert "STOPPING=1" in sent
 
     @pytest.mark.asyncio
     async def test_reraises_cancelled_error(self) -> None:
-        with mock.patch(f"{__name__}._send_notify"), \
-             mock.patch("asyncio.sleep", side_effect=asyncio.CancelledError):
-            with pytest.raises(asyncio.CancelledError):
-                await _watchdog_loop(interval_s=10.0)
+        with (
+            mock.patch(f"{__name__}._send_notify"),
+            mock.patch("asyncio.sleep", side_effect=asyncio.CancelledError),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _watchdog_loop(interval_s=10.0)

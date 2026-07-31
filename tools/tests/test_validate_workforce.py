@@ -13,7 +13,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = TOOLS_DIR.parent
 sys.path.insert(0, str(TOOLS_DIR))
 
-import validate_workforce as vw  # noqa: E402
+import validate_workforce as vw  # type: ignore[import-not-found]  # noqa: E402
 
 VALID_TEMPLATE = """\
 ---

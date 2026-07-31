@@ -1,7 +1,7 @@
 # ADR-001: pnpm Workspace + TypeScript ESM + esbuild
 
-**Status:** Accepted  
-**Date:** 2026-07-28  
+**Status:** Accepted
+**Date:** 2026-07-28
 **Deciders:** Engineering team
 
 ---

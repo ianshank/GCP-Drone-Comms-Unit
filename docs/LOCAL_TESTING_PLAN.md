@@ -12,7 +12,7 @@ This document outlines the comprehensive strategy for executing all test suites 
 
 ### Coverage Requirements & Quality Gates
 - **Global Minimum Coverage:** 80% (Project standard enforces **≥97%** in `meshsa` and **≥96%** in `jetson_yolo_gcs`).
-- **Achieved Coverage:** 
+- **Achieved Coverage:**
   - `packages/meshsa`: **99.54%** (1090 passed)
   - `packages/jetson_yolo_gcs`: **99.34%** (205 passed)
   - `tools/claude_hooks`: **100%** (62 passed)
@@ -93,7 +93,7 @@ bash scripts/validate-pre-pr.sh
 ## 5. Objective Peer Review & Architectural Audit
 
 ### Adherence to Project Charter (`docs/CHARTER.md`)
-1. **Scope & Non-Goals (§3):** 
+1. **Scope & Non-Goals (§3):**
    - `meshsa` core remains strictly a telemetry ingest, CoT codec, and mesh routing package.
    - Ground-side FPV interlock (`ArmGuard`) only gates arm low until health checks pass and does not intervene in flight.
    - `jetson_yolo_gcs` operates as an advisory landing target publisher with zero autonomous commanding authority.
@@ -108,4 +108,3 @@ bash scripts/validate-pre-pr.sh
 - **Backwards Compatibility:** Cross-platform Node script execution (`package.json`) ensures Windows, Linux, and macOS dev environments operate without shell dependency issues.
 - **Modularity:** Isolated subpackages (`meshsa`, `jetson_yolo_gcs`, `api-server`, `claude_hooks`) allow decoupled development and targeted test execution.
 - **Fail-Closed Security:** Loopback bind guards, pre-flight interlocks, and transport token authentication prevent unauthenticated network exposure.
-

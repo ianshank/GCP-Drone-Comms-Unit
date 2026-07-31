@@ -27,7 +27,7 @@ _STREAMS = ("rc", "telemetry", "events", "frames")
 
 def flatten_record(rec: dict[str, Any]) -> dict[str, Any]:
     """JSON-encode nested (dict/list) values so columns are uniform scalars."""
-    return {k: json.dumps(v) if isinstance(v, (dict, list)) else v for k, v in rec.items()}
+    return {k: json.dumps(v) if isinstance(v, dict | list) else v for k, v in rec.items()}
 
 
 def to_parquet(records: list[dict[str, Any]], out_path: str) -> int:

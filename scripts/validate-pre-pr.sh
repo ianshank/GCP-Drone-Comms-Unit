@@ -18,6 +18,12 @@
 # Exit codes:
 #   0  All checks passed
 #   1  One or more checks failed (specific step shown in output)
+#
+# Python steps added in T-2.2 (code-hygiene-modularity) now run:
+#   - ruff linting (all Python)
+#   - ruff formatting check
+#   - mypy type checking
+#   - pytest for packages/meshsa (primary test suite)
 
 set -euo pipefail
 
@@ -100,6 +106,41 @@ step_secrets() {
   fi
 }
 
+step_py_lint() {
+  python -m ruff check packages/ flightctl/ tools/ deliverables/ --exclude archive 2>&1
+}
+
+step_py_format() {
+  python -m ruff format --check packages/ flightctl/ tools/ deliverables/ --exclude archive 2>&1
+}
+
+step_py_typecheck() {
+  # mypy resolves module identity from directory structure, and pytest's flat
+  # (no-__init__.py) test-collection convention means every package's tests/
+  # and conftest.py collide under one bare module name ("tests"/"conftest") if
+  # scanned together. Each src-layout package therefore gets its own
+  # `mypy src` pass (reading that package's own pyproject.toml config, per
+  # AGENTS.md); flightctl/+tools/ (a single coherent namespace) and
+  # deliverables/ (standalone, not part of any package's src/) are checked
+  # separately against the root mypy.ini.
+  local failed=0
+  echo "-- packages/meshsa --"
+  (cd packages/meshsa && python -m mypy src) 2>&1 | head -100 || failed=1
+  if [[ -d packages/jetson_yolo_gcs ]]; then
+    echo "-- packages/jetson_yolo_gcs --"
+    (cd packages/jetson_yolo_gcs && python -m mypy src) 2>&1 | head -100 || failed=1
+  fi
+  echo "-- flightctl/ + tools/ --"
+  python -m mypy flightctl/ tools/ --exclude archive 2>&1 | head -100 || failed=1
+  echo "-- deliverables/ --"
+  python -m mypy deliverables/ --exclude archive 2>&1 | head -100 || failed=1
+  return "${failed}"
+}
+
+step_py_test() {
+  cd packages/meshsa && python -m pytest --tb=short -q 2>&1 && cd - >/dev/null
+}
+
 step_py_syntax() {
   local py_bin
   if command -v python3 &>/dev/null; then
@@ -112,12 +153,12 @@ step_py_syntax() {
   fi
 
   local failed=0
-  while IFS= read -r -d '' py_file; do
+  for py_file in $(find . -name "*.py" -path "*/packages/*" -o -name "*.py" -path "*/flightctl/*" -o -name "*.py" -path "*/tools/*" -o -name "*.py" -path "*/deliverables/*" | grep -v "node_modules"); do
     if ! "${py_bin}" -m py_compile "${py_file}" 2>&1; then
       echo "  Syntax error in: ${py_file}"
       failed=1
     fi
-  done < <(find deliverables -name "*.py" -print0)
+  done
 
   return "${failed}"
 }
@@ -136,6 +177,10 @@ run_step "ESLint"                    step_lint
 run_step "Test suite"                step_test
 run_step "Production build"          step_build
 run_step "Secret scan (gitleaks)"    step_secrets
+run_step "Python linting (ruff)"     step_py_lint
+run_step "Python formatting (ruff)"  step_py_format
+run_step "Python type checking"      step_py_typecheck
+run_step "Python test suite"         step_py_test
 run_step "Python syntax check"       step_py_syntax
 
 # ── Summary ───────────────────────────────────────────────────────────────────

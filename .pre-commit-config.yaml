@@ -8,7 +8,9 @@
 # Run manually on all files:
 #   pre-commit run --all-files
 #
-# This config covers both TypeScript (workspace) and Python (deliverables/).
+# This config covers both TypeScript (workspace) and Python (packages/, flightctl/, tools/,
+# deliverables/ — repo-wide as of code-hygiene-modularity T-2.1; previously scoped to
+# deliverables/ only, so ~98% of tracked Python files were never linted locally).
 
 repos:
 
@@ -58,25 +60,28 @@ repos:
         files: "\\.tsx?$"
         types: [file]
 
-  # ── Python (deliverables/) ──────────────────────────────────────────────────
+  # ── Python (repo-wide) ──────────────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.7.4
     hooks:
       - id: ruff
         name: ruff (Python linter)
         args: ["--fix"]
-        files: "^deliverables/.*\\.py$"
+        files: "\\.(py)$"
+        exclude: "^archive/"
       - id: ruff-format
         name: ruff-format (Python formatter)
-        files: "^deliverables/.*\\.py$"
+        files: "\\.(py)$"
+        exclude: "^archive/"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.13.0
     hooks:
       - id: mypy
         name: mypy (Python type check)
-        files: "^deliverables/.*\\.py$"
-        args: ["--ignore-missing-imports", "--no-strict-optional"]
+        files: "\\.(py)$"
+        exclude: "^archive/"
         additional_dependencies:
           - pytest>=8
           - aiohttp>=3.9
+          - types-PyYAML

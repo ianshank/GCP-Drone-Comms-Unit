@@ -22,10 +22,15 @@ The `/metrics` route is opt-in. In the node's `HealthConfig` (see
 The `/healthz` listener must also be running for the server to start. Defaults
 (all overridable in config):
 
+> **Breaking default (code-hygiene-modularity T-1.4):** `port` moved from `8088` to `8098`.
+> `8088` is `mavlink2rest`'s own upstream convention, and a node commonly wires a health
+> listener and a `mavlink2rest`-backed source into the same process — set `health.port: 8088`
+> / `MESHSA_HEALTH_PORT=8088` explicitly if a deployment relied on the old default.
+
 | Setting              | Default       |
 | -------------------- | ------------- |
 | `host`               | `127.0.0.1`   |
-| `port`               | `8088`        |
+| `port`               | `8098`        |
 | `metrics_path`       | `/metrics`    |
 | `metrics_format`     | `prometheus`  |
 
@@ -36,7 +41,7 @@ Example config fragment:
   "health": {
     "enabled": true,
     "host": "127.0.0.1",
-    "port": 8088,
+    "port": 8098,
     "metrics_enabled": true,
     "metrics_path": "/metrics",
     "metrics_format": "prometheus"
@@ -60,7 +65,7 @@ scrape_configs:
   - job_name: meshsa
     metrics_path: /metrics
     static_configs:
-      - targets: ["127.0.0.1:8088"]
+      - targets: ["127.0.0.1:8098"]
 ```
 
 If you bind off-loopback and set a token, add a bearer credential to the scrape job so it can
@@ -74,7 +79,7 @@ scrape_configs:
       type: Bearer
       credentials: "<MESHSA_HEALTH_TOKEN>"
     static_configs:
-      - targets: ["<node-host>:8088"]
+      - targets: ["<node-host>:8098"]
 ```
 
 ## 3. Import the dashboard

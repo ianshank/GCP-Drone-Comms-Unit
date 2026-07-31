@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to this workspace are documented here.  
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
+All notable changes to this workspace are documented here.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
@@ -15,6 +15,52 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `README.md` — root project overview, quick-start, architecture, contributing guide
 - `CHANGELOG.md` — this file; standardised release tracking
 - `NEXTSTEPS.md` — prioritised action backlog for workspace and GCP-Drone-Comms-Unit integration
+
+#### `code-hygiene-modularity` program — gate widening (T-2)
+- `.pre-commit-config.yaml` — the Python ruff / ruff-format / mypy hooks now scan repo-wide
+  (`packages/`, `flightctl/`, `tools/`, `deliverables/`) instead of `deliverables/` only; the old
+  scope silently skipped ~98% of tracked Python files from local pre-commit linting. The T-2.1
+  commit fixes the fallout the widened scan surfaced (17 ruff findings, 6 reformats) in the same
+  change so the gate lands green.
+- `tools/claude_hooks/bind_guard.py` — the bind-safety scan (`SCAN_GLOBS`) now also covers
+  `tools/**/*.py`, excluding `tools/**/tests/**` and `bind_guard.py` itself (its own fixtures
+  and trigger-name constants would otherwise self-flag); `.claude/governance.yaml` documents the
+  widened scope.
+- `scripts/validate-pre-pr.sh` — gained real Python steps (`ruff check`, `ruff format --check`,
+  `mypy`, `pytest` for `packages/meshsa`) ahead of the pre-existing `py_compile` syntax check, so
+  the "full pre-PR gate" claim now actually exercises Python quality, not just TypeScript.
+- `mypy.ini` — documented as the repo-wide root config (covering `packages/`, `flightctl/`,
+  `tools/`) with per-package `pyproject.toml` overrides layered on top; the `--config-file` pin
+  pre-commit previously passed mypy did not exist on disk and has been removed so mypy
+  auto-discovers the correct config per invocation.
+- `tools/claude_hooks/tests/test_bind_guard.py` — added regression coverage for the T-2.4
+  scan-scope widening itself (`tools/**/*.py` inclusion, `tools/**/tests/**` exclusion, and the
+  `bind_guard.py`-excludes-itself rule), which had shipped without direct tests.
+- **The repo-wide `mypy` step had never completed a real run.** `python -m mypy packages/
+  flightctl/ tools/ deliverables/` crashes immediately with `Duplicate module named "tests"`
+  (mixing `tools/tests/` and `packages/jetson_yolo_gcs/tests/`, neither namespaced) — the
+  broken `--exclude` above meant this was always the first thing hit, so it was never actually
+  run to completion before now. Fixed: added `tools/__init__.py` (`tools.*` was already the
+  import path every hook module uses; this makes `tools/tests` resolve as `tools.tests` instead
+  of colliding with `jetson_yolo_gcs`'s bare `tests`) and split `scripts/validate-pre-pr.sh`'s
+  type-check step into one `mypy src` pass per src-layout package (`packages/meshsa`,
+  `packages/jetson_yolo_gcs` — each reads its own `pyproject.toml`, per `AGENTS.md`) plus a
+  `flightctl/`+`tools/` pass and a `deliverables/` pass against the root `mypy.ini`: pytest's
+  flat (no-`__init__.py`) test-collection convention means every package's `tests/` and
+  `conftest.py` collide under one bare module name if mixed into a single mypy invocation.
+  Running mypy against `deliverables/meshsa-ui-validation/` for the first time surfaced 14 real
+  findings (9 stale/mismatched `# type: ignore` comments, 2 missing return-type annotations, 1
+  missing `TestClient` generic type argument, 2 legitimate `attr-defined` on a not-yet-landed
+  `UIConfig.watchdog_heartbeat_s` field pending the G0.1 patch) — all fixed in the same pass.
+- **`.github/workflows/ci.yml` never actually ran the widened checks.** T-2.1/T-2.2 widened
+  pre-commit and `validate-pre-pr.sh` to lint/type-check `tools/` and `deliverables/`, but CI's
+  `test` job still only covered `packages/meshsa` + `flightctl` — so a violation in `tools/` or
+  `deliverables/` would pass CI even though it would fail a local `pre-commit run --all-files`.
+  CI's lint/format steps now cover `tools`/`deliverables` too, and two new steps
+  (`mypy flightctl/ tools/`, `mypy deliverables/`) apply the same per-namespace split documented
+  above; the `Install` step gained `pyyaml`/`types-PyYAML` (a `tools/claude_hooks` dependency
+  that isn't part of `meshsa`'s own dependency set) so the new mypy steps can actually resolve
+  `governance.py`'s `import yaml`.
 
 #### Security & Hardening
 - `MavlinkSourceTransport` network bind guard — endpoint host extraction and `validate_bind` fail-closed enforcement on non-loopback overrides
@@ -66,6 +112,39 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 - `.gitignore` — added `dist/`, `coverage/`, `.vitest-cache/`, `*.tsbuildinfo`, `deliverables/**/__pycache__/`, `*.pyc`, `.pytest_cache/`
 - `.agents/memory/MEMORY.md` — indexed `meshsa-ui-validation.md` topic file
+
+### Security
+
+#### `code-hygiene-modularity` program (`openspec/changes/code-hygiene-modularity/`)
+- `meshsa.ui` — bearer-guarded `/api/*` JSON responses (`tracks`, `detections`, `health`, `fpv`, `chat`, `logs`) and the unauthorized/denied response bodies now carry `Cache-Control: no-store`; previously only the `/` page had it, so an intermediary proxy could persist an authorized JSON payload for replay to the next visitor of the same cached URL
+- `meshsa.scout.station` — the operator page now pins MapLibre GL to an exact version with a Subresource Integrity hash (was a floating `@4` CDN reference with no integrity check) and escapes the injected bearer token against `</script>` termination (was bare `json.dumps`), matching `meshsa.ui`'s existing page hardening; both pages now share `meshsa._webpage`'s constants so they cannot drift apart again
+
+### Fixed
+
+#### `code-hygiene-modularity` program
+- `meshsa.compact`'s codec-registry factory (`_make_compact`) discarded every keyword argument instead of forwarding them to `CompactCodec`, so a config-supplied `codec_options` value (e.g. a narrowed `supported_schemas`) was silently ignored for the compact codec alone
+- `meshsa.llm.sources` — narrowed bare `except Exception` to `(aiohttp.ClientError, asyncio.TimeoutError, ValueError)` in `Mavlink2RestSource` and `FtsTrackSource`, preventing silent swallowing of logic errors and added structured `structlog.warning` before degraded returns
+- **`--exclude` never actually excluded anything.** `scripts/validate-pre-pr.sh`'s Python steps
+  (added in T-2.2) and the `.pre-commit-config.yaml` ruff/mypy hooks (widened in T-2.1) both
+  passed/matched `tests/,archive/` — ruff's CLI splits `--exclude` on commas but a trailing `/`
+  on each segment stops the pattern from matching, and pre-commit's `^tests/|^archive/` regex is
+  anchored so it never matches a nested `tests/` directory (there is no top-level one). Net
+  effect: the "exclude" was a silent no-op the whole time. Fixed to `--exclude archive` /
+  `exclude: "^archive/"` (test directories are linted like the rest of the tree, matching
+  `packages/meshsa`'s own `[tool.ruff.lint.per-file-ignores]` convention of scoping exceptions
+  per-rule rather than exempting the directory outright). Widening the scan for real surfaced 8
+  genuine findings (5 `SIM105`, 3 `SIM117`) in `deliverables/meshsa-ui-validation/{patches,tests}/`
+  that were being silently skipped; fixed in the same pass.
+
+### Changed — breaking default
+
+#### `code-hygiene-modularity` program
+- **`HealthConfig.port` default moved from `8088` to `8098`** (also `cli.py`'s `--healthz-port`/`HEALTHZ_PORT` default). `8088` is `mavlink2rest`'s own upstream convention; a node commonly wires a health listener and a `mavlink2rest`-backed LLM data source into the same process (`meshsa.ui.cli`), so meshsa should not claim a port an external tool already owns by convention. A deployment that relied on the old default must set `health.port: 8088` / `MESHSA_HEALTH_PORT=8088` explicitly to keep the old bind. New `meshsa.defaults` module centralizes `PORT_HEALTH` and other service-port constants (further consolidation of hardcoded ports across `ui`, `llm`, `commander`, `scout`, and `detection_ingest` is staged for T-3.5).
+
+### Changed — operator-visible
+
+#### `code-hygiene-modularity` program
+- **`meshsa-scout` now honours `MESHSA_SCOUT_*` environment variables.** The standalone CLI previously built a bare `ScoutConfig()`, silently ignoring all 22 wired variables (`ScoutConfig` gains a new `from_env()` classmethod, sharing its scalar-override map with `NodeConfig.from_env().scout` so the two can never drift). **This is operator-visible, not just a bug fix:** a deployment that already exports `MESHSA_SCOUT_STORE_PATH` now gets a persistent file-backed store where it previously silently got the volatile `:memory:` default, and `MESHSA_SCOUT_STATION_TOKEN` now actually gates the station server where it was previously silently ignored. Operators who were relying on the old (unauthenticated / in-memory) behaviour should review their environment before upgrading.
 
 ---
 

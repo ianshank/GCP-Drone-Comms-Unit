@@ -105,7 +105,7 @@ class TestParseEndpointHost:
             ("udpout:192.168.1.100:14555", "192.168.1.100"),
             ("tcp:10.0.0.1:5760", "10.0.0.1"),
             ("tcpin:10.10.10.10:5760", "10.10.10.10"),
-            ("UDP:127.0.0.1:14550", "127.0.0.1"),   # scheme is case-insensitive
+            ("UDP:127.0.0.1:14550", "127.0.0.1"),  # scheme is case-insensitive
         ],
     )
     def test_network_endpoint_returns_host(self, endpoint: str, expected: str) -> None:
@@ -120,8 +120,8 @@ class TestParseEndpointHost:
             "/dev/ttyAMA0",
             "COM3",
             "serial:/dev/ttyUSB0",
-            "",            # empty string
-            "mavlink",     # just a name, no colons
+            "",  # empty string
+            "mavlink",  # just a name, no colons
         ],
     )
     def test_serial_or_unknown_endpoint_returns_none(self, endpoint: str) -> None:
@@ -167,7 +167,7 @@ def _make_transport(
     can catch an ImportError from a missing patch as a test failure rather than
     a collection error.
     """
-    from meshsa.transports.mavlink_source import MavlinkSourceTransport  # type: ignore[import]
+    from meshsa.transports.mavlink_source import MavlinkSourceTransport
 
     return MavlinkSourceTransport(
         name="test-mavlink",
@@ -243,9 +243,7 @@ class TestMavlinkBindGuard:
 
     def test_validate_bind_called_once_at_construction(self) -> None:
         """The guard fires at construction time (not at start / connect time)."""
-        with patch(
-            "meshsa.transports.mavlink_source.validate_bind"
-        ) as mock_vb:
+        with patch("meshsa.transports.mavlink_source.validate_bind") as mock_vb:
             mock_vb.side_effect = None  # suppress the real check
             _make_transport("udpin:0.0.0.0:14550", token=None)
             mock_vb.assert_called_once()

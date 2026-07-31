@@ -15,11 +15,15 @@ in-memory ``Static*`` sources.
 
 from __future__ import annotations
 
+import asyncio
 import math
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+import structlog
 from pydantic import BaseModel
+
+_log = structlog.get_logger("meshsa.llm.sources")
 
 # GLOBAL_POSITION_INT field scaling (see MAVLink common message set).
 _DEGE7 = 1e7  # lat/lon: degrees * 1e7
@@ -262,7 +266,13 @@ class Mavlink2RestSource:  # pragma: no cover - real HTTP I/O
             ):
                 resp.raise_for_status()
                 payload = await resp.json()
-        except Exception:
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+            # A genuinely dead/unreachable mavlink2rest is expected and degrades to
+            # link_ok=False; anything else (a bug in this method) must not be mistaken
+            # for that and should propagate.
+            _log.warning(
+                "mavlink2rest_unreachable", url=url, error=str(exc), error_type=type(exc).__name__
+            )
             return DroneState(uid=self._uid, link_ok=False)
         return parse_global_position_int(payload, self._uid)
 
@@ -290,6 +300,15 @@ class FtsTrackSource:  # pragma: no cover - real HTTP I/O
             ):
                 resp.raise_for_status()
                 data = await resp.json()
-        except Exception:
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+            # A genuinely dead/unreachable FreeTAKServer is expected and degrades to an
+            # empty track list; anything else (a bug in this method) must not be mistaken
+            # for that and should propagate.
+            _log.warning(
+                "fts_tracks_unreachable",
+                url=self._url,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
             return []
         return parse_fts_tracks(data)

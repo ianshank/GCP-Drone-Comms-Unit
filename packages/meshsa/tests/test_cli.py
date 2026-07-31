@@ -23,7 +23,7 @@ def test_parse_args_defaults(monkeypatch):
     assert args.port == "/dev/ttyUSB0"
     assert args.fts_port == 8087
     assert args.health is False
-    assert args.healthz_port == 8088
+    assert args.healthz_port == 8098  # defaults.PORT_HEALTH (moved off 8088 in T-1.4)
 
 
 def test_env_default_then_flag_wins(monkeypatch):

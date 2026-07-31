@@ -197,8 +197,9 @@ def run(argv: Sequence[str]) -> int:
     p_station.add_argument("--no-rtk", action="store_true")
 
     args = parser.parse_args(argv)
-    # Scout tunables: defaults here; a node/gateway resolves MESHSA_SCOUT_* via NodeConfig.
-    config = ScoutConfig()
+    # Standalone MESHSA_SCOUT_* resolution (T-1.5): a full node/gateway also resolves these
+    # via NodeConfig.from_env().scout, sharing the same scalar-override map.
+    config = ScoutConfig.from_env()
 
     if args.health_check:
         return _health_check(config)

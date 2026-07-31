@@ -167,7 +167,7 @@ class SnapshotStore:
         if not isinstance(position, dict):
             return None
         lat, lon = position.get("lat"), position.get("lon")
-        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+        if not isinstance(lat, int | float) or not isinstance(lon, int | float):
             return None
         if not (math.isfinite(float(lat)) and math.isfinite(float(lon))):
             return None  # NaN/inf coordinates are invalid JSON and unmappable

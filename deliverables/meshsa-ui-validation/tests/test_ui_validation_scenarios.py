@@ -24,14 +24,11 @@ to xpass automatically once the header is added to ``build_ui_app``.
 
 from __future__ import annotations
 
-import asyncio
-import time
 from typing import Any
 
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
-
 from meshsa.models import Envelope, MessageKind
 from meshsa.ui.app import build_ui_app
 from meshsa.ui.config import UIConfig
@@ -44,9 +41,9 @@ from meshsa.ui.sources import UISources
 # are irrelevant to the scenario outcomes (only uniqueness matters).
 # ---------------------------------------------------------------------------
 
-_DEFAULT_LAT: float = 38.5          # degrees N — NorCal area, arbitrarily chosen
-_DEFAULT_LON: float = -122.5        # degrees W
-_DEFAULT_HAE: float = 0.0           # height above ellipsoid, metres
+_DEFAULT_LAT: float = 38.5  # degrees N — NorCal area, arbitrarily chosen
+_DEFAULT_LON: float = -122.5  # degrees W
+_DEFAULT_HAE: float = 0.0  # height above ellipsoid, metres
 _DEFAULT_TRACK_STALE_S: float = 300.0
 _DEFAULT_DETECTION_STALE_S: float = 3600.0
 _DEFAULT_MAX_TRACKS: int = 64
@@ -114,7 +111,7 @@ async def _make_client(
     store: SnapshotStore,
     *,
     token: str | None = None,
-) -> TestClient:
+) -> TestClient[web.Request, web.Application]:
     """Build an aiohttp TestClient against the console app (caller must close it)."""
     cfg = UIConfig(token=token)
     app = build_ui_app(_make_sources(store), cfg)
@@ -382,7 +379,7 @@ def test_s3_cap_eviction_oldest_first_tracks() -> None:
     assert len(features) == max_t, "Cap must not be exceeded after overflow"
 
     live_uids = {f["properties"]["uid"] for f in features}
-    evicted_uids = {f"uas-{i}" for i in range(overflow)}      # oldest 5
+    evicted_uids = {f"uas-{i}" for i in range(overflow)}  # oldest 5
     retained_uids = {f"uas-{i}" for i in range(overflow, max_t + overflow)}  # newest 8
 
     assert live_uids.isdisjoint(evicted_uids), "Oldest entries must have been evicted"
@@ -397,9 +394,7 @@ def test_s3_cap_eviction_counter_increments() -> None:
 
     for i in range(max_d + 3):
         clock.t = float(i)
-        store.handle(
-            _marker_envelope("cam-0", msg_id=f"d{i}", ts=clock.t, track_id=i)
-        )
+        store.handle(_marker_envelope("cam-0", msg_id=f"d{i}", ts=clock.t, track_id=i))
 
     counters = store.counters()
     assert counters["detections_evicted"] == 3
@@ -419,7 +414,7 @@ def test_s3_cap_never_exceeded_mixed_upserts_and_inserts() -> None:
     # Upsert existing + add new (should evict one old for each new).
     for round_n in range(10):
         clock.t = float(max_t + round_n)
-        store.handle(_pli_envelope("uas-0", ts=clock.t))       # upsert
+        store.handle(_pli_envelope("uas-0", ts=clock.t))  # upsert
         store.handle(_pli_envelope(f"new-{round_n}", ts=clock.t))  # new
 
     assert len(store.tracks_geojson()["features"]) <= max_t
@@ -574,9 +569,7 @@ async def test_s5_no_store_on_page_with_token_query() -> None:
         resp = await client.get("/", params={"token": _TOKEN})
         assert resp.status == 200
         cc = resp.headers.get("Cache-Control", "")
-        assert "no-store" in cc, (
-            f"Cache-Control: no-store missing on token-gated page; got {cc!r}"
-        )
+        assert "no-store" in cc, f"Cache-Control: no-store missing on token-gated page; got {cc!r}"
     finally:
         await client.close()
 
@@ -626,9 +619,7 @@ async def test_s6_old_token_rejected_after_rotation() -> None:
     client_old = TestClient(TestServer(app_old))
     await client_old.start_server()
     try:
-        resp = await client_old.get(
-            "/api/tracks", headers={"Authorization": f"Bearer {old_token}"}
-        )
+        resp = await client_old.get("/api/tracks", headers={"Authorization": f"Bearer {old_token}"})
         assert resp.status == 200, "Old token must work on the old instance"
     finally:
         await client_old.close()
@@ -663,9 +654,7 @@ async def test_s6_stale_token_body_reveals_no_data() -> None:
 
     client = await _make_client(store, token="live-token")
     try:
-        resp = await client.get(
-            "/api/tracks", headers={"Authorization": "Bearer stale-token"}
-        )
+        resp = await client.get("/api/tracks", headers={"Authorization": "Bearer stale-token"})
         assert resp.status == 401
         body = await resp.json()
         # The error body must not contain any feature data.

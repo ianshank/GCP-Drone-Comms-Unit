@@ -160,7 +160,7 @@ def test_parse_endpoint_host_network_endpoints() -> None:
         ("udpout:192.168.1.100:14555", "192.168.1.100"),
         ("tcp:10.0.0.1:5760", "10.0.0.1"),
         ("tcpin:10.10.10.10:5760", "10.10.10.10"),
-        ("UDP:127.0.0.1:14550", "127.0.0.1"),   # case-insensitive scheme
+        ("UDP:127.0.0.1:14550", "127.0.0.1"),  # case-insensitive scheme
         ("  udpin:192.168.1.10:14550  ", "192.168.1.10"),  # leading/trailing ws
     ]
     for endpoint, expected in cases:

@@ -122,7 +122,7 @@ def test_merge_preserves_persisted_triage() -> None:
             )
         ],
     )
-    (det_id,) = [d.id for d in pipe.store.all()]
+    (det_id,) = (d.id for d in pipe.store.all())
     pipe.store.set_status(det_id, "tagged")
     # A second, higher-confidence observation of the same ground point merges into the cluster.
     pipe.ingest(

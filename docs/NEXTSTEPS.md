@@ -9,6 +9,51 @@
 > [ROADMAP_RECONCILIATION.md](ROADMAP_RECONCILIATION.md) — most of it is inapplicable or out of
 > scope per CHARTER §3; the in-scope slice became the AI-inference Track-B work below.
 
+## Code hygiene & modularity program (`code-hygiene-modularity` branch)
+> Repo-wide gap analysis + hardening pass: gates that didn't gate (pre-commit scoped to ~2% of
+> tracked Python files), security-relevant duplication drift across four aiohttp auth scaffolds,
+> six verified bugs, and fail-closed gaps on the (still-frozen) Initiative-C command path. Full
+> bundle — proposal, design, spec deltas, commit-by-commit task list — lives at
+> `openspec/changes/code-hygiene-modularity/`. Does **not** open M3+ and does **not** clear the
+> Initiative-C M2 gate (`c_gate_met` untouched).
+
+- [x] **T-0 — Spec + preconditions:** OpenSpec bundle authored; CHARTER §3 jetson-amendment
+      wording drafted for maintainer ratification.
+- [x] **T-1 — Six verified bug fixes:** `meshsa.ui` `/api/*` responses now carry
+      `Cache-Control: no-store`; the scout station page adopts the shared `_webpage.py` (SRI-pinned
+      MapLibre CDN tag + script-safe token escaping, matching `meshsa.ui`); `compact` codec
+      registry factory forwards `codec_options` instead of discarding them; `HealthConfig.port`
+      moved `8088`→`8098` (breaking default — see CHANGELOG) backed by a new `meshsa.defaults`
+      port table; `meshsa-scout` CLI now resolves `MESHSA_SCOUT_*` env vars (operator-visible —
+      see CHANGELOG); `meshsa.llm.sources` narrowed two bare `except Exception` swallows.
+- [x] **T-2 — Gate widening:** pre-commit and `scripts/validate-pre-pr.sh` now run real Python
+      lint/format/type/test steps repo-wide (previously `deliverables/`-only / syntax-only);
+      `bind_guard`'s scan scope widened to include `tools/**/*.py`.
+- [ ] **T-2.3 (deferred, part of T-2):** archive `artifacts/mockup-sandbox` and
+      `lib/api-client-react` into `archive/`, fix the root Dockerfile's invalid
+      `COPY … 2>/dev/null || true` lines, update `tsconfig`/`pnpm-workspace.yaml`, and add a new
+      `ts` CI job for `api-spec`/`api-zod`/`api-server`. Deferred pending a Node.js/pnpm toolchain
+      in this working environment to verify the workspace surgery safely — not dropped.
+- [ ] **T-3 — Shared foundations (8 commits):** extract `_web.py` (consolidated auth scaffold for
+      the four aiohttp factories), `_envconfig.py`, `_frame_codec.py`, `_geojson.py`, `_queues.py`,
+      `mavlink_constants.py`, `_logging.py`; characterization-first (route/status/header pins
+      before migration).
+- [ ] **T-4 — Class splits** behind unchanged public facades (`InferenceService`, `tak.py`,
+      `FlightLogger`, `CotCodec`, jetson `Bridge`/`Pipeline`).
+- [ ] **T-5 — fpv prune + decouple:** safe dead-code deletions only; ratified CHARTER §3 carve-out
+      code (`ArmGuard`, `crsf/rc.py`, `RCLink`, `FlightLogger.record_rc`) is **kept and marked**,
+      not deleted; unify the four arm-freshness predicates on one `is_fresh` window.
+- [ ] **T-6 — scout + llm correctness** (store concurrency, terrain fail-closed defaults, llm
+      config knob consolidation).
+- [ ] **T-7 — `meshsa-core` extraction:** new `packages/meshsa_core` distribution; `meshsa.netauth`
+      becomes a pure re-export shim, canonical module flips to `meshsa_core.netauth`.
+- [ ] **T-8 — Command-zone hardening (gated, commanding stays disabled):** denied-command audit
+      records, gate-issued `ConfirmedCommand`, bounded confirmation TTL/pending cap.
+- [ ] **T-9/T-10 — Coupling cleanup, sdnotify watchdog, docs truth pass, openspec closeout.**
+
+See `openspec/changes/code-hygiene-modularity/tasks.md` for the full commit-by-commit plan and
+`docs/OPENSPEC_CODE_HYGIENE_PEER_REVIEW.md` for the peer-review corrections folded into it.
+
 ## Done (this initial PR)
 - `telemetry` codec + `mavlink_source` (pymavlink) + `msp_source` (Betaflight MSP/YAMSPy)
   transports; drone/FC fixes → **air** CoT tracks with no schema bump.

@@ -154,5 +154,5 @@ class CompactCodec:
 
 
 @codec_registry.register("compact")
-def _make_compact(**_: object) -> CompactCodec:
-    return CompactCodec()
+def _make_compact(**kwargs: Any) -> CompactCodec:
+    return CompactCodec(**kwargs)

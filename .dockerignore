@@ -39,6 +39,9 @@ docs/
 *.md
 !artifacts/api-server/README.md
 
+# ── OpenSpec change bundles (planning docs, not runtime code) ────────────────
+openspec/
+
 # ── Replit / editor artefacts ─────────────────────────────────────────────────
 .replit
 .replitignore
