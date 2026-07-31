@@ -9,6 +9,16 @@
 > [ROADMAP_RECONCILIATION.md](ROADMAP_RECONCILIATION.md) — most of it is inapplicable or out of
 > scope per CHARTER §3; the in-scope slice became the AI-inference Track-B work below.
 
+## Charter alignment audit (process)
+> A dated, full-CHARTER scan (scope §3 + all six carve-outs + all seven §4 invariants) was
+> missing — existing docs each cover one slice (`AUDIT_M2_AUTH.md` = auth/encryption only,
+> `GAP_ANALYSIS.md` = test categories only). The repeatable method now lives at
+> [CHARTER_ALIGNMENT_AUDIT_PLAN.md](CHARTER_ALIGNMENT_AUDIT_PLAN.md); each run produces its own
+> dated `CHARTER_ALIGNMENT_AUDIT_<date>.md` findings report, linked here once one exists.
+
+- [ ] **Run the plan's Phase A–E pass** and file the first
+      `CHARTER_ALIGNMENT_AUDIT_<date>.md` findings report.
+
 ## Code hygiene & modularity program (`code-hygiene-modularity` branch)
 > Repo-wide gap analysis + hardening pass: gates that didn't gate (pre-commit scoped to ~2% of
 > tracked Python files), security-relevant duplication drift across four aiohttp auth scaffolds,
