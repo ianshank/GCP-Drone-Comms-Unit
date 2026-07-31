@@ -14,7 +14,7 @@
       consistent with every existing carve-out being dated to when the capability lands.
 
 ## Phase 1 — Verified bug fixes
-- [ ] T-1.1 `Cache-Control: no-store` on `ui/app.py`'s `/api/*` JSON routes; salvage the S5a
+- [x] T-1.1 `Cache-Control: no-store` on `ui/app.py`'s `/api/*` JSON routes; salvage the S5a
       assertion from `deliverables/meshsa-ui-validation/tests/test_ui_validation_scenarios.py`
       into `packages/meshsa/tests/`.
 - [ ] T-1.2 `meshsa/_webpage.py` (SRI-pinned MapLibre tags + `_js_literal`, sourced from

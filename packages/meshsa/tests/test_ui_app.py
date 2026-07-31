@@ -482,6 +482,45 @@ async def test_index_sends_no_store() -> None:
         await client.close()
 
 
+# Regression for the bug found in the code-hygiene-modularity audit: the page route had
+# Cache-Control: no-store but the bearer-guarded /api/* JSON routes did not, so an
+# intermediary proxy could persist an authorized response for replay to the next visitor
+# of the same cached URL. Salvaged from deliverables/meshsa-ui-validation's S5a scenario
+# (spec delta m2-bind-safety "Authenticated JSON Responses Are Non-Cacheable").
+@pytest.mark.parametrize(
+    "path", ["/api/tracks", "/api/detections", "/api/health", "/api/fpv", "/api/logs"]
+)
+async def test_s5a_no_store_on_api_get_routes(path: str) -> None:
+    client = await _client(build_ui_app(_sources(), UIConfig(token="s3cret")))
+    try:
+        resp = await client.get(path, headers={"Authorization": "Bearer s3cret"})
+        assert resp.status == 200, f"expected 200 on {path}, got {resp.status}"
+        assert resp.headers.get("Cache-Control") == "no-store", (
+            f"Cache-Control: no-store missing on {path}; got {resp.headers.get('Cache-Control')!r}"
+        )
+    finally:
+        await client.close()
+
+
+async def test_s5a_no_store_on_chat_and_denied_response() -> None:
+    client = await _client(build_ui_app(_sources(), UIConfig(token="s3cret")))
+    try:
+        # Denied (401) response also carries no-store.
+        denied = await client.get("/api/tracks")
+        assert denied.status == 401
+        assert denied.headers.get("Cache-Control") == "no-store"
+        # Successful POST /api/chat response carries no-store.
+        ok = await client.post(
+            "/api/chat",
+            headers={"Authorization": "Bearer s3cret"},
+            json={"prompt": "status?"},
+        )
+        assert ok.status == 200
+        assert ok.headers.get("Cache-Control") == "no-store"
+    finally:
+        await client.close()
+
+
 async def test_page_values_cannot_close_script_block() -> None:
     evil = "</script><script>alert(1)</script>"
     client = await _client(build_ui_app(_sources(), UIConfig(title=evil)))

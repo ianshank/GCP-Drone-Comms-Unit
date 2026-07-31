@@ -67,6 +67,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `.gitignore` — added `dist/`, `coverage/`, `.vitest-cache/`, `*.tsbuildinfo`, `deliverables/**/__pycache__/`, `*.pyc`, `.pytest_cache/`
 - `.agents/memory/MEMORY.md` — indexed `meshsa-ui-validation.md` topic file
 
+### Security
+
+#### `code-hygiene-modularity` program (`openspec/changes/code-hygiene-modularity/`)
+- `meshsa.ui` — bearer-guarded `/api/*` JSON responses (`tracks`, `detections`, `health`, `fpv`, `chat`, `logs`) and the unauthorized/denied response bodies now carry `Cache-Control: no-store`; previously only the `/` page had it, so an intermediary proxy could persist an authorized JSON payload for replay to the next visitor of the same cached URL
+
 ---
 
 ## [0.1.0] — 2026-07-28

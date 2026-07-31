@@ -42,6 +42,11 @@ __all__ = [
 #: Stable, non-sensitive body returned to the browser when a data source raises.
 UPSTREAM_ERROR = "source unavailable; check the server logs"
 
+#: Every bearer-guarded JSON response carries this: an intermediary proxy must never
+#: persist an authorized payload for replay to an unauthenticated client (spec delta
+#: m2-bind-safety "Authenticated JSON Responses Are Non-Cacheable").
+_NO_STORE_HEADERS = {"Cache-Control": "no-store"}
+
 
 def validate_bind(host: str, token: str | None) -> None:
     """Fail closed: a non-loopback console bind without a token is a misconfiguration."""
@@ -108,12 +113,12 @@ def build_ui_app(
         if result is None:
             return None
         body, status = result
-        return web.json_response(body, status=status)
+        return web.json_response(body, status=status, headers=_NO_STORE_HEADERS)
 
     def _upstream_error(route: str, exc: Exception) -> Any:
         # Generic body to the browser; the detail is logged server-side only (llm policy).
         _log.warning("ui_source_error", route=route, error=str(exc), error_type=type(exc).__name__)
-        return web.json_response({"error": UPSTREAM_ERROR}, status=502)
+        return web.json_response({"error": UPSTREAM_ERROR}, status=502, headers=_NO_STORE_HEADERS)
 
     async def index(request: Any) -> Any:
         # Browsers can't set an Authorization header on navigation: gate the page on a
@@ -121,7 +126,9 @@ def build_ui_app(
         if effective_token and not authorize(
             effective_token, "Bearer " + (request.query.get("token") or "")
         ):
-            return web.json_response({"error": "unauthorized"}, status=401)
+            return web.json_response(
+                {"error": "unauthorized"}, status=401, headers=_NO_STORE_HEADERS
+            )
         page = render_page(
             effective_token,
             manifest,
@@ -143,7 +150,7 @@ def build_ui_app(
         if denied is not None:
             return denied
         try:
-            return web.json_response(sources.snapshot.tracks_geojson())
+            return web.json_response(sources.snapshot.tracks_geojson(), headers=_NO_STORE_HEADERS)
         except Exception as exc:
             return _upstream_error("/api/tracks", exc)
 
@@ -152,7 +159,9 @@ def build_ui_app(
         if denied is not None:
             return denied
         try:
-            return web.json_response(sources.snapshot.detections_geojson())
+            return web.json_response(
+                sources.snapshot.detections_geojson(), headers=_NO_STORE_HEADERS
+            )
         except Exception as exc:
             return _upstream_error("/api/detections", exc)
 
@@ -164,7 +173,7 @@ def build_ui_app(
             body: dict[str, Any] = {"snapshot": sources.snapshot.counters()}
             if sources.health is not None:
                 body.update(sources.health.snapshot())
-            return web.json_response(body)
+            return web.json_response(body, headers=_NO_STORE_HEADERS)
         except Exception as exc:
             return _upstream_error("/api/health", exc)
 
@@ -183,7 +192,7 @@ def build_ui_app(
             if denied is not None:
                 return denied
             try:
-                return web.json_response(fpv_source.report())
+                return web.json_response(fpv_source.report(), headers=_NO_STORE_HEADERS)
             except Exception as exc:
                 return _upstream_error("/api/fpv", exc)
 
@@ -204,7 +213,7 @@ def build_ui_app(
                 body, status = await chat_backend.reply(payload)
             except Exception as exc:  # a raising backend still yields the generic 502
                 return _upstream_error("/api/chat", exc)
-            return web.json_response(body, status=status)
+            return web.json_response(body, status=status, headers=_NO_STORE_HEADERS)
 
         app.router.add_post("/api/chat", chat)
 
@@ -216,7 +225,9 @@ def build_ui_app(
             if denied is not None:
                 return denied
             try:
-                return web.json_response({"entries": log_source.entries()})
+                return web.json_response(
+                    {"entries": log_source.entries()}, headers=_NO_STORE_HEADERS
+                )
             except Exception as exc:
                 return _upstream_error("/api/logs", exc)
 
