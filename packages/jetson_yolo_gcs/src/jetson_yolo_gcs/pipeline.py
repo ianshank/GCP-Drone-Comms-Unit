@@ -42,6 +42,10 @@ _DEFAULT_MIN_PUBLISH_RATE_HZ: float = float(
 _DEFAULT_PUBLISH_FAILURE_TOLERANCE: int = int(
     PipelineSettings.model_fields["publish_failure_tolerance"].default
 )
+_DEFAULT_FPS_WINDOW: int = int(PipelineSettings.model_fields["fps_window"].default)
+#: Default idle back-off for :meth:`Pipeline.run` (same single-source-of-truth rationale as
+#: above): a direct ``Pipeline().run()`` and ``cli.py``'s settings-driven call never diverge.
+_DEFAULT_IDLE_POLL_S: float = float(PipelineSettings.model_fields["idle_poll_s"].default)
 
 _log = structlog.get_logger("jetson_yolo_gcs.pipeline")
 
@@ -62,6 +66,7 @@ class Pipeline:
         tracker: TrackerBase | None = None,
         target_classes: frozenset[str] | None = None,
         fps: FpsCounter | None = None,
+        fps_window: int = _DEFAULT_FPS_WINDOW,
         clock: Clock | None = None,
         liveness_timeout_s: float = _DEFAULT_LIVENESS_TIMEOUT_S,
         drop_log_every: int = _DEFAULT_DROP_LOG_EVERY,
@@ -88,7 +93,7 @@ class Pipeline:
         self._tracker = tracker
         self._target_classes = target_classes
         self._clock: Clock = clock or MonotonicClock()
-        self._fps = fps or FpsCounter(clock=self._clock)
+        self._fps = fps or FpsCounter(window=fps_window, clock=self._clock)
         self._liveness_timeout_s = liveness_timeout_s
         self._drop_log_every = drop_log_every
         self._min_publish_rate_hz = min_publish_rate_hz
@@ -330,7 +335,7 @@ class Pipeline:
         *,
         max_iterations: int | None = None,
         max_consecutive_empty: int | None = None,
-        idle_poll_s: float = 0.01,
+        idle_poll_s: float = _DEFAULT_IDLE_POLL_S,
         sleep: SleepCallable | None = None,
     ) -> int:
         """Run the loop, returning the number of frames processed.
@@ -401,6 +406,7 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
         bridge=bridge,
         tracker=tracker,
         target_classes=settings.mavlink.target_class_set,
+        fps_window=settings.pipeline.fps_window,
         liveness_timeout_s=settings.pipeline.liveness_timeout_s,
         drop_log_every=settings.pipeline.drop_log_every,
         min_publish_rate_hz=settings.mavlink.min_publish_rate_hz,

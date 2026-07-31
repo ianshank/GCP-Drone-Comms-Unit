@@ -67,6 +67,10 @@ build-api: ## Build API server only
 .PHONY: typecheck
 typecheck: ## Run TypeScript strict type checking across all packages
 	$(call log_step,TypeScript type checking)
+	@# lib/api-zod and lib/db are TS composite project references (emitDeclarationOnly);
+	@# their gitignored dist/ .d.ts output must exist before dependents can typecheck
+	@# against them via "references" -- build them first, on every fresh clone.
+	$(PNPM) --filter './lib/*' run build
 	$(PNPM) -r run typecheck
 	@echo "$(_GREEN)✔  Type checking passed$(_RESET)"
 

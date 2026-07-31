@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from jetson_yolo_gcs.core.config import MavlinkSettings
+from jetson_yolo_gcs.core.config import MavlinkSettings, PipelineSettings
 from jetson_yolo_gcs.core.errors import DetectionError
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge
@@ -608,3 +608,52 @@ def test_close_swallows_raising_closer() -> None:
 
     pipeline = Pipeline(camera=_RaisingCamera(), detector=FakeDetector(_sample()))
     pipeline.close()  # must not raise
+
+
+def test_fps_window_default_matches_pipeline_settings() -> None:
+    # No explicit fps_window: Pipeline's own bare default must mirror PipelineSettings (single
+    # source of truth) so a direct Pipeline(...) and settings-driven build_pipeline() never
+    # diverge — proven by inspecting the internal FpsCounter's sliding-window size.
+    pipeline = Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()))
+    assert pipeline._fps._times.maxlen == PipelineSettings().fps_window == 30
+
+
+def test_fps_window_forwarded_to_internal_counter() -> None:
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()), fps_window=5
+    )
+    assert pipeline._fps._times.maxlen == 5
+
+
+def test_fps_window_below_two_rejected() -> None:
+    # Delegated to FpsCounter's own "window must be >= 2" invariant: Pipeline must not be
+    # constructible with a self-inconsistent fps window (mirrors the class's other
+    # independent-of-config-Field-bounds checks, e.g. liveness_timeout_s <= 0 above).
+    with pytest.raises(ValueError):
+        Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()), fps_window=1)
+
+
+def test_fps_window_ignored_when_explicit_fps_counter_given() -> None:
+    # An explicit fps= bypasses fps_window entirely (the same short-circuit `fps or
+    # FpsCounter(...)` that already made the old bare `FpsCounter()` default inert whenever a
+    # caller supplied their own counter).
+    explicit = FpsCounter(window=7, clock=FakeClock())
+    pipeline = Pipeline(
+        camera=FakeCamera(_frames(0)),
+        detector=FakeDetector(_sample()),
+        fps=explicit,
+        fps_window=2,  # would raise via FpsCounter if it were actually used
+    )
+    assert pipeline._fps is explicit
+    assert pipeline._fps._times.maxlen == 7
+
+
+def test_run_idle_poll_default_matches_pipeline_settings() -> None:
+    # No explicit idle_poll_s: run() must use its own settings-derived bare default, not an
+    # independent hardcoded literal (single source of truth with PipelineSettings.idle_poll_s;
+    # cli.py's production call already passes this explicitly, exercised via the exact value
+    # actually reaching time.sleep's injected fake here).
+    slept: list[float] = []
+    pipeline = Pipeline(camera=FakeCamera(_frames(0)), detector=FakeDetector(_sample()))
+    pipeline.run(max_consecutive_empty=2, sleep=slept.append)
+    assert slept == [PipelineSettings().idle_poll_s] == [0.01]

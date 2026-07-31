@@ -3,12 +3,20 @@
 #
 # Runs every check that must pass before a pull request is opened.
 # Steps (in order, each must pass before the next runs):
-#   1. TypeScript type checking (all packages)
-#   2. ESLint (all packages, no warnings)
-#   3. Unit + integration tests (all packages)
-#   4. Production build (api-server)
-#   5. Secret scan (gitleaks)
-#   6. Python syntax check (deliverables/)
+#   1.  TypeScript type checking (all packages)
+#   2.  ESLint (all packages, no warnings)
+#   3.  Unit + integration tests (TS packages)
+#   4.  Production build (api-server)
+#   5.  Secret scan (gitleaks)
+#   6.  Python linting (ruff) — packages/, flightctl/, tools/, deliverables/
+#   7.  Python formatting check (ruff format --check) — same scope as #6
+#   8.  Python type checking (mypy) — packages/meshsa, packages/jetson_yolo_gcs
+#       (if present), flightctl/+tools/, deliverables/, each against its own
+#       pyproject.toml/mypy.ini
+#   9.  Python test suite (pytest) — packages/meshsa, and packages/jetson_yolo_gcs
+#       if present (each package's own coverage-gated suite)
+#   10. Python syntax check (py_compile) — every *.py under packages/,
+#       flightctl/, tools/, deliverables/ (not deliverables/ alone)
 #
 # Usage:
 #   bash scripts/validate-pre-pr.sh
@@ -19,11 +27,9 @@
 #   0  All checks passed
 #   1  One or more checks failed (specific step shown in output)
 #
-# Python steps added in T-2.2 (code-hygiene-modularity) now run:
-#   - ruff linting (all Python)
-#   - ruff formatting check
-#   - mypy type checking
-#   - pytest for packages/meshsa (primary test suite)
+# Python steps added in T-2.2 (code-hygiene-modularity); jetson_yolo_gcs test
+# coverage (step 9) added 2026-07-31 — it was lint/type-checked but never
+# actually pytest-run by this gate.
 
 set -euo pipefail
 
@@ -80,7 +86,11 @@ skip_step() {
 # ── Step functions ────────────────────────────────────────────────────────────
 
 step_typecheck() {
-  pnpm -r run typecheck
+  # lib/api-zod and lib/db are TS composite project references
+  # (emitDeclarationOnly); their gitignored dist/ .d.ts output must exist
+  # before dependents (e.g. api-server) can typecheck against them via
+  # "references" -- build them first, since a fresh clone never has it.
+  pnpm --filter './lib/*' run build && pnpm -r run typecheck
 }
 
 step_lint() {
@@ -141,6 +151,14 @@ step_py_test() {
   cd packages/meshsa && python -m pytest --tb=short -q 2>&1 && cd - >/dev/null
 }
 
+step_py_test_jetson() {
+  if [[ ! -d packages/jetson_yolo_gcs ]]; then
+    warn "packages/jetson_yolo_gcs not present — skipping"
+    return 0
+  fi
+  cd packages/jetson_yolo_gcs && python -m pytest --tb=short -q 2>&1 && cd - >/dev/null
+}
+
 step_py_syntax() {
   local py_bin
   if command -v python3 &>/dev/null; then
@@ -180,7 +198,8 @@ run_step "Secret scan (gitleaks)"    step_secrets
 run_step "Python linting (ruff)"     step_py_lint
 run_step "Python formatting (ruff)"  step_py_format
 run_step "Python type checking"      step_py_typecheck
-run_step "Python test suite"         step_py_test
+run_step "Python test suite (meshsa)"       step_py_test
+run_step "Python test suite (jetson_yolo_gcs)" step_py_test_jetson
 run_step "Python syntax check"       step_py_syntax
 
 # ── Summary ───────────────────────────────────────────────────────────────────

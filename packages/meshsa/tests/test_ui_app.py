@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 import pytest
+import structlog
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
@@ -296,6 +297,23 @@ async def test_chat_invalid_payload_400() -> None:
     try:
         res = await client.post("/api/chat", data=b"not json")
         assert res.status == 400
+    finally:
+        await client.close()
+
+
+async def test_chat_invalid_payload_logs_parse_error() -> None:
+    # Matches the other five source handlers + the chat-backend-call: a swallowed
+    # exception must still leave a structured, server-side trail (llm policy).
+    client = await _client(build_ui_app(_sources(), UIConfig()))
+    try:
+        with structlog.testing.capture_logs() as cap:
+            res = await client.post("/api/chat", data=b"not json")
+        assert res.status == 400
+        [entry] = [e for e in cap if e["event"] == "ui_chat_payload_parse_error"]
+        assert entry["log_level"] == "warning"
+        assert entry["route"] == "/api/chat"
+        assert entry["error_type"] == "JSONDecodeError"
+        assert entry["error"]
     finally:
         await client.close()
 

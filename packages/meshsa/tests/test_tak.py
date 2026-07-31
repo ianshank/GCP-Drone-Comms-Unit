@@ -43,6 +43,18 @@ def test_build_ssl_context_requires_cert_when_key_set(tmp_path):
         _build_ssl_context(ca_cert=None, client_cert=None, client_key=str(key), verify=True)
 
 
+def test_require_file_rejects_a_directory(tmp_path):
+    # A configured cert path that resolves to a directory (not a regular file) must be
+    # refused clearly, distinct from "not found" (the path does exist) and from the
+    # unreadable-permissions case below.
+    from meshsa.transports.tak import _require_file
+
+    directory = tmp_path / "ca_dir"
+    directory.mkdir()
+    with pytest.raises(FileNotFoundError, match="tls_ca_cert is not a regular file"):
+        _require_file("tls_ca_cert", str(directory))
+
+
 def test_require_file_distinguishes_unreadable_from_missing(tmp_path):
     import os as _os
 
