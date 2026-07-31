@@ -21,7 +21,7 @@
       `ui/_html.py`); `scout/station/_html.py` adopts (fixes the floating `maplibre-gl@4` CDN
       reference with no integrity attribute, and the bare `json.dumps(token)` injection with
       no `</script>` escaping).
-- [ ] T-1.3 `compact.py`'s `_make_compact` registry factory passes `**kwargs` through instead
+- [x] T-1.3 `compact.py`'s `_make_compact` registry factory passes `**kwargs` through instead
       of discarding them (`CompactCodec.__init__` already accepts `supported_schemas` — only
       the factory dropped it); registry-path test.
 - [ ] T-1.4 `meshsa/defaults.py` + port table; `HealthConfig.port` 8088→8098; `cli.py`

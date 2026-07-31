@@ -23,6 +23,27 @@ def test_registered():
     assert isinstance(codec_registry.create("compact"), CompactCodec)
 
 
+def test_registry_passes_through_codec_options():
+    # Regression (code-hygiene-modularity T-1.3): the registry factory used to discard
+    # every keyword argument (`**_: object`), so a config-supplied `codec_options` value
+    # was silently ignored for the compact codec alone — CompactCodec.__init__ already
+    # applied `supported_schemas` correctly; only the factory dropped it before it arrived.
+    narrowed = codec_registry.create("compact", supported_schemas=[SCHEMA_VERSION])
+    assert narrowed.supported_schemas == frozenset([SCHEMA_VERSION])
+
+    other_schema = Envelope(
+        schema_version=SCHEMA_VERSION + 1,
+        msg_id="m",
+        ts=1.0,
+        source_uid="u",
+        kind=MessageKind.PLI,
+        payload={"node": {"callsign": "X"}, "position": {"lat": 0, "lon": 0}},
+    )
+    wire = CompactCodec(supported_schemas=[SCHEMA_VERSION, SCHEMA_VERSION + 1]).encode(other_schema)
+    with pytest.raises(IncompatibleSchemaError):
+        narrowed.decode(wire)
+
+
 def test_pli_fits_lora_and_is_far_smaller_than_json():
     c = CompactCodec()
     assert len(c.encode(_pli())) <= 237  # single Meshtastic packet
