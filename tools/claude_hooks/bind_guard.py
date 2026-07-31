@@ -67,7 +67,12 @@ LISTENER_TRIGGERS: Final[frozenset[str]] = frozenset(
 )
 
 #: Repo-relative glob patterns enumerating the files the linter scans.
-SCAN_GLOBS: Final[tuple[str, ...]] = ("packages/**/src/**/*.py", "flightctl/*.py")
+#: T-2.4: widened to include tools/ (but excluding tests and the linter itself).
+SCAN_GLOBS: Final[tuple[str, ...]] = (
+    "packages/**/src/**/*.py",
+    "flightctl/*.py",
+    "tools/**/*.py",
+)
 
 
 @dataclass(frozen=True)
@@ -229,11 +234,23 @@ def scan_file(source: str, rel_path: str, config: BindGuardConfig) -> list[Findi
 
 
 def iter_scan_files(repo_root: Path) -> list[Path]:
-    """The de-duplicated, sorted set of files selected by :data:`SCAN_GLOBS`."""
+    """The de-duplicated, sorted set of files selected by :data:`SCAN_GLOBS`.
+
+    Excludes tools/**/tests/** and tools/claude_hooks/bind_guard.py itself
+    (which redefines LISTENER_TRIGGERS and has fixture patterns).
+    """
     files: set[Path] = set()
     for pattern in SCAN_GLOBS:
         files.update(p for p in repo_root.glob(pattern) if p.is_file())
-    return sorted(files)
+
+    # Exclude test files and the linter itself
+    excluded = {
+        repo_root / "tools/claude_hooks/bind_guard.py",
+    }
+    for test_pattern in (repo_root / "tools").glob("**/tests/**/*.py"):
+        excluded.add(test_pattern)
+
+    return sorted(files - excluded)
 
 
 def scan_repo(repo_root: Path, config: BindGuardConfig) -> tuple[list[Finding], int]:

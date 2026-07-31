@@ -31,6 +31,10 @@ scope_widening_globs:
 # bind_guard.py policy: any scanned file that creates a network listener must
 # route through the single audited primitive (meshsa.netauth.validate_bind) or
 # be declared as an exception here, with a rationale.
+#
+# T-2.4 (code-hygiene-modularity) widened the scan to include tools/**/*.py,
+# excluding tools/**/tests/** and tools/claude_hooks/bind_guard.py.
+# Scan globs: packages/**/src/**/*.py, flightctl/*.py, tools/**/*.py
 bind_guard:
   required_symbol: "validate_bind"
   canonical_module: "meshsa.netauth"
