@@ -205,7 +205,13 @@ def build_ui_app(
                 return denied
             try:
                 payload = await request.json()
-            except Exception:
+            except Exception as exc:
+                _log.warning(
+                    "ui_chat_payload_parse_error",
+                    route="/api/chat",
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
                 payload = None
             try:
                 body, status = await chat_backend.reply(payload)
