@@ -24,6 +24,8 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.protocols`              | `Transport`, `Codec`, `Clock`, `IdFactory` Protocols + defaults      |
 | `meshsa.models`                 | `Position`, `NodeInfo`, `Envelope`, `PliPayload`, `ChatPayload`, `UNKNOWN_ERROR_M` |
 | `meshsa.config`                 | `NodeConfig`, `MeshConfig`, `RouterConfig`, `HealthConfig`, `TransportConfig` |
+| `meshsa.defaults`                | Service-port constants (`PORT_HEALTH`, etc.) — the single source config models reference instead of a bare literal; further consolidation across `ui`/`llm`/`commander`/`scout`/`detection_ingest` is ongoing |
+| `meshsa.netauth`                 | The one audited HTTP bind-safety primitive: `is_loopback`, constant-time bearer `authorize`, fail-closed `validate_bind`; every aiohttp surface's `validate_bind` adapter delegates to it (enforced by `tools/claude_hooks/bind_guard.py`) |
 | `meshsa.registry`               | Generic `Registry[T]`; `transport_registry`, `codec_registry`        |
 | `meshsa.plugins`                | `load_plugins()` — opt-in entry-point discovery of out-of-tree drivers |
 | `meshsa.codec`                  | `JsonCodec` (Envelope <-> bytes); per-codec `supported_schemas`      |
