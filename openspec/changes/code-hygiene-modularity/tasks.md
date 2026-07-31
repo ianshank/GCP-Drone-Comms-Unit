@@ -32,7 +32,7 @@
       `CHANGELOG.md` entry marked operator-visible (an operator with
       `MESHSA_SCOUT_STORE_PATH` already exported moves from the volatile in-memory store to a
       file-backed one on upgrade).
-- [ ] T-1.6 `llm/sources.py`'s two blanket `except Exception` handlers gain structlog
+- [x] T-1.6 `llm/sources.py`'s two blanket `except Exception` handlers gain structlog
       warnings before their degraded returns, narrowed to
       `aiohttp.ClientError | asyncio.TimeoutError | ValueError`.
 
