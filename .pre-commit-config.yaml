@@ -81,7 +81,6 @@ repos:
         name: mypy (Python type check)
         files: "\\.(py)$"
         exclude: "^tests/|^archive/"
-        args: ["--config-file=pyproject.toml"]
         additional_dependencies:
           - pytest>=8
           - aiohttp>=3.9
