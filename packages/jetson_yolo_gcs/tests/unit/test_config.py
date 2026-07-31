@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from jetson_yolo_gcs.core.config import (
     CameraType,
+    JetsonSettings,
     MavlinkSettings,
     Settings,
     StreamEncoder,
@@ -154,6 +155,24 @@ def test_pipeline_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.pipeline.max_consecutive_empty == 3
 
 
+def test_fps_window_default() -> None:
+    # Matches FpsCounter's own bare ``window=30`` default (utils/fps.py) — this is its config
+    # home so a direct Pipeline(...) and settings-driven build_pipeline() never diverge.
+    assert Settings().pipeline.fps_window == 30
+
+
+def test_fps_window_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_FPS_WINDOW", "50")
+    assert get_settings().pipeline.fps_window == 50
+
+
+def test_fps_window_rejects_below_two(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Mirrors FpsCounter's own "window must be >= 2" invariant at the config layer.
+    monkeypatch.setenv("PIPELINE_FPS_WINDOW", "1")
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
 def test_rtsp_latency_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().camera.rtsp_latency_ms == 0
     monkeypatch.setenv("CAMERA_RTSP_LATENCY_MS", "200")
@@ -189,3 +208,39 @@ def test_mavlink_timesync_and_capture_time_source_defaults() -> None:
     s = MavlinkSettings()
     assert s.timesync_enabled is False
     assert s.capture_time_source == "publish"
+
+
+def test_jetson_defaults() -> None:
+    # Matches utils/jetson.py's historical literals (_SUBPROCESS_TIMEOUT_S=10.0,
+    # read_tegrastats(interval_ms=1000)) — this is now their config home.
+    s = JetsonSettings()
+    assert s.subprocess_timeout_s == 10.0
+    assert s.tegrastats_interval_ms == 1000
+
+
+def test_jetson_settings_aggregated_on_top_level_settings() -> None:
+    # Settings.jetson must expose the same defaults (aggregation wiring, like every other
+    # domain settings object).
+    s = Settings().jetson
+    assert s.subprocess_timeout_s == 10.0
+    assert s.tegrastats_interval_ms == 1000
+
+
+def test_jetson_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JETSON_SUBPROCESS_TIMEOUT_S", "5")
+    monkeypatch.setenv("JETSON_TEGRASTATS_INTERVAL_MS", "500")
+    s = get_settings().jetson
+    assert s.subprocess_timeout_s == 5.0
+    assert s.tegrastats_interval_ms == 500
+
+
+def test_jetson_subprocess_timeout_rejects_non_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JETSON_SUBPROCESS_TIMEOUT_S", "0")
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
+def test_jetson_tegrastats_interval_rejects_non_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JETSON_TEGRASTATS_INTERVAL_MS", "0")
+    with pytest.raises(ValidationError):
+        get_settings()
