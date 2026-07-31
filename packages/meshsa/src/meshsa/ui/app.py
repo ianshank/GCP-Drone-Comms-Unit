@@ -138,9 +138,7 @@ def build_ui_app(
         )
         # The page embeds the bearer token and is reached via ``?token=``: keep it out of
         # the browser's disk cache (history retention is inherent to the station pattern).
-        return web.Response(
-            text=page, content_type="text/html", headers={"Cache-Control": "no-store"}
-        )
+        return web.Response(text=page, content_type="text/html", headers=_NO_STORE_HEADERS)
 
     async def healthz(_request: Any) -> Any:
         return web.json_response({"status": "ok"})
