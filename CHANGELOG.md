@@ -10,6 +10,47 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+#### Charter alignment audit (2026-07-31)
+- `docs/CHARTER_ALIGNMENT_AUDIT_PLAN.md` — repeatable Phase A–E method for scanning the codebase
+  against `CHARTER.md` scope, all five ratified carve-outs, and all seven invariants in one pass;
+  `docs/CHARTER_ALIGNMENT_AUDIT_PLAN_PEER_REVIEW.md` — its peer review (8 findings, all fixed).
+- `docs/CHARTER_ALIGNMENT_AUDIT_2026-07-31.md` — the plan's first execution: a full gap-analysis
+  pass (quality gates, magic-number sweep, bind/auth re-derivation, doc staleness) with 12
+  findings, most fixed directly.
+- `JetsonSettings` (`JETSON_*` env prefix) in `jetson_yolo_gcs/core/config.py`, and
+  `PipelineSettings.fps_window` — closes three CHARTER §4 Invariant 5 (no magic numbers) gaps in
+  `utils/jetson.py`/`utils/fps.py`/`pipeline.py`; defaults unchanged.
+- `scripts/validate-pre-pr.sh::step_py_test_jetson` — the pre-PR gate now actually runs
+  `packages/jetson_yolo_gcs`'s test suite; it was previously lint/type-checked but never pytest-run
+  by this script.
+
+### Fixed
+
+#### Charter alignment audit (2026-07-31)
+- `meshsa/netauth.py::validate_bind` now logs a structured warning before its fail-closed raise —
+  previously silent except for the exception message; every one of its ~9 call sites benefits.
+- `meshsa/ui/app.py`'s chat-handler JSON-parse swallow now logs like its six sibling handlers.
+- `meshsa/transports/tak.py::_require_file`'s "not a regular file" branch was genuinely untested;
+  added coverage. `meshsa/scout/__main__.py`'s untested entry shim now carries the same
+  `# pragma: no cover` convention used elsewhere in the package.
+- `docs/AUDIT_M2_AUTH.md` rows #10/#11 and two Gap-summary items described the pre-`fab3ab1`
+  (2026-07-29) state (`mavlink_source` as fail-open, `detection_ingest` on port `8099`); corrected,
+  and re-derived the true fail-open surface count (3, only 1 `bind_guard`-scoped).
+- `docs/IMPLEMENTATION_PLAN.md` and `docs/ARCHITECTURE.md` cited a 2026-07-08 test-count snapshot
+  against a materially different current tree; updated with fresh figures and an explicit
+  snapshot-not-live-value caveat.
+- `.gitignore` had no rule for `.claude/worktrees/` (Claude Code harness worktree state) and a
+  blanket `.agents/` ignore that contradicted `.agents/skills/`'s real tracked status; both fixed.
+- `README.md` never mentioned the Python drone-comms side of the repository; added a pointer.
+- **`make typecheck`/`scripts/validate-pre-pr.sh` failed on every fresh clone.** `lib/api-zod` and
+  `lib/db` are TS composite project references (`emitDeclarationOnly`) with gitignored `dist/`
+  output and no `build` script; `api-server`'s typecheck needs that output to exist first. Added
+  `"build": "tsc --build"` to both libs and a `pnpm --filter './lib/*' run build` prestep to both
+  the Makefile and the validation script. Verified against a true fresh-clone simulation (both
+  `dist/` and the gitignored `.tsbuildinfo` incremental cache removed).
+
+### Added
+
 #### Infrastructure & Tooling
 - `docs/LOCAL_TESTING_PLAN.md` — comprehensive local test execution strategy, quality matrix, and peer review document
 - `README.md` — root project overview, quick-start, architecture, contributing guide

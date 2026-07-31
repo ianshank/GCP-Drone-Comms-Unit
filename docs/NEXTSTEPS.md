@@ -12,12 +12,21 @@
 ## Charter alignment audit (process)
 > A dated, full-CHARTER scan (scope §3 + all five carve-outs + all seven §4 invariants) was
 > missing — existing docs each cover one slice (`AUDIT_M2_AUTH.md` = auth/encryption only,
-> `GAP_ANALYSIS.md` = test categories only). The repeatable method now lives at
+> `GAP_ANALYSIS.md` = test categories only). The repeatable method lives at
 > [CHARTER_ALIGNMENT_AUDIT_PLAN.md](CHARTER_ALIGNMENT_AUDIT_PLAN.md); each run produces its own
-> dated `CHARTER_ALIGNMENT_AUDIT_<date>.md` findings report, linked here once one exists.
+> dated findings report.
 
-- [ ] **Run the plan's Phase A–E pass** and file the first
-      `CHARTER_ALIGNMENT_AUDIT_<date>.md` findings report.
+- [x] **Run the plan's Phase A–E pass** and file the first findings report:
+      [CHARTER_ALIGNMENT_AUDIT_2026-07-31.md](CHARTER_ALIGNMENT_AUDIT_2026-07-31.md). Phase D
+      (bind/auth) and most of Phase C (invariants) ran in full with fixes applied; Phase A, the
+      ArmGuard/Scout rows of Phase B, and Invariants 1–4 were not directly re-verified this pass —
+      see that report's "What was not run this pass" section for the next A–E run to cover.
+- [ ] **Frozen-path magic numbers flagged, not fixed (2026-07-31 audit finding 1):**
+      `command/mavlink_pump.py`'s unconfigured `read_timeout_s` and `command/health.py`'s
+      `HeartbeatHealth` default (`3.0`) silently diverging from the value production actually uses
+      (`2.0`) both need a maintainer §6 decision before either can be touched — the frozen-path
+      hook denies writes there while `c_gate_met` is `false`, and the correct default is itself the
+      open question for the second one.
 
 ## Code hygiene & modularity program (`code-hygiene-modularity` branch)
 > Repo-wide gap analysis + hardening pass: gates that didn't gate (pre-commit scoped to ~2% of

@@ -86,7 +86,11 @@ skip_step() {
 # ── Step functions ────────────────────────────────────────────────────────────
 
 step_typecheck() {
-  pnpm -r run typecheck
+  # lib/api-zod and lib/db are TS composite project references
+  # (emitDeclarationOnly); their gitignored dist/ .d.ts output must exist
+  # before dependents (e.g. api-server) can typecheck against them via
+  # "references" -- build them first, since a fresh clone never has it.
+  pnpm --filter './lib/*' run build && pnpm -r run typecheck
 }
 
 step_lint() {
