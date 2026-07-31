@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from ._parsing import parse_float, parse_int
+from .defaults import PORT_HEALTH
 from .models import NodeTier
 from .ui.config import UIConfig
 
@@ -131,7 +132,7 @@ class HealthConfig(BaseModel):
 
     enabled: bool = False
     host: str = "127.0.0.1"
-    port: int = 8088
+    port: int = PORT_HEALTH
     token: str | None = None
     metrics_enabled: bool = False
     metrics_path: str = "/metrics"

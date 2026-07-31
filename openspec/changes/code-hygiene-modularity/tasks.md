@@ -24,7 +24,7 @@
 - [x] T-1.3 `compact.py`'s `_make_compact` registry factory passes `**kwargs` through instead
       of discarding them (`CompactCodec.__init__` already accepts `supported_schemas` — only
       the factory dropped it); registry-path test.
-- [ ] T-1.4 `meshsa/defaults.py` + port table; `HealthConfig.port` 8088→8098; `cli.py`
+- [x] T-1.4 `meshsa/defaults.py` + port table; `HealthConfig.port` 8088→8098; `cli.py`
       `--healthz-port` default; `ops/observability/README.md` (4 references);
       `docs/AUDIT_M2_AUTH.md` port row; `CHANGELOG.md` breaking-default entry.
 - [ ] T-1.5 `scout/cli.py` resolves `ScoutConfig` from environment so the 22 wired

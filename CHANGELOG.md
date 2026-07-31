@@ -71,6 +71,17 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 #### `code-hygiene-modularity` program (`openspec/changes/code-hygiene-modularity/`)
 - `meshsa.ui` — bearer-guarded `/api/*` JSON responses (`tracks`, `detections`, `health`, `fpv`, `chat`, `logs`) and the unauthorized/denied response bodies now carry `Cache-Control: no-store`; previously only the `/` page had it, so an intermediary proxy could persist an authorized JSON payload for replay to the next visitor of the same cached URL
+- `meshsa.scout.station` — the operator page now pins MapLibre GL to an exact version with a Subresource Integrity hash (was a floating `@4` CDN reference with no integrity check) and escapes the injected bearer token against `</script>` termination (was bare `json.dumps`), matching `meshsa.ui`'s existing page hardening; both pages now share `meshsa._webpage`'s constants so they cannot drift apart again
+
+### Fixed
+
+#### `code-hygiene-modularity` program
+- `meshsa.compact`'s codec-registry factory (`_make_compact`) discarded every keyword argument instead of forwarding them to `CompactCodec`, so a config-supplied `codec_options` value (e.g. a narrowed `supported_schemas`) was silently ignored for the compact codec alone
+
+### Changed — breaking default
+
+#### `code-hygiene-modularity` program
+- **`HealthConfig.port` default moved from `8088` to `8098`** (also `cli.py`'s `--healthz-port`/`HEALTHZ_PORT` default). `8088` is `mavlink2rest`'s own upstream convention; a node commonly wires a health listener and a `mavlink2rest`-backed LLM data source into the same process (`meshsa.ui.cli`), so meshsa should not claim a port an external tool already owns by convention. A deployment that relied on the old default must set `health.port: 8088` / `MESHSA_HEALTH_PORT=8088` explicitly to keep the old bind. New `meshsa.defaults` module is the single source for this and other service-port defaults.
 
 ---
 

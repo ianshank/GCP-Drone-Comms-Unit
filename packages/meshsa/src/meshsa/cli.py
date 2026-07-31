@@ -24,6 +24,7 @@ import structlog
 
 from ._parsing import parse_float, parse_int
 from .config import NodeConfig
+from .defaults import PORT_HEALTH
 from .health import serve_healthz, validate_healthz_bind
 from .models import Envelope, Position
 from .node import build_node
@@ -78,7 +79,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("--health", action="store_true", default=_env("HEALTH", "") != "")
     p.add_argument("--healthz-host", default=_env("HEALTHZ_HOST", "127.0.0.1"))
-    p.add_argument("--healthz-port", type=int, default=_env_int("HEALTHZ_PORT", 8088))
+    p.add_argument("--healthz-port", type=int, default=_env_int("HEALTHZ_PORT", PORT_HEALTH))
     p.add_argument(
         "--log-level",
         default=_env("LOG_LEVEL", "INFO"),
