@@ -11,6 +11,10 @@ from __future__ import annotations
 import hmac
 from typing import Protocol, runtime_checkable
 
+import structlog
+
+_log = structlog.get_logger("meshsa.netauth")
+
 #: Hosts treated as loopback-only (safe to serve without a bearer token).
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
@@ -43,9 +47,13 @@ def validate_bind(host: str, token: str | None, *, service: str, remedy: str) ->
 
     Raises :class:`ValueError` so an entry point can refuse to start rather than silently
     exposing an unauthenticated service. ``service`` names the binary and ``remedy`` explains
-    what to set, so each caller keeps its own operator-facing message.
+    what to set, so each caller keeps its own operator-facing message. The refusal is also
+    logged here (structured ``service``/``host``/``remedy`` fields) so every one of this
+    primitive's call sites gets a non-silent rejection for free, instead of each caller
+    duplicating its own log line.
     """
     if not is_loopback(host) and not token:
+        _log.warning("refusing to bind without a token", service=service, host=host, remedy=remedy)
         raise ValueError(f"refusing to bind {service} to {host!r} without a token: {remedy}")
 
 
