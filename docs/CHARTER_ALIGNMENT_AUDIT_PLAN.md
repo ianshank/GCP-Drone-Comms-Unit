@@ -8,7 +8,8 @@
 > never silently fixed by rewriting the charter or flipping a gate.
 
 Reading order: [CHARTER.md](CHARTER.md) → [ROADMAP.md](ROADMAP.md) → [NEXTSTEPS.md](NEXTSTEPS.md)
-→ [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md) (auth posture, already covers Phase D below) →
+→ [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (execution-sequencing claims, checked in Phase E
+below) → [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md) (auth posture, already covers Phase D below) →
 [ROADMAP_RECONCILIATION.md](ROADMAP_RECONCILIATION.md) (prior scope-drift precedent) → this plan.
 
 ## Why this plan exists
@@ -17,7 +18,7 @@ The repo already carries several *partial* alignment checks: `AUDIT_M2_AUTH.md` 
 surfaces only), `GAP_ANALYSIS.md` (test-category coverage only), `ROADMAP_RECONCILIATION.md`
 (one external document reconciled once), and mechanical enforcement for two invariants
 (`tools/claude_hooks/bind_guard.py`, `scope_freeze.py` via `.claude/governance.yaml`). Nothing
-currently walks **every** CHARTER clause — §3 scope/non-goals, all six ratified carve-outs, and
+currently walks **every** CHARTER clause — §3 scope/non-goals, all five ratified carve-outs, and
 all seven §4 invariants — against the current tree in one pass. This plan closes that gap and
 gives future re-runs (a new feature branch, a maintainer pre-release check, a periodic sweep) a
 fixed checklist instead of an ad hoc re-read of CHARTER.md.
@@ -29,9 +30,17 @@ fixed checklist instead of an ad hoc re-read of CHARTER.md.
 - `scope_widening_globs` (M3/M4 work barred during M2): `meshsa/federation/**`,
   `meshsa/storeforward/**` — neither directory exists in the tree yet (confirmed absent; this is
   the *expected* state, not a finding).
-- Startup hook reports **5 fail-open surfaces** tracked in `AUDIT_M2_AUTH.md` — Phase D below
-  re-derives that count against the live tree rather than trusting the cached figure.
-- Six ratified CHARTER §3 carve-outs to check (dates from CHARTER.md): 2026-06-12 (ArmGuard
+- **No fail-open-surface count in `AUDIT_M2_AUTH.md` should be trusted as-is.** The startup hook's
+  naive `grep -ci 'fails open' docs/AUDIT_M2_AUTH.md` reports "5," but the surface table itself has
+  only 4 rows saying "fails open" (#1 TAK TCP, #2 TAK multicast, #4 Meshtastic, #11
+  `mavlink_source`) — the 5th grep hit is the Gap Summary section restating #11 in prose, a
+  double-count. Worse: even that "4" is stale. Commit `fab3ab1` (2026-07-29) added a
+  `validate_bind` fail-closed guard to `mavlink_source.py` and moved `detection_ingest.py`'s
+  default port 8099→8097, but `AUDIT_M2_AUTH.md`'s surface #11 row, its Gap Summary bullet, and its
+  backlog item #1 still assert the pre-`fab3ab1` fail-open state. Phase D's re-derivation of the
+  true count is **already-overdue work, not a hypothetical future check** — do not carry forward
+  5, 4, or any other cached number.
+- Five ratified CHARTER §3 carve-outs to check (dates from CHARTER.md): 2026-06-12 (ArmGuard
   pre-flight interlock), 2026-06-16 (Initiative-C supervised commanding), 2026-06-20 (on-board
   perception / `LANDING_TARGET`), 2026-07-05 (Scout offline survey export), 2026-07-16 (on-board
   tracker).
@@ -39,15 +48,18 @@ fixed checklist instead of an ad hoc re-read of CHARTER.md.
 ## Method
 
 Each phase below names: the CHARTER clause it verifies, the concrete check, where in the tree to
-run it, and which existing subagent (from the roster in `AGENTS.md` / `.claude/agents/`) is
-scoped to do it — so execution can fan out instead of one agent reading the whole tree serially.
+run it, and which existing subagent (from the roster in `AGENTS.md` / `.claude/agents/`) is the
+right one to invoke *by convention* — i.e. whose `description:` trigger text matches the phase,
+not a tool-enforced restriction (every relevant agent's `tools:` grant in `.claude/agents/*.md` is
+repo-wide; none path-scopes a subagent to a directory) — so execution can fan out instead of one
+agent reading the whole tree serially.
 
 ### Phase A — Scope conformance (CHARTER §3, in-scope / non-goals)
 
 Verify the tree only contains the four in-scope areas (`meshsa`, `flightctl`, `hardware`,
 `jetson_yolo_gcs`) and none of the explicit non-goals have crept in.
 
-1. Confirm no code path *flies or controls* the aircraft outside the six ratified carve-outs —
+1. Confirm no code path *flies or controls* the aircraft outside the five ratified carve-outs —
    grep for MAVLink `COMMAND_LONG`/`COMMAND_INT`/RC-override sends outside
    `meshsa/command/**`, `meshsa/fpv/arm_guard.py`, and `jetson_yolo_gcs/mavlink/bridge.py`.
 2. Confirm the ATAK Android app is not vendored or built from this repo (docs/ops references
@@ -72,12 +84,15 @@ just that the feature exists.
 | --- | --- | --- |
 | ArmGuard pre-flight interlock (2026-06-12) | Never touches the arm channel after it goes high; latch resets only on operator-driven disarm; no other RC channel is ever written | `packages/meshsa/src/meshsa/fpv/arm_guard.py`, `fpv/config.py`, `fpv/errors.py` |
 | Initiative-C supervised commanding (2026-06-16) | `c_gate_met` still `false`; command path only reachable via `transport_registry`/command codec, not router/node edits; `COMMAND_INT` + bounded-retry `ACK`; force-disarm path (param2=21196) gated behind separate confirmation and off by default; `meshsa.llm` issues no commands | `.claude/governance.yaml`, `packages/meshsa/src/meshsa/command/*.py` (safety.py, audit.py, commands.py, service.py), delegate to **charter-gate-keeper** |
-| On-board perception / `LANDING_TARGET` (2026-06-20) | `MavlinkSettings.enable_landing_target` defaults `false`; publisher never arms/sets-mode/sends RC; detector/camera/stream/MAVLink seams stay `Protocol`-based | `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/core/config.py:88`, `mavlink/bridge.py` |
-| Scout offline survey export (2026-07-05) | No auto-upload, no MAVLink writes, no in-flight action anywhere in `meshsa/scout/**`; output is a file only | `packages/meshsa/src/meshsa/scout/export_mission.py`, `scout/cli.py`, `scout/pipeline.py` |
+| On-board perception / `LANDING_TARGET` (2026-06-20) | `MavlinkSettings.enable_landing_target` defaults `false`; publisher never arms/sets-mode/sends RC; detector/camera/stream/MAVLink seams stay `Protocol`-based | `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/core/config.py` (`MavlinkSettings.enable_landing_target`), `mavlink/bridge.py` |
+| Scout offline survey export (2026-07-05) | No auto-upload, no MAVLink writes, no in-flight action anywhere in `meshsa/scout/**`; output is a file only; every operational value is a `ScoutConfig` field, no magic numbers | `packages/meshsa/src/meshsa/scout/export_mission.py`, `scout/cli.py`, `scout/pipeline.py`, `packages/meshsa/src/meshsa/config.py` (`ScoutConfig` — lives in the shared config module, not under `scout/`) |
 | On-board tracker (2026-07-16) | `TrackerSettings.enabled` defaults `false`; tracker output feeds only the health snapshot (`tracks_active`/`tracks_total`/`dropped_tracks`), never `LANDING_TARGET` selection or a command; frozen `Detection` is not mutated (wrapped in `TrackedDetection`) | `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/core/config.py` (`TrackerSettings`), `tracking/factory.py`, `tracking/norfair_backend.py` |
 
-Owner: **charter-gate-keeper** for the Initiative-C row; general sweep for the other four
-(none of the other five subagents have standing scope over `fpv/`, `scout/`, or `tracking/`).
+Owner: **charter-gate-keeper** for the Initiative-C row, by its `description:` trigger (any diff
+touching `packages/meshsa/src/meshsa/command/` or `flightctl/run_commander.py`); general sweep for
+the other four — none of the other six subagents' descriptions claim `fpv/`, `scout/`, or
+`tracking/`, and none of the agents' `tools:` grants are path-restricted, so this is a convention,
+not an enforced boundary.
 
 ### Phase C — Invariant conformance (CHARTER §4, all seven)
 
@@ -93,13 +108,19 @@ Owner: **charter-gate-keeper** for the Initiative-C row; general sweep for the o
 
 ### Phase D — Network bind / auth posture (cross-cutting, feeds Invariant 6 + M2 security invariant)
 
-Re-derive the fail-open surface count instead of trusting the cached "5" from the startup hook:
-walk every socket bind in `packages/**/src/**/*.py`, `flightctl/*.py`, `tools/**/*.py` against
-`meshsa.netauth.validate_bind`, cross-checked with `bind_guard.exceptions` in
-`.claude/governance.yaml`, and reconcile against `AUDIT_M2_AUTH.md`'s existing surface table
-(update it if the tree has moved since 2026-07-08; do not fork a duplicate table).
+Re-derive the fail-open surface count instead of trusting either the naive grep count or the
+cached surface table in `AUDIT_M2_AUTH.md` (see Ground truth above): walk every socket bind in
+`packages/**/src/**/*.py`, `flightctl/*.py`, `tools/**/*.py` against `meshsa.netauth.validate_bind`,
+cross-checked with `bind_guard.exceptions` in `.claude/governance.yaml`, and reconcile against
+`AUDIT_M2_AUTH.md`'s existing surface table. **This correction is already due, not hypothetical:**
+commit `fab3ab1` (2026-07-29) added a `validate_bind` guard to `mavlink_source.py` and moved
+`detection_ingest.py`'s default port 8099→8097, but `AUDIT_M2_AUTH.md`'s surface #11 row, its Gap
+Summary bullet on `mavlink_source`, and its backlog item #1 still describe the pre-`fab3ab1`
+fail-open state. Update the existing table in place; do not fork a duplicate table.
 
-Owner: **bind-auditor** (primary), **security-reviewer** (fail-closed posture verification).
+Owner: **bind-auditor** (primary, by its bind/`netauth.py`-diff trigger), **security-reviewer**
+(fail-closed posture verification, by its transport/bind-diff trigger) — both triggers are
+descriptive invocation criteria, not tool-enforced path scope.
 
 ### Phase E — Roadmap/backlog consistency (not CHARTER itself, but must not silently diverge)
 
@@ -110,6 +131,13 @@ Owner: **bind-auditor** (primary), **security-reviewer** (fail-closed posture ve
    amendment without flagging it as such.
 3. `docs/specs/` status column (Definition/Implemented/Validated) matches what's actually in the
    tree for each initiative spec.
+4. `IMPLEMENTATION_PLAN.md`'s dated claims (test counts, coverage %, track-shipped status) match a
+   live run. This doc drifts between its own reconciliation passes: it currently states (as of a
+   "2026-07-08 reconciliation" note) `meshsa` 957 passed/99.16% cov and `jetson_yolo_gcs`
+   174/99.34% cov; a live check at the time this plan was corrected found materially higher counts
+   (~1120 / ~205) — it is already stale again, the same drift risk class as `AUDIT_M2_AUTH.md`
+   (Phase D above). No other phase checks this file; add it here rather than assuming Phase D's
+   auth-only re-derivation covers it.
 
 Owner: general sweep.
 
