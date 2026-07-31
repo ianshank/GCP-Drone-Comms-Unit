@@ -32,9 +32,7 @@ Dependency:
 from __future__ import annotations
 
 import pytest
-
 from meshsa.ui.snapshot import SnapshotStore  # type: ignore[import]
-
 
 # ---------------------------------------------------------------------------
 # asyncio mode — auto-collect async test functions without the decorator
@@ -148,17 +146,16 @@ def assert_geojson_feature_collection():
         """
         prefix = f"{message}: " if message else ""
         assert isinstance(fc, dict), f"{prefix}Expected dict, got {type(fc).__name__}"
-        assert fc.get("type") == "FeatureCollection", (
-            f"{prefix}Expected 'FeatureCollection', got {fc.get('type')!r}"
-        )
+        assert (
+            fc.get("type") == "FeatureCollection"
+        ), f"{prefix}Expected 'FeatureCollection', got {fc.get('type')!r}"
         assert "features" in fc, f"{prefix}Missing 'features' key"
-        assert isinstance(fc["features"], list), (
-            f"{prefix}'features' must be a list, got {type(fc['features']).__name__}"
-        )
+        assert isinstance(
+            fc["features"], list
+        ), f"{prefix}'features' must be a list, got {type(fc['features']).__name__}"
         if expected_count is not None:
             assert len(fc["features"]) == expected_count, (
-                f"{prefix}Expected {expected_count} feature(s), "
-                f"got {len(fc['features'])}"
+                f"{prefix}Expected {expected_count} feature(s), " f"got {len(fc['features'])}"
             )
 
     return _assert

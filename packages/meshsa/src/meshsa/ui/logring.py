@@ -79,7 +79,7 @@ class LogRing:
         if _LEVELS.get(method_name, _UNKNOWN_LEVEL) >= self._floor:
             ts = event_dict.get("timestamp")
             entry: dict[str, Any] = {
-                "ts": ts if isinstance(ts, (int, float)) else self._clock.now(),
+                "ts": ts if isinstance(ts, int | float) else self._clock.now(),
                 "level": method_name,
                 "logger": event_dict.get("logger")
                 if _is_scalar(event_dict.get("logger"))

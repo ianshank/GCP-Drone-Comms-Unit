@@ -183,8 +183,10 @@ class TestWatchdogLoopPatch:
             if call_count >= 2:
                 raise asyncio.CancelledError
 
-        with mock.patch(f"{__name__}._send_notify", side_effect=sent.append), \
-             mock.patch("asyncio.sleep", side_effect=_fake_sleep):
+        with (
+            mock.patch(f"{__name__}._send_notify", side_effect=sent.append),
+            mock.patch("asyncio.sleep", side_effect=_fake_sleep),
+        ):
             with pytest.raises(asyncio.CancelledError):
                 await _watchdog_loop(interval_s=10.0)
 
@@ -193,7 +195,9 @@ class TestWatchdogLoopPatch:
 
     @pytest.mark.asyncio
     async def test_reraises_cancelled_error(self) -> None:
-        with mock.patch(f"{__name__}._send_notify"), \
-             mock.patch("asyncio.sleep", side_effect=asyncio.CancelledError):
+        with (
+            mock.patch(f"{__name__}._send_notify"),
+            mock.patch("asyncio.sleep", side_effect=asyncio.CancelledError),
+        ):
             with pytest.raises(asyncio.CancelledError):
                 await _watchdog_loop(interval_s=10.0)

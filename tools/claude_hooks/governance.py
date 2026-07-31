@@ -18,9 +18,8 @@ from __future__ import annotations
 import fnmatch
 import logging
 import os
-import posixpath
 from collections.abc import Iterable
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Final
 
 import yaml

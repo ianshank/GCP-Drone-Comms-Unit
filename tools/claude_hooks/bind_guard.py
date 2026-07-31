@@ -31,25 +31,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-try:
-    from tools.claude_hooks.governance import (
-        CLAUDE_DIR_NAME,
-        GOVERNANCE_FILENAME,
-        BindGuardConfig,
-        GovernanceConfigError,
-        find_repo_root,
-        load_governance,
-    )
-except ImportError:  # script execution: repo root is not on sys.path as a package parent
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from governance import (  # type: ignore[no-redef]
-        CLAUDE_DIR_NAME,
-        GOVERNANCE_FILENAME,
-        BindGuardConfig,
-        GovernanceConfigError,
-        find_repo_root,
-        load_governance,
-    )
+if __package__ in (None, ""):
+    # Executed directly (`python tools/claude_hooks/bind_guard.py` — the invocation both
+    # .claude/settings.json and CI use), so the repo root is not on sys.path as a package
+    # parent. Add it and import the fully-qualified module below, rather than maintaining a
+    # second import path to a differently-named top-level module (that duplication is what
+    # previously made this file and tools/claude_hooks/governance.py resolve as two distinct
+    # module identities under mypy).
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.claude_hooks.governance import (
+    CLAUDE_DIR_NAME,
+    GOVERNANCE_FILENAME,
+    BindGuardConfig,
+    GovernanceConfigError,
+    find_repo_root,
+    load_governance,
+)
 
 _log = logging.getLogger("claude_hooks.bind_guard")
 

@@ -28,25 +28,23 @@ import sys
 from pathlib import Path
 from typing import Any, Final, TextIO
 
-try:
-    from tools.claude_hooks.governance import (
-        GovernanceConfig,
-        GovernanceConfigError,
-        find_repo_root,
-        load_governance,
-        match_globs,
-        to_repo_relative,
-    )
-except ImportError:  # script execution: repo root is not on sys.path as a package parent
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from governance import (  # type: ignore[no-redef]
-        GovernanceConfig,
-        GovernanceConfigError,
-        find_repo_root,
-        load_governance,
-        match_globs,
-        to_repo_relative,
-    )
+if __package__ in (None, ""):
+    # Executed directly (`python tools/claude_hooks/scope_freeze.py` — the invocation
+    # .claude/settings.json uses), so the repo root is not on sys.path as a package parent.
+    # Add it and import the fully-qualified module below, rather than maintaining a second
+    # import path to a differently-named top-level module (that duplication is what
+    # previously made this file and tools/claude_hooks/governance.py resolve as two distinct
+    # module identities under mypy — the same fix as bind_guard.py).
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.claude_hooks.governance import (
+    GovernanceConfig,
+    GovernanceConfigError,
+    find_repo_root,
+    load_governance,
+    match_globs,
+    to_repo_relative,
+)
 
 _log = logging.getLogger("claude_hooks.scope_freeze")
 

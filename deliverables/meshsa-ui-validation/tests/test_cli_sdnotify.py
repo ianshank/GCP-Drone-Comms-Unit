@@ -19,8 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -37,6 +36,7 @@ import pytest
 
 try:
     from meshsa.ui.cli import _send_notify, _watchdog_loop  # type: ignore[attr-defined]
+
     _PATCH_APPLIED = True
 except (ImportError, AttributeError):
     _PATCH_APPLIED = False
@@ -54,6 +54,7 @@ if not _PATCH_APPLIED:
         """No-op reference implementation — graceful fallback when sdnotify absent."""
         try:
             import sdnotify  # type: ignore[import]
+
             notifier = sdnotify.SystemdNotifier()
             notifier.notify(message)
         except ImportError:
@@ -62,9 +63,7 @@ if not _PATCH_APPLIED:
                 extra={"hint": "pip install sdnotify"},
             )
         except Exception as exc:
-            _ref_log.warning(
-                "sd_notify failed", extra={"message": message, "error": str(exc)}
-            )
+            _ref_log.warning("sd_notify failed", extra={"message": message, "error": str(exc)})
 
     async def _watchdog_loop(interval_s: float) -> None:  # type: ignore[misc]  # noqa: F811
         """Reference implementation — sends WATCHDOG=1 every interval_s seconds."""
@@ -177,8 +176,10 @@ class TestWatchdogLoop:
             if call_count >= 3:
                 raise asyncio.CancelledError
 
-        with patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
+        with (
+            patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+        ):
             try:
                 await _watchdog_loop(interval_s=10.0)
             except asyncio.CancelledError:
@@ -192,8 +193,10 @@ class TestWatchdogLoop:
         """STOPPING=1 is sent when the loop is cancelled (graceful shutdown)."""
         sent: list[str] = []
 
-        with patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append), \
-             patch("asyncio.sleep", side_effect=asyncio.CancelledError):
+        with (
+            patch(f"{_send_notify.__module__}._send_notify", side_effect=sent.append),
+            patch("asyncio.sleep", side_effect=asyncio.CancelledError),
+        ):
             try:
                 await _watchdog_loop(interval_s=10.0)
             except asyncio.CancelledError:
@@ -204,8 +207,10 @@ class TestWatchdogLoop:
     @pytest.mark.asyncio
     async def test_reraises_cancelled_error(self) -> None:
         """CancelledError propagates so the caller's finally block runs."""
-        with patch(f"{_send_notify.__module__}._send_notify"), \
-             patch("asyncio.sleep", side_effect=asyncio.CancelledError):
+        with (
+            patch(f"{_send_notify.__module__}._send_notify"),
+            patch("asyncio.sleep", side_effect=asyncio.CancelledError),
+        ):
             with pytest.raises(asyncio.CancelledError):
                 await _watchdog_loop(interval_s=10.0)
 
@@ -223,16 +228,18 @@ class TestWatchdogLoop:
                 raise asyncio.CancelledError
 
         expected_interval = 7.5
-        with patch(f"{_send_notify.__module__}._send_notify"), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
+        with (
+            patch(f"{_send_notify.__module__}._send_notify"),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+        ):
             try:
                 await _watchdog_loop(interval_s=expected_interval)
             except asyncio.CancelledError:
                 pass
 
-        assert all(s == expected_interval for s in sleep_calls), (
-            f"asyncio.sleep must be called with {expected_interval}; got {sleep_calls}"
-        )
+        assert all(
+            s == expected_interval for s in sleep_calls
+        ), f"asyncio.sleep must be called with {expected_interval}; got {sleep_calls}"
 
     @pytest.mark.asyncio
     async def test_heartbeat_before_first_sleep(self) -> None:
@@ -251,16 +258,18 @@ class TestWatchdogLoop:
             else:
                 order.append(f"after-sleep:notify:{msg}")
 
-        with patch(f"{_send_notify.__module__}._send_notify", side_effect=_record_notify), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
+        with (
+            patch(f"{_send_notify.__module__}._send_notify", side_effect=_record_notify),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+        ):
             try:
                 await _watchdog_loop(interval_s=10.0)
             except asyncio.CancelledError:
                 pass
 
-        assert order[0] == "notify:WATCHDOG=1", (
-            "First heartbeat must be sent before the first sleep"
-        )
+        assert (
+            order[0] == "notify:WATCHDOG=1"
+        ), "First heartbeat must be sent before the first sleep"
 
     @pytest.mark.asyncio
     async def test_watchdog_interval_below_half_watchdog_sec(self) -> None:
@@ -301,8 +310,10 @@ class TestReadyHeartbeatStoppingSequence:
         fake_sdnotify.SystemdNotifier.return_value = notifier
         notifier.notify.side_effect = sent.append
 
-        with patch.dict(sys.modules, {"sdnotify": fake_sdnotify}), \
-             patch("asyncio.sleep", side_effect=_fake_sleep):
+        with (
+            patch.dict(sys.modules, {"sdnotify": fake_sdnotify}),
+            patch("asyncio.sleep", side_effect=_fake_sleep),
+        ):
             _send_notify("READY=1")
             try:
                 await _watchdog_loop(interval_s=10.0)
