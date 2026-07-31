@@ -23,6 +23,17 @@ Generated: 2026-06-30. Baseline verified against the tree at that date (see §1)
 > branch fixed the one fail-open HTTP surface (`/healthz`+`/metrics`). The commanding M2 gate stays
 > **closed** pending a maintainer §6 decision (per-surface, not transport-wide, auth). The stable
 > trajectory below is unchanged — this note only reconciles state, per CHARTER §6.
+>
+> **Update (2026-07-31 reconciliation).** The 2026-07-08 figures above are stale again — this file
+> has drifted between reconciliation passes twice now; treat every count in this note as a snapshot,
+> not a live value, and re-derive from `python -m pytest` rather than trusting either note on a
+> future read. Current tree: **`meshsa` 1114 passed / 6 skipped (1120 collected) / 99.20% cov,
+> `jetson_yolo_gcs` 205 passed / 99.34% cov**, all gates green in both packages.
+> [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md)'s surface inventory was itself re-derived and corrected the
+> same day (rows #10/#11 and two Gap-summary items were stale against commit `fab3ab1`, 2026-07-29);
+> the true current fail-open surface count is 3, of which only 1 (TAK multicast) is an actual
+> `bind_guard`-scoped gap — see that file's Gap summary for the full breakdown. The commanding M2
+> gate is unchanged: still **closed** pending a maintainer §6 decision.
 
 ---
 

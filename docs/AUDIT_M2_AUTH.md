@@ -2,7 +2,10 @@
 
 <!-- markdownlint-disable MD013 MD060 -->
 
-Date: 2026-07-08
+Date: 2026-07-08; surface inventory re-derived and corrected 2026-07-31 (see
+[CHARTER_ALIGNMENT_AUDIT_PLAN.md](CHARTER_ALIGNMENT_AUDIT_PLAN.md) Phase D — this file's rows #10/#11
+and two Gap-summary items were stale against commit `fab3ab1`, landed 2026-07-29 after the original
+audit date).
 Scope: every socket-bound or link-bound surface in `packages/meshsa` and
 `packages/jetson_yolo_gcs`, and its actual authentication / encryption posture.
 Prerequisite task from [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) Track 0.2 / Track E.3: the
@@ -50,9 +53,9 @@ until one lands.
 | 6 | Commander HTTP — `flightctl/run_commander.py`, `command/config.py` | Inbound listener | `127.0.0.1:8095` | Bearer `MESHSA_CMD_TOKEN` on `/command/*`; default off, loopback. **MAVLink2 signing** optional on the autopilot leg (`MESHSA_CMD_SIGNING_KEY_FILE`) | Plaintext HTTP | **Fails closed** — **NOW** delegates to `netauth.validate_bind` (this branch; its former local guard used `token is None`, so an empty token passed when called directly) |
 | 7 | `/healthz`+`/metrics` — `health.py`, `config.py::HealthConfig.port` | Inbound listener | `127.0.0.1:8098` (moved off `8088` in `code-hygiene-modularity` T-1.4 — `8088` is `mavlink2rest`'s own upstream convention), `enabled=False` | **NOW** bearer `MESHSA_HEALTH_TOKEN` gating `/metrics`; default off, loopback; `/healthz` open | Plaintext HTTP | **NOW fails closed** (`validate_healthz_bind`, this branch) — *was fail-open* |
 | 8 | Nemotron inference — `inference.py` | Outbound client | `base_url` from config; `/chat/completions` | API key `Authorization: Bearer`; call skipped if no key | Depends on `base_url` scheme (https expected) | n/a (outbound) |
-| 9 | Scout station — `scout/station/app.py`, `config.py:162` | Inbound listener | `127.0.0.1:8099`, token `""` | Bearer on data/mutation routes; default off, loopback; `/healthz` open. **XSS-hardened** (`_html.py` JSON-encoded token, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`validate_bind`) |
-| 10 | `DetectionIngestTransport` UDP — `transports/detection_ingest.py` | Inbound listener (UDP) | `127.0.0.1:8099` | **None on datagrams** (any local process may inject); `token` transport option gates the bind | None / plaintext | **NOW fails closed** (`netauth.validate_bind` at construction, this branch) — *was fail-open on override*; non-loopback + token binds with a loud unauthenticated-datagram warning |
-| 11 | `MavlinkSourceTransport` — `transports/mavlink_source.py` | Inbound (receive-only) | `udpin:127.0.0.1:14550` | **None** (no MAVLink2 signing on ingest) | Plaintext | Loopback-default; fails open on override |
+| 9 | Scout station — `scout/station/app.py`, `config.py` (`ScoutConfig.station_port`) | Inbound listener | `127.0.0.1:8099`, token `""` | Bearer on data/mutation routes; default off, loopback; `/healthz` open. **XSS-hardened** (`_html.py` JSON-encoded token, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`validate_bind`) |
+| 10 | `DetectionIngestTransport` UDP — `transports/detection_ingest.py` | Inbound listener (UDP) | `127.0.0.1:8097` (moved off `8099` in commit `fab3ab1`, 2026-07-29, to deconflict with the scout station's default) | **None on datagrams** (any local process may inject); `token` transport option gates the bind | None / plaintext | **Fails closed** (`netauth.validate_bind` at construction) — non-loopback + token binds with a loud unauthenticated-datagram warning |
+| 11 | `MavlinkSourceTransport` — `transports/mavlink_source.py` | Inbound (receive-only) | `udpin:127.0.0.1:14550` | **None on frame contents** (no MAVLink2 signing on ingest); bind gated by an optional `token` transport option via `netauth.validate_bind` | Plaintext | **Fails closed** (`netauth.validate_bind` at construction, commit `fab3ab1`, 2026-07-29) — *was fail-open on override before this commit* |
 | 12 | `MspSourceTransport` — `transports/msp_source.py` | Inbound (serial poll) | `/dev/ttyACM0` — serial, no network bind | None (physical) | n/a | n/a |
 | 13 | `CrsfSourceTransport` — `transports/crsf_source.py` | Inbound (serial poll) | pyserial — serial, no network bind | None (physical) | n/a | n/a |
 | 14 | Jetson GStreamer egress — `streaming/gstreamer.py`, `core/config.py` | Outbound (RTP/UDP) | `127.0.0.1:5600`, **`enabled=False`** (this branch) | **None** (RTP has no auth) — control is default-off + `STREAM_ENABLED=true` opt-in | None / plaintext RTP/H.264 | **NOW fails closed** (default-off; single WARNING with destination at activation) — *was on by default* |
@@ -62,6 +65,17 @@ until one lands.
 
 ## Gap summary
 
+- **Re-derived fail-open surface count (2026-07-31): 3, and only 1 of those is an actual
+  `bind_guard`-scoped listener gap.** A naive `grep -ci 'fails open'` over this file returns 5,
+  which double-counts surface #11's status in this Gap-summary prose; after correcting rows #10/#11
+  above, the surface-inventory table has 3 rows still saying "fails open": #1 `TakTcpTransport`, #2
+  `TakMulticastTransport`, #4 `MeshtasticTransport`. Of those, only **#2** is actually in
+  `bind_guard`'s scope (a listener that calls `.bind()`) and is a declared, still-valid governance
+  exception (`.claude/governance.yaml::bind_guard.exceptions`, "multicast CoT binds all interfaces —
+  inherent to the protocol"). **#1 and #4 are not listeners at all** — #1 is an outbound TLS client
+  connection and #4 is serial/BLE or an outbound `TCPInterface` connect — so their "fails open"
+  language describes plaintext/PSK-not-enforced *encryption* posture, not a `bind_guard` gap; neither
+  is scanned by `bind_guard` by construction. No new bind surface has appeared since 2026-07-08.
 - **`/healthz`+`/metrics` was the one fail-open HTTP surface — fixed on this branch.** Every other
   HTTP surface routed through `netauth.validate_bind`; `serve_healthz` did not, and its host is
   operator-overridable off-loopback (`MESHSA_HEALTH_HOST`), exposing `/metrics` (router/transport/
@@ -78,14 +92,15 @@ until one lands.
 - **Meshtastic "link-layer PSK" is aspirational in code.** `_default_provisioner` applies only the
   LoRa `region` and logs channel/PSK/frequency as "device-provisioned; verify on hardware" without
   setting them (`meshtastic_radio.py:81-86`). The mesh PSK must be pre-provisioned out-of-band.
-- **Telemetry-ingest transports trust their source.** `mavlink_source` (`udpin:14550`),
-  `detection_ingest` (UDP 8099), and the serial MSP/CRSF sources perform no authentication on
-  inbound frames. Loopback / physical-serial defaults are the mitigation. `detection_ingest`
-  **now carries `validate_bind`** (this branch) so a non-loopback override without a token fails
-  closed; `mavlink_source` still has no guard and fails open on override.
-- **Shared default port number 8099.** `detection_ingest` (UDP, `detection_ingest.py:49`) and the
-  scout station (TCP, `config.py:163`) both default to `8099`. Different protocols → not an OS-level
-  collision, but a confusing default worth deconflicting.
+- **Telemetry-ingest transports trust their source (frame contents), but the bind itself is now
+  guarded.** `mavlink_source` (`udpin:14550`), `detection_ingest` (UDP `8097`), and the serial
+  MSP/CRSF sources perform no authentication on inbound *frame contents*. Loopback / physical-serial
+  defaults are the mitigation. As of commit `fab3ab1` (2026-07-29), both `mavlink_source` and
+  `detection_ingest` carry `netauth.validate_bind` at construction, so a non-loopback override
+  without a token fails closed on both — this closes what was previously the one remaining fail-open
+  gap in this bullet (`mavlink_source`, prior to `fab3ab1`).
+- ~~**Shared default port number 8099.**~~ **Resolved** (commit `fab3ab1`, 2026-07-29):
+  `detection_ingest` moved to `8097`; the scout station keeps `8099`. No longer a shared default.
 
 ## What is done well
 
@@ -113,10 +128,11 @@ satisfies §3, or whether transport-wide auth is required first.
 
 ## Follow-up backlog (deferred — see [NEXTSTEPS.md](NEXTSTEPS.md))
 
-1. Fail-closed bind guard for `mavlink_source` on a non-loopback `endpoint`
-   (`detection_ingest` done on this branch via `netauth.validate_bind`).
+1. ~~Fail-closed bind guard for `mavlink_source` on a non-loopback `endpoint`.~~ **Done** (commit
+   `fab3ab1`, 2026-07-29 — `detection_ingest` was already done on the original audit branch).
 2. Implement Meshtastic PSK provisioning, or downgrade the docs/config so operators don't assume an
    enforced PSK.
-3. Deconflict the shared `8099` default between `detection_ingest` and the scout station.
+3. ~~Deconflict the shared `8099` default between `detection_ingest` and the scout station.~~
+   **Done** (commit `fab3ab1`, 2026-07-29 — `detection_ingest` moved to `8097`).
 4. Document that all HTTP + MAVLink/RTP surfaces are plaintext by default; TAK TLS (`:8089`) is the
    only wired-in transport encryption.

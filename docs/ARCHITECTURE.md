@@ -52,8 +52,10 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 
 ### Dependency injection via `Protocol`
 Anything I/O-shaped is a `typing.Protocol`. The router and node accept those types,
-not concrete classes. This is what lets the test suite drive a 747-test, 99.7%
-coverage run without hardware.
+not concrete classes. This is what lets the test suite drive a 1114-test (1120
+collected, 6 skipped), 99.20% coverage run without hardware (figures as of 2026-07-31;
+re-check against `python -m pytest` output rather than trusting this comment on future
+reads — it has gone stale before).
 
 ### Open/closed registries
 `transport_registry` and `codec_registry` are generic `Registry[T]` instances.

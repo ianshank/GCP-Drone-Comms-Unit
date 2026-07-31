@@ -10,6 +10,16 @@ validation deliverables for the
 [GCP-Drone-Comms-Unit](https://github.com/ianshank/GCP-Drone-Comms-Unit)
 `meshsa.ui` operator console.
 
+> **Looking for the drone-comms framework itself, not this validation workspace?**
+> The Python side of this repository — `meshsa` (telemetry/mesh-SA/CoT bridge),
+> `jetson_yolo_gcs` (on-board perception), `flightctl/` (ops layer), `hardware/`,
+> and `ops/` — lives outside this pnpm tree. Start at
+> [`docs/CHARTER.md`](docs/CHARTER.md) (scope + invariants),
+> [`docs/ROADMAP.md`](docs/ROADMAP.md) (milestone trajectory), and
+> [`packages/meshsa/README.md`](packages/meshsa/README.md) (framework-specific
+> setup). This README and everything below it describes only the TypeScript
+> validation/preview workspace for `meshsa.ui`.
+
 ---
 
 ## Workspace packages
