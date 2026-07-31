@@ -61,7 +61,8 @@ Verify the tree only contains the four in-scope areas (`meshsa`, `flightctl`, `h
 
 1. Confirm no code path *flies or controls* the aircraft outside the five ratified carve-outs —
    grep for MAVLink `COMMAND_LONG`/`COMMAND_INT`/RC-override sends outside
-   `meshsa/command/**`, `meshsa/fpv/arm_guard.py`, and `jetson_yolo_gcs/mavlink/bridge.py`.
+   `packages/meshsa/src/meshsa/command/**`, `packages/meshsa/src/meshsa/fpv/arm_guard.py`, and
+   `packages/jetson_yolo_gcs/src/jetson_yolo_gcs/mavlink/bridge.py`.
 2. Confirm the ATAK Android app is not vendored or built from this repo (docs/ops references
    only).
 3. Confirm no general-purpose message-broker surface exists (i.e. no new pub/sub facing

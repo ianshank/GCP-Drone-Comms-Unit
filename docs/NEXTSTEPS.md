@@ -10,7 +10,7 @@
 > scope per CHARTER §3; the in-scope slice became the AI-inference Track-B work below.
 
 ## Charter alignment audit (process)
-> A dated, full-CHARTER scan (scope §3 + all six carve-outs + all seven §4 invariants) was
+> A dated, full-CHARTER scan (scope §3 + all five carve-outs + all seven §4 invariants) was
 > missing — existing docs each cover one slice (`AUDIT_M2_AUTH.md` = auth/encryption only,
 > `GAP_ANALYSIS.md` = test categories only). The repeatable method now lives at
 > [CHARTER_ALIGNMENT_AUDIT_PLAN.md](CHARTER_ALIGNMENT_AUDIT_PLAN.md); each run produces its own
