@@ -70,6 +70,17 @@ Thumbs.db
 skills-lock.json
 attached_assets/
 
+# `.agents/skills/` and `.agents/README.md` are real, tracked AGENTS.md
+# playbooks (see AGENTS.md "Agent Skills") despite the blanket rule above —
+# already-tracked files stay tracked regardless, but this exception keeps
+# `git status`/`git add -A` picking up *new* files added under skills/.
+!.agents/skills/
+!.agents/skills/**
+!.agents/README.md
+
+# ── Claude Code harness runtime state (never commit) ───────────────────────────
+.claude/worktrees/
+
 # ── Temporary / scratch ───────────────────────────────────────────────────────
 *.tmp
 *.temp
