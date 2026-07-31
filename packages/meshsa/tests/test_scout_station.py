@@ -82,6 +82,32 @@ async def test_index_open_without_token() -> None:
         assert "null" in await resp.text()  # SCOUT_TOKEN injected as null
 
 
+async def test_index_pins_maplibre_with_integrity() -> None:
+    # Regression (code-hygiene-modularity T-1.2): this page used to load a floating
+    # `maplibre-gl@4` CDN reference with no integrity attribute — a silently swapped CDN
+    # artifact could execute in the same scope as the injected bearer token. It now shares
+    # meshsa._webpage's pinned tags with meshsa.ui._html.
+    from meshsa._webpage import MAPLIBRE_VERSION
+
+    async with TestClient(TestServer(build_app(_store()))) as client:
+        body = await (await client.get("/")).text()
+    assert f"maplibre-gl@{MAPLIBRE_VERSION}/" in body
+    assert 'integrity="sha384-' in body
+    assert 'crossorigin="anonymous"' in body
+
+
+async def test_index_token_cannot_close_script_block() -> None:
+    # Regression (code-hygiene-modularity T-1.2): this page used to inject the token via
+    # bare json.dumps, which does not escape "</script>" — a token value containing it
+    # could terminate the script block and inject markup. It now uses the same
+    # meshsa._webpage.js_literal escaping meshsa.ui._html has always used.
+    evil = "</script><script>alert(1)</script>"
+    async with TestClient(TestServer(build_app(_store(), token=evil))) as client:
+        body = await (await client.get("/", params={"token": evil})).text()
+    assert "</script><script>alert(1)</script>" not in body.replace("\n", "")
+    assert "\\u003c/script\\u003e" in body
+
+
 async def test_open_endpoints() -> None:
     async with TestClient(TestServer(build_app(_store()))) as client:
         assert (await client.get("/healthz")).status == 200

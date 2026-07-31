@@ -17,7 +17,7 @@
 - [x] T-1.1 `Cache-Control: no-store` on `ui/app.py`'s `/api/*` JSON routes; salvage the S5a
       assertion from `deliverables/meshsa-ui-validation/tests/test_ui_validation_scenarios.py`
       into `packages/meshsa/tests/`.
-- [ ] T-1.2 `meshsa/_webpage.py` (SRI-pinned MapLibre tags + `_js_literal`, sourced from
+- [x] T-1.2 `meshsa/_webpage.py` (SRI-pinned MapLibre tags + `_js_literal`, sourced from
       `ui/_html.py`); `scout/station/_html.py` adopts (fixes the floating `maplibre-gl@4` CDN
       reference with no integrity attribute, and the bare `json.dumps(token)` injection with
       no `</script>` escaping).

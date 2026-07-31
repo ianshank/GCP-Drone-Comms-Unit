@@ -1,11 +1,11 @@
 """Self-contained MapLibre operator console page (served at ``/``; design D-3).
 
 Kept as a module constant (data, not logic) so it needs no packaged static files and the
-tested aiohttp handlers own all behaviour — the ``scout.station._html`` pattern. MapLibre
-GL is loaded from a CDN **pinned to an exact version with subresource integrity** (the
-page JSON-injects a bearer token, so a silently swapped CDN artifact must not be able to
-execute in that scope); for fully offline field use, vendor the assets and point the
-``<script>``/``<link>`` (and ``ui.map_style_url``) at local copies.
+tested aiohttp handlers own all behaviour — the ``scout.station._html`` pattern. The pinned
+MapLibre GL asset tags and the safe-literal helper live in ``meshsa._webpage`` (shared with
+``scout.station._html``, which injects a bearer token into the same kind of scope); for
+fully offline field use, vendor the assets and point the ``<script>``/``<link>`` (and
+``ui.map_style_url``) at local copies.
 
 XSS posture: the token, panel manifest, and page settings are injected as JSON-encoded JS
 literals with ``<``/``>``/``&`` additionally escaped to ``\\uXXXX`` (``json.dumps`` alone
@@ -15,20 +15,12 @@ DOM nodes with ``textContent``/``createTextNode`` only — no ``innerHTML`` sink
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
+from .._webpage import MAPLIBRE_CSS_TAG, MAPLIBRE_JS_TAG
+from .._webpage import js_literal as _js_literal
+
 __all__ = ["render_page"]
-
-
-def _js_literal(value: Any) -> str:
-    """JSON-encode ``value`` for safe embedding inside a ``<script>`` block.
-
-    ``json.dumps`` does not escape ``<``/``>``/``&``, so a string containing
-    ``</script>`` would otherwise close the block and inject markup. The ``\\uXXXX``
-    forms are valid JSON, so the decoded JS value is byte-identical.
-    """
-    return json.dumps(value).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
 #: Serve-time placeholders, each replaced with a JSON-encoded value.
@@ -36,6 +28,11 @@ _TOKEN_PLACEHOLDER = "__UI_TOKEN__"
 _MANIFEST_PLACEHOLDER = "__UI_MANIFEST__"
 _SETTINGS_PLACEHOLDER = "__UI_SETTINGS__"
 _TITLE_PLACEHOLDER = "__UI_TITLE__"
+
+#: Build-time placeholders for the shared, version-pinned MapLibre asset tags — resolved
+#: once below, not per request (design D-3's "single-sourced tags" dedup).
+_MAPLIBRE_CSS_PLACEHOLDER = "__MAPLIBRE_CSS_TAG__"
+_MAPLIBRE_JS_PLACEHOLDER = "__MAPLIBRE_JS_TAG__"
 
 
 def render_page(
@@ -64,18 +61,14 @@ def render_page(
     )
 
 
-PAGE_HTML = """<!doctype html>
+_PAGE_HTML_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>meshsa operator</title>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"
-  integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V"
-  crossorigin="anonymous" />
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"
-  integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj"
-  crossorigin="anonymous"></script>
+__MAPLIBRE_CSS_TAG__
+__MAPLIBRE_JS_TAG__
 <style>
   body { margin: 0; font-family: system-ui, sans-serif; }
   #map { position: absolute; inset: 0; }
@@ -221,3 +214,10 @@ map.on('load', () => { refresh(); setInterval(refresh, UI_SETTINGS.poll_interval
 </body>
 </html>
 """
+
+#: The final page template with the shared, version-pinned MapLibre tags resolved in —
+#: single-sourced from ``meshsa._webpage`` so this page and ``scout.station._html`` can
+#: never drift on which CDN version or SRI hash they pin.
+PAGE_HTML = _PAGE_HTML_TEMPLATE.replace(_MAPLIBRE_CSS_PLACEHOLDER, MAPLIBRE_CSS_TAG).replace(
+    _MAPLIBRE_JS_PLACEHOLDER, MAPLIBRE_JS_TAG
+)

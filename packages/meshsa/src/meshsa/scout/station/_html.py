@@ -1,37 +1,49 @@
 """Self-contained MapLibre operator page (served at ``/``).
 
 Kept as a module constant (data, not logic) so it needs no packaged static files and the
-tested aiohttp handlers own all behaviour. MapLibre GL is loaded from a CDN; for fully
-offline field use, vendor the asset and point the ``<script>``/``<link>`` at a local copy.
+tested aiohttp handlers own all behaviour. The pinned MapLibre GL asset tags and the
+safe-literal helper live in ``meshsa._webpage`` (shared with ``ui._html``, which injects a
+bearer token into the same kind of scope) — this page injects the same kind of credential
+and needs the same defenses: an exact CDN version with a Subresource Integrity hash, and
+``<``/``>``/``&`` escaped so a token value containing ``</script>`` cannot terminate the
+block. For fully offline field use, vendor the assets and point the
+``<script>``/``<link>`` at a local copy.
 """
 
 from __future__ import annotations
 
-import json
+from ..._webpage import MAPLIBRE_CSS_TAG, MAPLIBRE_JS_TAG
+from ..._webpage import js_literal as _js_literal
 
 #: Placeholder replaced at serve time with the JSON-encoded bearer token (or ``null``).
 _TOKEN_PLACEHOLDER = "__SCOUT_TOKEN__"
+
+#: Build-time placeholders for the shared, version-pinned MapLibre asset tags — resolved
+#: once below, not per request.
+_MAPLIBRE_CSS_PLACEHOLDER = "__MAPLIBRE_CSS_TAG__"
+_MAPLIBRE_JS_PLACEHOLDER = "__MAPLIBRE_JS_TAG__"
 
 
 def render_page(token: str | None) -> str:
     """Return the operator page with the bearer token injected for its `fetch` calls.
 
-    The token is JSON-encoded (so it is a valid JS literal and cannot break out of the
-    string), letting the page attach ``Authorization: Bearer <token>`` to the data/status
-    requests. `/` itself is gated on the same token by the app, so serving it here does not
-    widen exposure.
+    The token is embedded via :func:`meshsa._webpage.js_literal` (JSON-encoded and with
+    ``<``/``>``/``&`` escaped, so it is a valid JS literal that cannot break out of the
+    ``<script>`` block), letting the page attach ``Authorization: Bearer <token>`` to the
+    data/status requests. `/` itself is gated on the same token by the app, so serving it
+    here does not widen exposure.
     """
-    return MAP_HTML.replace(_TOKEN_PLACEHOLDER, json.dumps(token))
+    return MAP_HTML.replace(_TOKEN_PLACEHOLDER, _js_literal(token))
 
 
-MAP_HTML = """<!doctype html>
+_MAP_HTML_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>meshsa scout</title>
-<link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet" />
-<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+__MAPLIBRE_CSS_TAG__
+__MAPLIBRE_JS_TAG__
 <style>
   body { margin: 0; font-family: system-ui, sans-serif; }
   #map { position: absolute; inset: 0; }
@@ -110,3 +122,10 @@ map.on('load', () => { refresh(); setInterval(refresh, 3000); });
 </body>
 </html>
 """
+
+#: The final page template with the shared, version-pinned MapLibre tags resolved in —
+#: single-sourced from ``meshsa._webpage`` so this page and ``ui._html`` can never drift
+#: on which CDN version or SRI hash they pin (the gap this module previously had).
+MAP_HTML = _MAP_HTML_TEMPLATE.replace(_MAPLIBRE_CSS_PLACEHOLDER, MAPLIBRE_CSS_TAG).replace(
+    _MAPLIBRE_JS_PLACEHOLDER, MAPLIBRE_JS_TAG
+)
