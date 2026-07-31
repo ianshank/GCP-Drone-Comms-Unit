@@ -83,6 +83,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 #### `code-hygiene-modularity` program
 - **`HealthConfig.port` default moved from `8088` to `8098`** (also `cli.py`'s `--healthz-port`/`HEALTHZ_PORT` default). `8088` is `mavlink2rest`'s own upstream convention; a node commonly wires a health listener and a `mavlink2rest`-backed LLM data source into the same process (`meshsa.ui.cli`), so meshsa should not claim a port an external tool already owns by convention. A deployment that relied on the old default must set `health.port: 8088` / `MESHSA_HEALTH_PORT=8088` explicitly to keep the old bind. New `meshsa.defaults` module is the single source for this and other service-port defaults.
 
+### Changed — operator-visible
+
+#### `code-hygiene-modularity` program
+- **`meshsa-scout` now honours `MESHSA_SCOUT_*` environment variables.** The standalone CLI previously built a bare `ScoutConfig()`, silently ignoring all 22 wired variables (`ScoutConfig` gains a new `from_env()` classmethod, sharing its scalar-override map with `NodeConfig.from_env().scout` so the two can never drift). **This is operator-visible, not just a bug fix:** a deployment that already exports `MESHSA_SCOUT_STORE_PATH` now gets a persistent file-backed store where it previously silently got the volatile `:memory:` default, and `MESHSA_SCOUT_STATION_TOKEN` now actually gates the station server where it was previously silently ignored. Operators who were relying on the old (unauthenticated / in-memory) behaviour should review their environment before upgrading.
+
 ---
 
 ## [0.1.0] — 2026-07-28

@@ -27,7 +27,7 @@
 - [x] T-1.4 `meshsa/defaults.py` + port table; `HealthConfig.port` 8088→8098; `cli.py`
       `--healthz-port` default; `ops/observability/README.md` (4 references);
       `docs/AUDIT_M2_AUTH.md` port row; `CHANGELOG.md` breaking-default entry.
-- [ ] T-1.5 `scout/cli.py` resolves `ScoutConfig` from environment so the 22 wired
+- [x] T-1.5 `scout/cli.py` resolves `ScoutConfig` from environment so the 22 wired
       `MESHSA_SCOUT_*` variables (including `MESHSA_SCOUT_STATION_TOKEN`) take effect;
       `CHANGELOG.md` entry marked operator-visible (an operator with
       `MESHSA_SCOUT_STORE_PATH` already exported moves from the volatile in-memory store to a

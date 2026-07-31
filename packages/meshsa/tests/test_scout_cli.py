@@ -130,3 +130,20 @@ def test_health_check_pin_count_failure(monkeypatch, capsys) -> None:  # type: i
 def test_no_command_prints_help(capsys) -> None:  # type: ignore[no-untyped-def]
     assert run([]) == 1
     assert "meshsa-scout" in capsys.readouterr().out
+
+
+def test_run_resolves_scout_config_from_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # Regression (code-hygiene-modularity T-1.5): run() used to build a bare ScoutConfig(),
+    # silently ignoring every MESHSA_SCOUT_* variable, including MESHSA_SCOUT_STATION_TOKEN.
+    monkeypatch.setenv("MESHSA_SCOUT_STATION_TOKEN", "topsecret")
+    monkeypatch.setenv("MESHSA_SCOUT_STORE_PATH", "/data/pins.db")
+    seen: dict[str, str] = {}
+
+    def fake_health_check(config):  # noqa: ANN001, ANN202
+        seen["token"] = config.station_token
+        seen["store_path"] = config.store_path
+        return 0
+
+    monkeypatch.setattr(cli_mod, "_health_check", fake_health_check)
+    assert run(["--health-check"]) == 0
+    assert seen == {"token": "topsecret", "store_path": "/data/pins.db"}

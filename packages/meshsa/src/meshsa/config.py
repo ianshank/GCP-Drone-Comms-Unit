@@ -30,6 +30,13 @@ def _parse_bool(name: str, v: str) -> bool:
     raise ValueError(f"{name}: expected a boolean, got {v!r}")
 
 
+def _str(_name: str, value: str) -> str:
+    """No-op caster: the env value is already the target type. ``_name`` exists only so
+    every caster in a ``scalar_map`` shares the same ``(env_key, raw_value) -> Any``
+    signature."""
+    return value
+
+
 class TransportConfig(BaseModel):
     name: str
     type: str  # transport registry key
@@ -139,6 +146,45 @@ class HealthConfig(BaseModel):
     metrics_format: Literal["prometheus", "json"] = "prometheus"
 
 
+def _apply_scout_env(scout: dict[str, Any], env: Mapping[str, str], prefix: str) -> dict[str, Any]:
+    """Apply every ``<prefix>SCOUT_*`` scalar override to ``scout`` in place; return it.
+
+    Shared by :meth:`NodeConfig.from_env` and :meth:`ScoutConfig.from_env` so the two never
+    drift on which environment variables the scout section honours (T-1.5: before this
+    helper existed, ``meshsa-scout`` built a bare ``ScoutConfig()`` and silently ignored all
+    22 of these, including ``SCOUT_STATION_TOKEN``).
+    """
+    scout_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
+        f"{prefix}SCOUT_ENABLED": ("enabled", _parse_bool),
+        f"{prefix}SCOUT_RTK_ENABLED": ("rtk_enabled", _parse_bool),
+        f"{prefix}SCOUT_VINE_SPACING_M": ("vine_spacing_m", parse_float),
+        f"{prefix}SCOUT_ROW_SPACING_M": ("row_spacing_m", parse_float),
+        f"{prefix}SCOUT_DEDUP_RADIUS_M": ("dedup_radius_m", parse_float),
+        f"{prefix}SCOUT_SYNC_MAX_SKEW_S": ("sync_max_skew_s", parse_float),
+        f"{prefix}SCOUT_ATTITUDE_SIGMA_DEG": ("attitude_sigma_deg", parse_float),
+        f"{prefix}SCOUT_POS_CEP_M": ("pos_cep_m", parse_float),
+        f"{prefix}SCOUT_MARKER_STALE_S": ("marker_stale_s", parse_float),
+        f"{prefix}SCOUT_FORWARD_OVERLAP": ("forward_overlap", parse_float),
+        f"{prefix}SCOUT_SIDE_OVERLAP": ("side_overlap", parse_float),
+        f"{prefix}SCOUT_SURVEY_ALT_AGL_M": ("survey_alt_agl_m", parse_float),
+        f"{prefix}SCOUT_SURVEY_CRUISE_SPEED_MS": ("survey_cruise_speed_ms", parse_float),
+        f"{prefix}SCOUT_SURVEY_HOVER_SPEED_MS": ("survey_hover_speed_ms", parse_float),
+        f"{prefix}SCOUT_CAMERA_IMG_W": ("camera_img_w", parse_int),
+        f"{prefix}SCOUT_CAMERA_IMG_H": ("camera_img_h", parse_int),
+        f"{prefix}SCOUT_CAMERA_H_FOV_DEG": ("camera_h_fov_deg", parse_float),
+        f"{prefix}SCOUT_CAMERA_V_FOV_DEG": ("camera_v_fov_deg", parse_float),
+        f"{prefix}SCOUT_DEM_PATH": ("dem_path", _str),
+        f"{prefix}SCOUT_STORE_PATH": ("store_path", _str),
+        f"{prefix}SCOUT_STATION_HOST": ("station_host", _str),
+        f"{prefix}SCOUT_STATION_PORT": ("station_port", parse_int),
+        f"{prefix}SCOUT_STATION_TOKEN": ("station_token", _str),
+    }
+    for env_key, (field, caster) in scout_scalars.items():
+        if env_key in env:
+            scout[field] = caster(env_key, env[env_key])
+    return scout
+
+
 class ScoutConfig(BaseModel):
     """Vineyard scouting tunables (``meshsa.scout``; spec §5).
 
@@ -171,6 +217,26 @@ class ScoutConfig(BaseModel):
     station_host: str = "127.0.0.1"
     station_port: int = 8099
     station_token: str = ""
+
+    @classmethod
+    def from_env(
+        cls, environ: Mapping[str, str] | None = None, prefix: str = "MESHSA_"
+    ) -> ScoutConfig:
+        """Build a standalone ``ScoutConfig`` from environment variables.
+
+        Applies the same ``<prefix>SCOUT_*`` scalar overrides (and the ``"scout"`` section of
+        a ``<prefix>CONFIG_JSON`` blob) that :meth:`NodeConfig.from_env` applies when building
+        a full node — so a config authored for a node behaves identically when the
+        ``meshsa-scout`` CLI runs standalone. Standalone is the point: unlike ``NodeConfig``,
+        this does not require a node identity (``uid``/``callsign``).
+        """
+        env = dict(os.environ if environ is None else environ)
+        data: dict[str, Any] = {}
+        blob = env.get(f"{prefix}CONFIG_JSON")
+        if blob:
+            data.update(json.loads(blob))
+        scout = _apply_scout_env(dict(data.get("scout", {})), env, prefix)
+        return cls.model_validate(scout)
 
 
 class NodeConfig(BaseModel):
@@ -209,9 +275,8 @@ class NodeConfig(BaseModel):
             data.update(json.loads(blob))
 
         # caster takes (field_name, raw_value) so numeric parse errors name the field.
-        def _str(_name: str, value: str) -> str:
-            return value
-
+        # (module-level _str above covers the no-op case; _csv_tuple is the one caster
+        # this function still needs locally.)
         def _csv_tuple(_name: str, value: str) -> tuple[str, ...]:
             """Parse a comma-separated env value into a tuple of trimmed, non-empty items."""
             return tuple(x.strip() for x in value.split(",") if x.strip())
@@ -300,35 +365,9 @@ class NodeConfig(BaseModel):
             data["inference"] = inference
 
         # --- scout (ScoutConfig) env-var bindings ---
-        scout: dict[str, Any] = dict(data.get("scout", {}))
-        scout_scalars: dict[str, tuple[str, Callable[[str, str], Any]]] = {
-            f"{prefix}SCOUT_ENABLED": ("enabled", _parse_bool),
-            f"{prefix}SCOUT_RTK_ENABLED": ("rtk_enabled", _parse_bool),
-            f"{prefix}SCOUT_VINE_SPACING_M": ("vine_spacing_m", parse_float),
-            f"{prefix}SCOUT_ROW_SPACING_M": ("row_spacing_m", parse_float),
-            f"{prefix}SCOUT_DEDUP_RADIUS_M": ("dedup_radius_m", parse_float),
-            f"{prefix}SCOUT_SYNC_MAX_SKEW_S": ("sync_max_skew_s", parse_float),
-            f"{prefix}SCOUT_ATTITUDE_SIGMA_DEG": ("attitude_sigma_deg", parse_float),
-            f"{prefix}SCOUT_POS_CEP_M": ("pos_cep_m", parse_float),
-            f"{prefix}SCOUT_MARKER_STALE_S": ("marker_stale_s", parse_float),
-            f"{prefix}SCOUT_FORWARD_OVERLAP": ("forward_overlap", parse_float),
-            f"{prefix}SCOUT_SIDE_OVERLAP": ("side_overlap", parse_float),
-            f"{prefix}SCOUT_SURVEY_ALT_AGL_M": ("survey_alt_agl_m", parse_float),
-            f"{prefix}SCOUT_SURVEY_CRUISE_SPEED_MS": ("survey_cruise_speed_ms", parse_float),
-            f"{prefix}SCOUT_SURVEY_HOVER_SPEED_MS": ("survey_hover_speed_ms", parse_float),
-            f"{prefix}SCOUT_CAMERA_IMG_W": ("camera_img_w", parse_int),
-            f"{prefix}SCOUT_CAMERA_IMG_H": ("camera_img_h", parse_int),
-            f"{prefix}SCOUT_CAMERA_H_FOV_DEG": ("camera_h_fov_deg", parse_float),
-            f"{prefix}SCOUT_CAMERA_V_FOV_DEG": ("camera_v_fov_deg", parse_float),
-            f"{prefix}SCOUT_DEM_PATH": ("dem_path", _str),
-            f"{prefix}SCOUT_STORE_PATH": ("store_path", _str),
-            f"{prefix}SCOUT_STATION_HOST": ("station_host", _str),
-            f"{prefix}SCOUT_STATION_PORT": ("station_port", parse_int),
-            f"{prefix}SCOUT_STATION_TOKEN": ("station_token", _str),
-        }
-        for env_key, (field, caster) in scout_scalars.items():
-            if env_key in env:
-                scout[field] = caster(env_key, env[env_key])
+        # Shared with ScoutConfig.from_env so the standalone meshsa-scout CLI and a full
+        # node resolve MESHSA_SCOUT_* identically.
+        scout: dict[str, Any] = _apply_scout_env(dict(data.get("scout", {})), env, prefix)
         if scout:
             data["scout"] = scout
 
