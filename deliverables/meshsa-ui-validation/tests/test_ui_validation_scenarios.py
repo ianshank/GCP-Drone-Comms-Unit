@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from meshsa.models import Envelope, MessageKind
 from meshsa.ui.app import build_ui_app
@@ -110,7 +111,7 @@ async def _make_client(
     store: SnapshotStore,
     *,
     token: str | None = None,
-) -> TestClient:
+) -> TestClient[web.Request, web.Application]:
     """Build an aiohttp TestClient against the console app (caller must close it)."""
     cfg = UIConfig(token=token)
     app = build_ui_app(_make_sources(store), cfg)

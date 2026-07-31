@@ -165,17 +165,17 @@ def test_parse_endpoint_host_network_endpoints() -> None:
     ]
     for endpoint, expected in cases:
         result = _parse_endpoint_host(endpoint)
-        assert (
-            result == expected
-        ), f"_parse_endpoint_host({endpoint!r}) = {result!r}; expected {expected!r}"
+        assert result == expected, (
+            f"_parse_endpoint_host({endpoint!r}) = {result!r}; expected {expected!r}"
+        )
 
 
 def test_parse_endpoint_host_serial_and_unknown() -> None:
     """Serial paths, plain device names, and empty strings return None."""
     for endpoint in ["/dev/ttyUSB0", "serial:/dev/ttyUSB0", "COM3", "", "mavlink"]:
-        assert (
-            _parse_endpoint_host(endpoint) is None
-        ), f"_parse_endpoint_host({endpoint!r}) should be None"
+        assert _parse_endpoint_host(endpoint) is None, (
+            f"_parse_endpoint_host({endpoint!r}) should be None"
+        )
 
 
 def test_parse_endpoint_host_ipv6_returns_none() -> None:

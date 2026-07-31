@@ -29,18 +29,28 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e "packages/meshsa[dev,inference]"
+          # tools/claude_hooks (governance.py) depends on pyyaml, not a meshsa dependency.
+          pip install pyyaml types-PyYAML
 
       - name: Lint
-        run: ruff check packages/meshsa flightctl
+        run: ruff check packages/meshsa flightctl tools deliverables --exclude archive
 
       - name: Format check
-        run: ruff format --check packages/meshsa flightctl
+        run: ruff format --check packages/meshsa flightctl tools deliverables --exclude archive
 
       - name: Type check
         working-directory: packages/meshsa
         run: mypy src
-      - name: Type check flightctl glue
-        run: mypy --config-file mypy.ini flightctl/run_commander.py flightctl/run_gateway.py
+      - name: Type check flightctl + tools
+        # A single invocation across packages/ + flightctl/ + tools/ + deliverables/ is not
+        # possible: pytest's flat (no-__init__.py) test-collection convention means every
+        # package's tests/ and conftest.py collide under one bare module name if mixed into one
+        # mypy pass (see CHANGELOG "The repo-wide mypy step had never completed a real run").
+        # flightctl/ + tools/ form one coherent namespace and check together; deliverables/ and
+        # each src-layout package check separately below/above.
+        run: mypy flightctl/ tools/ --exclude archive
+      - name: Type check deliverables
+        run: mypy deliverables/ --exclude archive
 
       - name: Test
         working-directory: packages/meshsa

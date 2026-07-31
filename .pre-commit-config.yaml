@@ -68,11 +68,11 @@ repos:
         name: ruff (Python linter)
         args: ["--fix"]
         files: "\\.(py)$"
-        exclude: "^tests/|^archive/"
+        exclude: "^archive/"
       - id: ruff-format
         name: ruff-format (Python formatter)
         files: "\\.(py)$"
-        exclude: "^tests/|^archive/"
+        exclude: "^archive/"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.13.0
@@ -80,7 +80,7 @@ repos:
       - id: mypy
         name: mypy (Python type check)
         files: "\\.(py)$"
-        exclude: "^tests/|^archive/"
+        exclude: "^archive/"
         additional_dependencies:
           - pytest>=8
           - aiohttp>=3.9

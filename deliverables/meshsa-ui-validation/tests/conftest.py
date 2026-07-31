@@ -31,8 +31,10 @@ Dependency:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
-from meshsa.ui.snapshot import SnapshotStore  # type: ignore[import]
+from meshsa.ui.snapshot import SnapshotStore
 
 # ---------------------------------------------------------------------------
 # asyncio mode — auto-collect async test functions without the decorator
@@ -89,7 +91,7 @@ def fake_clock() -> _FakeClock:
 
 
 @pytest.fixture()
-def make_store(fake_clock: _FakeClock):
+def make_store(fake_clock: _FakeClock) -> Callable[..., SnapshotStore]:
     """Factory fixture that builds a ``SnapshotStore`` wired to ``fake_clock``.
 
     Returns a callable::
@@ -119,7 +121,7 @@ def make_store(fake_clock: _FakeClock):
 
 
 @pytest.fixture()
-def assert_geojson_feature_collection():
+def assert_geojson_feature_collection() -> Callable[..., None]:
     """Return a callable that validates the shape of a GeoJSON FeatureCollection.
 
     Usage::
@@ -146,16 +148,16 @@ def assert_geojson_feature_collection():
         """
         prefix = f"{message}: " if message else ""
         assert isinstance(fc, dict), f"{prefix}Expected dict, got {type(fc).__name__}"
-        assert (
-            fc.get("type") == "FeatureCollection"
-        ), f"{prefix}Expected 'FeatureCollection', got {fc.get('type')!r}"
+        assert fc.get("type") == "FeatureCollection", (
+            f"{prefix}Expected 'FeatureCollection', got {fc.get('type')!r}"
+        )
         assert "features" in fc, f"{prefix}Missing 'features' key"
-        assert isinstance(
-            fc["features"], list
-        ), f"{prefix}'features' must be a list, got {type(fc['features']).__name__}"
+        assert isinstance(fc["features"], list), (
+            f"{prefix}'features' must be a list, got {type(fc['features']).__name__}"
+        )
         if expected_count is not None:
             assert len(fc["features"]) == expected_count, (
-                f"{prefix}Expected {expected_count} feature(s), " f"got {len(fc['features'])}"
+                f"{prefix}Expected {expected_count} feature(s), got {len(fc['features'])}"
             )
 
     return _assert

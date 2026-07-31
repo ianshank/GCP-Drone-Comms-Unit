@@ -167,7 +167,7 @@ def _make_transport(
     can catch an ImportError from a missing patch as a test failure rather than
     a collection error.
     """
-    from meshsa.transports.mavlink_source import MavlinkSourceTransport  # type: ignore[import]
+    from meshsa.transports.mavlink_source import MavlinkSourceTransport
 
     return MavlinkSourceTransport(
         name="test-mavlink",
@@ -210,12 +210,12 @@ class TestMavlinkBindGuard:
             _make_transport("udpin:0.0.0.0:14550", token=None)
         msg = str(excinfo.value)
         # The error must name the transport and include a remedy hint.
-        assert (
-            "MAVLink" in msg or "mavlink" in msg.lower()
-        ), f"Error message must name the MAVLink transport; got: {msg!r}"
-        assert (
-            "token" in msg.lower() or "127.0.0.1" in msg
-        ), f"Error message must include a remedy hint; got: {msg!r}"
+        assert "MAVLink" in msg or "mavlink" in msg.lower(), (
+            f"Error message must name the MAVLink transport; got: {msg!r}"
+        )
+        assert "token" in msg.lower() or "127.0.0.1" in msg, (
+            f"Error message must include a remedy hint; got: {msg!r}"
+        )
 
     def test_nonloopback_empty_token_refused(self) -> None:
         """An empty/whitespace-only token is not a credential; refuse non-loopback."""

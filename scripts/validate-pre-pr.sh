@@ -107,15 +107,34 @@ step_secrets() {
 }
 
 step_py_lint() {
-  python -m ruff check packages/ flightctl/ tools/ deliverables/ --exclude tests/,archive/ 2>&1
+  python -m ruff check packages/ flightctl/ tools/ deliverables/ --exclude archive 2>&1
 }
 
 step_py_format() {
-  python -m ruff format --check packages/ flightctl/ tools/ deliverables/ --exclude tests/,archive/ 2>&1
+  python -m ruff format --check packages/ flightctl/ tools/ deliverables/ --exclude archive 2>&1
 }
 
 step_py_typecheck() {
-  python -m mypy packages/ flightctl/ tools/ deliverables/ --exclude tests/,archive/ 2>&1 | head -100
+  # mypy resolves module identity from directory structure, and pytest's flat
+  # (no-__init__.py) test-collection convention means every package's tests/
+  # and conftest.py collide under one bare module name ("tests"/"conftest") if
+  # scanned together. Each src-layout package therefore gets its own
+  # `mypy src` pass (reading that package's own pyproject.toml config, per
+  # AGENTS.md); flightctl/+tools/ (a single coherent namespace) and
+  # deliverables/ (standalone, not part of any package's src/) are checked
+  # separately against the root mypy.ini.
+  local failed=0
+  echo "-- packages/meshsa --"
+  (cd packages/meshsa && python -m mypy src) 2>&1 | head -100 || failed=1
+  if [[ -d packages/jetson_yolo_gcs ]]; then
+    echo "-- packages/jetson_yolo_gcs --"
+    (cd packages/jetson_yolo_gcs && python -m mypy src) 2>&1 | head -100 || failed=1
+  fi
+  echo "-- flightctl/ + tools/ --"
+  python -m mypy flightctl/ tools/ --exclude archive 2>&1 | head -100 || failed=1
+  echo "-- deliverables/ --"
+  python -m mypy deliverables/ --exclude archive 2>&1 | head -100 || failed=1
+  return "${failed}"
 }
 
 step_py_test() {
