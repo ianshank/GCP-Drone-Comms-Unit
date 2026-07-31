@@ -2,13 +2,17 @@
 
 :func:`parse_tegrastats` is pure and unit-tested. The functions that shell out to
 ``tegrastats`` / ``nvpmodel`` / ``jetson_clocks`` touch the device and are
-``# pragma: no cover``.
+``# pragma: no cover``. Their timing bounds are sourced from :class:`JetsonSettings`
+(``core/config.py``) so the values have a config home (charter Invariant 5: no magic
+numbers) instead of being bare literals.
 """
 
 from __future__ import annotations
 
 import re
 import subprocess
+
+from ..core.config import JetsonSettings
 
 _RAM_RE = re.compile(r"RAM (\d+)/(\d+)MB")
 _GPU_RE = re.compile(r"GR3D_FREQ (\d+)%")
@@ -35,12 +39,20 @@ def parse_tegrastats(line: str) -> dict[str, float]:
     return metrics
 
 
-#: Default bound (s) for device shell-outs so a wedged tool can never hang the caller.
-_SUBPROCESS_TIMEOUT_S = 10.0
+#: Per-module defaults sourced from :class:`JetsonSettings` so there is a single source of
+#: truth (mirrors ``pipeline.py``'s ``_DEFAULT_*`` pattern): a bare call to these functions and
+#: any settings-driven caller never diverge on the device shell-out bounds. Cast pins the type
+#: for mypy since ``FieldInfo.default`` is ``Any``.
+_SUBPROCESS_TIMEOUT_S: float = float(JetsonSettings.model_fields["subprocess_timeout_s"].default)
+_DEFAULT_TEGRASTATS_INTERVAL_MS: int = int(
+    JetsonSettings.model_fields["tegrastats_interval_ms"].default
+)
 
 
 def read_tegrastats(
-    *, interval_ms: int = 1000, timeout_s: float = _SUBPROCESS_TIMEOUT_S
+    *,
+    interval_ms: int = _DEFAULT_TEGRASTATS_INTERVAL_MS,
+    timeout_s: float = _SUBPROCESS_TIMEOUT_S,
 ) -> dict[str, float]:  # pragma: no cover - device
     """Sample one ``tegrastats`` line and parse it (requires a Jetson)."""
     proc = subprocess.run(

@@ -8,6 +8,7 @@ grouped and overridable from the environment or a ``.env`` file:
 * ``STREAM_*``  — GCS video egress
 * ``MAVLINK_*`` — LANDING_TARGET publisher (disabled by default)
 * ``TRACKER_*`` — multi-object tracker (disabled by default; read-only, advisory)
+* ``JETSON_*``  — device shell-out timing (tegrastats/nvpmodel/jetson_clocks)
 * ``APP_*``     — top-level (logging)
 
 The :class:`StreamEncoder` / :class:`CameraType` enums live here (core) so both the
@@ -148,6 +149,10 @@ class PipelineSettings(BaseSettings):
     #: transient link blip is counted and logged, not fatal; a persistently broken safety feed
     #: still fails loud so it never *looks* healthy. ``0`` = fail loud on the first failure.
     publish_failure_tolerance: int = Field(default=3, ge=0)
+    #: Sliding-window size (ticks) for the rolling FPS estimate (see ``utils/fps.py``): higher
+    #: smooths the rate over more frames, lower reacts faster to a changing frame rate. Mirrors
+    #: ``FpsCounter``'s own ``window must be >= 2`` invariant.
+    fps_window: int = Field(default=30, ge=2)
 
 
 class TrackerSettings(BaseSettings):
@@ -178,6 +183,23 @@ class TrackerSettings(BaseSettings):
     initialization_delay: int = Field(default=3, ge=0)
 
 
+class JetsonSettings(BaseSettings):
+    """Bounds for Jetson device shell-outs (``tegrastats``/``nvpmodel``/``jetson_clocks``).
+
+    ``utils/jetson.py`` samples ``tegrastats`` telemetry and (optionally) sets the power mode
+    or pins clocks; those helpers are hardware-only (``# pragma: no cover`` there), but their
+    timing values are still operational and must not be magic numbers per the charter's
+    Invariant 5 — this is their config home.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="JETSON_", env_file=_ENV_FILE, extra="ignore")
+
+    #: Bound (s) for device shell-outs so a wedged tool can never hang the caller.
+    subprocess_timeout_s: float = Field(default=10.0, gt=0.0)
+    #: Sampling interval (ms) passed to ``tegrastats --interval``.
+    tegrastats_interval_ms: int = Field(default=1000, gt=0)
+
+
 class Settings(BaseSettings):
     """Top-level settings composing every domain (each reads its own env prefix)."""
 
@@ -191,6 +213,7 @@ class Settings(BaseSettings):
     mavlink: MavlinkSettings = Field(default_factory=MavlinkSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
     tracker: TrackerSettings = Field(default_factory=TrackerSettings)
+    jetson: JetsonSettings = Field(default_factory=JetsonSettings)
 
 
 def get_settings() -> Settings:
