@@ -189,6 +189,21 @@ step_task_sync() {
   python tools/check_task_sync.py 2>&1
 }
 
+step_skills_tracked() {
+  # .gitignore must exclude .agents/* (contents), never .agents/ (directory):
+  # git cannot re-include files under an excluded parent, so the directory form
+  # silently untracks NEW files under .agents/skills/ despite the negations.
+  local probe=".agents/skills/.gitignore-probe"
+  touch "${probe}"
+  if git check-ignore -q "${probe}" 2>/dev/null; then
+    rm -f "${probe}"
+    echo ".gitignore regression: new files under .agents/skills/ are ignored"
+    return 1
+  fi
+  rm -f "${probe}"
+  return 0
+}
+
 step_py_syntax() {
   local py_bin
   if command -v python3 &>/dev/null; then
@@ -236,6 +251,7 @@ run_step "Literal guard"             step_literal_guard
 run_step "Workforce roster lint"     step_workforce
 run_step "Tool-pin sync"             step_tool_pins
 run_step "Task-checkbox sync (advisory)" step_task_sync
+run_step "Skills trackable (.gitignore)" step_skills_tracked
 run_step "Python syntax check"       step_py_syntax
 
 # ── Summary ───────────────────────────────────────────────────────────────────

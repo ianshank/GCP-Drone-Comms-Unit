@@ -14,7 +14,7 @@ Scope: post-reorg + Phase 6 state on branch `feat/agent-harness-and-strict-types
 | Test count         | **101 passing**                                 |
 | Coverage (line)    | **100.00%** (837 stmts, 0 missed)               |
 | Coverage (branch)  | **100.00%** (156 branches, 0 missed)            |
-| Coverage gate      | `--cov-fail-under=90` (pyproject)               |
+| Coverage gate      | `--cov-fail-under=97` (pyproject; was 90 at the original audit date — figures in this report are as-of their stated dates) |
 | Lint (ruff)        | Clean after auto-fix; 1 rule (`SIM105`) deferred|
 | Format (ruff)      | Clean (29 files reformatted during reorg)       |
 | Type-check (mypy)  | **Strict clean** (CI required)                  |

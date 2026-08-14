@@ -4,6 +4,10 @@
 > `claude/peer-review-implementation-plan-96e1m0` (includes merged PR #23). Every verdict
 > below was checked against actual files, not docs alone. Part 1 is the claim-by-claim
 > review; Part 2 is the regenerated plan with the corrections folded in.
+>
+> **Point-in-time record**: figures below (test counts, coverage gates 90/85) are as-of
+> the review date and are preserved as evidence. Current gates are 97% (meshsa) / 96%
+> (jetson_yolo_gcs) — the package `pyproject.toml` files are authoritative.
 
 ## Part 1 — Peer review
 

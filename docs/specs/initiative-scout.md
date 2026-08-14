@@ -198,8 +198,8 @@ and falls back to the legacy estimate only when neither is given (preserving exi
 
 ## 7. Test plan (by category)
 
-Fakes-first, no hardware in unit tests. **Coverage floor: meshsa ≥90% total** (this repo enforces
-`--cov-fail-under=90` repo-wide; scout ships at ~100%). Pre-declared exempt surface: only the
+Fakes-first, no hardware in unit tests. **Coverage floor: meshsa ≥97% total** (the package
+enforces `--cov-fail-under=97`; scout ships at ~100%). Pre-declared exempt surface: only the
 `rasterio.open(...)` **file read** in `load_dem` is `# pragma: no cover` (I/O glue, Invariant 6) —
 the CI `test` job installs `[dev,inference]`, not the `geo` extra, so rasterio is absent. The
 DEM's *data-shaping* logic is a pure `grid_from_band` function tested with an in-memory band, the

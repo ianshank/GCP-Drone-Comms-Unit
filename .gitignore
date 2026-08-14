@@ -65,15 +65,18 @@ Thumbs.db
 .replitignore
 
 # ── Replit agent & task internal state (never commit to public repos) ─────────
-.agents/
+# `.agents/*` (not `.agents/`): git cannot re-include files under an EXCLUDED
+# PARENT DIRECTORY, so with the directory form the `!.agents/skills/**` negations
+# below were inert — a brand-new skill file was invisible to `git add -A` and
+# would silently never ship. Excluding the directory's *contents* keeps the
+# same coverage while letting the skills/README negations actually work.
+.agents/*
 .local/
 skills-lock.json
 attached_assets/
 
 # `.agents/skills/` and `.agents/README.md` are real, tracked AGENTS.md
-# playbooks (see AGENTS.md "Agent Skills") despite the blanket rule above —
-# already-tracked files stay tracked regardless, but this exception keeps
-# `git status`/`git add -A` picking up *new* files added under skills/.
+# playbooks (see AGENTS.md "Agent Skills") despite the blanket rule above.
 !.agents/skills/
 !.agents/skills/**
 !.agents/README.md

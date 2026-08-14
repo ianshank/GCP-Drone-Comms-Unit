@@ -7,13 +7,17 @@ tools: Read, Grep, Glob, Bash(rg *)
 Config guardian scoped to M2 hardening. A hardcoded endpoint is a latent
 unauthenticated surface; a hardcoded token is an incident.
 
-Relationship: none — new mandate.
+Relationship: mechanized by `.agents/skills/config-literal-sweep` (the
+deterministic loop) and `tools/claude_hooks/literal_guard.py` (the CI gate);
+extends `pre-pr-validator`.
 
 Duties:
 
 1. Sweep for hardcoded ports, hosts, multicast groups, tokens/keys, and
    timing intervals (retry, pacing, heartbeat timeouts) in code — literals
-   that belong in config.
+   that belong in config. Start from the checker's output
+   (`python tools/claude_hooks/literal_guard.py`), then hunt what its four
+   rules cannot see (timing values, file paths, URLs).
 2. Propose the correct config home following the existing Pydantic pattern:
    `meshsa/config.py` (framework + healthz), `command/config.py`
    (commander), jetson `core/config.py` (perception). Extend those models;

@@ -5,13 +5,16 @@ Thanks for your interest in contributing.
 ## Repository layout
 
 ```text
-packages/meshsa/      Python framework (src layout, all tests live here)
-ops/                  Deployment kits (pi5-node, base-service)
-hardware/             3D-printable cases and parts
-docs/                 Architecture, audit report, design notes
-tools/                Dockerfile, Makefile, build helpers
-.github/workflows/    CI pipelines
-archive/              Historical ZIP snapshots (do not edit)
+packages/meshsa/           Python framework (src layout + its tests)
+packages/jetson_yolo_gcs/  On-board perception package (src layout + its tests)
+flightctl/                 Live-service glue: gateway/commander runners, sim, systemd units
+ops/                       Deployment kits (pi5-node, base-service, observability)
+hardware/                  3D-printable cases and parts
+docs/                      Architecture, audits, specs (docs/specs/), design notes
+openspec/                  OpenSpec change bundles (proposal/design/tasks per change)
+tools/                     Dockerfile, Makefile, governance hooks + checkers, build helpers
+.github/workflows/         CI pipelines
+archive/                   Historical ZIP snapshots (do not edit)
 ```
 
 ## Development setup
@@ -50,7 +53,9 @@ AI coding agents should read [AGENTS.md](AGENTS.md) first, then any nested
 
 - Branch off `main`. Use `feat/`, `fix/`, `chore/`, `docs/` prefixes.
 - Keep PRs small and focused. One logical change per PR.
-- Coverage gate is **>=90%**; new code should keep the suite at 100%.
+- Coverage gates are **>=97%** (`packages/meshsa`) and **>=96%** (`packages/jetson_yolo_gcs`),
+  enforced by each package's `pyproject.toml` `addopts`; new code should keep the suite at 100%.
+  Always run the full suite — a single-file run fails the gate even when its tests pass.
 - Update `CHANGELOG.md` under `## [Unreleased]` for any user-visible change.
 - Run `pre-commit run -a` and `make test lint type` locally before pushing.
 

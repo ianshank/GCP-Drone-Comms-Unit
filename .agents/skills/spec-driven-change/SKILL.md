@@ -32,6 +32,23 @@ argument-hint: "The feature/initiative, the milestone or plan track, and the sea
    `NEXTSTEPS.md` and move the spec status to `Implemented` (`Validated` after the spec's
    hardware/bench exit criteria pass).
 
+## OpenSpec bundle reconciliation
+
+For work tracked by an `openspec/changes/<bundle>/tasks.md` checklist:
+
+- **Same-commit checkboxes**: the commit that lands a task ticks its `[x]` in the
+  same commit. Name the task id(s) at the start of the commit subject
+  (`T-2.3a: …`, `T-2.7/T-2.9: …`) so `tools/check_task_sync.py` can reconcile.
+- **Split-task convention**: when a commit delivers only part of a task, split it
+  into `T-x.ya` (what actually landed, ticked with the evidence commit SHA) and
+  `T-x.yb` (the residual, unticked with a one-line reason) instead of leaving the
+  original box ambiguously unchecked — the honest-partial pattern used across
+  Phase 2 of `code-hygiene-modularity`.
+- **Reconcile before a PR**: run `python tools/check_task_sync.py` (advisory —
+  wired into `validate-pre-pr.sh`); every warning is either a checkbox to tick or
+  a subject/bundle mismatch to explain in the PR body. Move the script's baseline
+  forward when a bundle archives.
+
 ## Anti-patterns
 
 - Implementing first and back-filling a spec to match — the spec is the design, not a summary.

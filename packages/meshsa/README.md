@@ -71,7 +71,7 @@ Then reference `{"name": "lora", "type": "meshtastic", "options": {"port": "..."
 in the node config. Same pattern for a HaLow/IP transport or a CoT codec.
 
 ## Tests & coverage
-`pytest` → **791 passed, ~99% line + branch coverage** (`--cov-fail-under=90`
+`pytest` → **1,100+ passed, ~99% line + branch coverage** (`--cov-fail-under=97`
 enforced in `pyproject.toml`; figures as of 2026-07-04). Tests inject a `FakeClock`, sequential id factory,
 in-memory `LoopbackBus`, and a fake Meshtastic interface + pubsub, so they run with
 no radio and no network. Hardware/library binding glue (building the real serial/TCP

@@ -95,7 +95,7 @@
       `ci` (derandomize, print_blob, no database, no deadline; default) and `nightly`
       (randomized, print_blob, no deadline, wider max_examples), selected via
       `HYPOTHESIS_PROFILE`.
-- [ ] T-2.10 Drift checkers + skills: `tools/check_tool_pins.py` (pre-commit revs ==
+- [x] T-2.10 Drift checkers + skills: `tools/check_tool_pins.py` (pre-commit revs ==
       pyproject dev pins; required CI step), `tools/check_task_sync.py` (checkbox-vs-git
       reconciliation; advisory, baseline-scoped, multi-bundle-tolerant),
       `.agents/skills/config-literal-sweep/`, reconciliation section in
