@@ -190,6 +190,9 @@ jobs:
       - name: Workforce roster lint
         run: python tools/validate_workforce.py
 
+      - name: Tool-pin sync
+        run: python tools/check_tool_pins.py
+
       - name: Secret scan (gitleaks)
         # Pre-commit runs gitleaks locally but is bypassable (--no-verify); this is the
         # non-bypassable copy. Version matches the pre-commit rev; the checksum pins the

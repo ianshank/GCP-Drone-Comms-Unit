@@ -176,6 +176,15 @@ step_workforce() {
   python tools/validate_workforce.py 2>&1
 }
 
+step_tool_pins() {
+  python tools/check_tool_pins.py 2>&1
+}
+
+step_task_sync() {
+  # Advisory: prints warnings, fails only when it cannot run at all.
+  python tools/check_task_sync.py 2>&1
+}
+
 step_py_syntax() {
   local py_bin
   if command -v python3 &>/dev/null; then
@@ -220,6 +229,8 @@ run_step "Python test suite (jetson_yolo_gcs)" step_py_test_jetson
 run_step "Governance hook tests"     step_governance_tests
 run_step "Bind guard"                step_bind_guard
 run_step "Workforce roster lint"     step_workforce
+run_step "Tool-pin sync"             step_tool_pins
+run_step "Task-checkbox sync (advisory)" step_task_sync
 run_step "Python syntax check"       step_py_syntax
 
 # ── Summary ───────────────────────────────────────────────────────────────────

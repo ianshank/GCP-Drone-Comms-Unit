@@ -76,7 +76,7 @@
       ratify the split-config layout as the end state and close this task.
 - [x] T-2.6 Unplanned follow-up: fix gate-widening bugs surfaced by running mypy/ruff to
       completion. (Landed: `0205675`; recorded so this file matches git history.)
-- [ ] T-2.7 CI determinism & hardening: `concurrency` group (PR-only cancel-in-progress),
+- [x] T-2.7 CI determinism & hardening: `concurrency` group (PR-only cancel-in-progress),
       `timeout-minutes` on all jobs, meshsa CI step moves to `pytest -m "not slow"`
       (spec-conformant per `docs/specs/m2-soak-fuzz.md` §7; coverage measured identical
       at 99.31% with/without the fuzz) plus a non-slow `FUZZ_SMOKE_CYCLES = 250` smoke
@@ -91,7 +91,7 @@
       (`{path, rule, rationale}`) in `.claude/governance.yaml` — loader extended before
       the yaml gains the key (the scope-freeze hook fails open on unknown keys); wired
       into the CI governance job and `validate-pre-pr.sh`.
-- [ ] T-2.9 Hypothesis determinism profiles in `packages/meshsa/tests/conftest.py`:
+- [x] T-2.9 Hypothesis determinism profiles in `packages/meshsa/tests/conftest.py`:
       `ci` (derandomize, print_blob, no database, no deadline; default) and `nightly`
       (randomized, print_blob, no deadline, wider max_examples), selected via
       `HYPOTHESIS_PROFILE`.
@@ -100,7 +100,7 @@
       reconciliation; advisory, baseline-scoped, multi-bundle-tolerant),
       `.agents/skills/config-literal-sweep/`, reconciliation section in
       `spec-driven-change`, `pre-pr-validator` extension.
-- [ ] T-2.11 Repo-governance pack: `CODEOWNERS`, PR + issue templates,
+- [x] T-2.11 Repo-governance pack: `CODEOWNERS`, PR + issue templates,
       `.github/dependabot.yml` (pip + github-actions), SHA-pinned workflow actions,
       CI gitleaks step, `SECURITY.md` placeholder replaced with GitHub private
       vulnerability reporting, CONTRIBUTING paragraph on required checks.

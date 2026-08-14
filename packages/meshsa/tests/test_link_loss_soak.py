@@ -23,6 +23,7 @@ import random
 
 import pytest
 
+from meshsa import defaults
 from meshsa.command.health import HeartbeatHealth
 from meshsa.transports.backoff import Backoff
 from meshsa.transports.pacing import Pacer
@@ -38,10 +39,19 @@ HEARTBEAT_MAX_AGE_S = 2.0
 #: Pacer profile: the FTS-facing shape (sustained cap with a small burst allowance).
 PACER_RATE_HZ = 10.0
 PACER_BURST = 5
-#: Reconnect schedule mirroring the TAK/Meshtastic supervisors' config shape.
+#: Reconnect schedule mirroring the TAK/Meshtastic supervisors' config shape. The
+#: initial delay deliberately differs from the deployed default (spec §5 mirrors the
+#: schedule's *shape*); the cap must equal the deployed cap — see the tie test below.
 BACKOFF_INITIAL_S = 0.5
 BACKOFF_MAX_S = 30.0
 BACKOFF_FACTOR = 2.0
+
+
+def test_soaked_backoff_cap_equals_deployed_cap():
+    # Spec §4: the attempt rate is bounded by 1/max_s. That claim is evidence about
+    # the deployment only while the soaked cap and the deployed default are the same
+    # number — this tie fails if either side drifts.
+    assert BACKOFF_MAX_S == defaults.DEFAULT_BACKOFF_MAX_S
 
 
 class ManualClock:

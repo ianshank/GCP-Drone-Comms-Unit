@@ -60,8 +60,40 @@ class BindGuardConfig(BaseModel):
     exceptions: list[BindGuardExceptionEntry]
 
 
+class LiteralGuardExceptionEntry(BaseModel):
+    """A declared literal-guard exception: repo-relative path, rule, and rationale.
+
+    ``rule`` names one of the checker's rule identifiers (``ports``, ``hosts``,
+    ``magics``, ``endpoints``) or ``*`` for all rules — a scoped waiver, so a file
+    excepted for one literal class stays scanned for the others.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    rule: str
+    rationale: str
+
+
+class LiteralGuardConfig(BaseModel):
+    """Policy for the literal-guard linter (service literals live in one module)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    defaults_module: str
+    exceptions: list[LiteralGuardExceptionEntry]
+
+
 class GovernanceConfig(BaseModel):
-    """Validated shape of ``.claude/governance.yaml`` (no extra keys allowed)."""
+    """Validated shape of ``.claude/governance.yaml`` (no extra keys allowed).
+
+    ``literal_guard`` is optional (default ``None``) deliberately: the scope-freeze
+    hook fails open on a config it cannot validate, so a required new section would
+    open a mid-edit window — whichever of loader/yaml changed first would invalidate
+    the other. Optional-with-default keeps every loader/yaml combination valid during
+    rollout; :mod:`tools.claude_hooks.literal_guard` errors cleanly when the section
+    is absent.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -70,6 +102,7 @@ class GovernanceConfig(BaseModel):
     command_emission_globs: list[str]
     scope_widening_globs: list[str]
     bind_guard: BindGuardConfig
+    literal_guard: LiteralGuardConfig | None = None
 
 
 def find_repo_root() -> Path:
