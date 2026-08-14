@@ -45,7 +45,6 @@ _UPSTREAM_ERROR = "assistant unavailable; check the server logs"
 #: token) and each prompt spends model tokens, so an unbounded prompt is a cost/latency
 #: DoS. Generous for real SA questions; oversized prompts get a 400, not a model call.
 DEFAULT_MAX_PROMPT_CHARS = 8000
-MAX_PROMPT_CHARS = DEFAULT_MAX_PROMPT_CHARS
 ENV_MAX_PROMPT_CHARS = "MESHSA_LLM_MAX_PROMPT_CHARS"
 
 # Server bind defaults + the environment-variable names that override every

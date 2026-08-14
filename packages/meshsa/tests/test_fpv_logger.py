@@ -146,7 +146,7 @@ def test_manifest_video_is_null_without_camera(tmp_path):
 
 
 def test_manifest_video_populated_with_camera(tmp_path):
-    # When capture is wired, the CaptureWriter's metadata dict is emitted as video.
+    # When capture is wired, the capture pipeline's metadata dict is emitted as video.
     meta = {"file": "video.mp4", "width": 1280, "height": 720, "fps": 30, "encoder": "h264"}
     logger = _logger(tmp_path, video_meta=meta)
     logger.start()

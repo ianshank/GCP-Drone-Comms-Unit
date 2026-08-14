@@ -202,3 +202,26 @@ def test_extract_endpoint_host_and_bind_validation():
         token="secret-token",
     )
     assert t.name == "d"
+
+    # Empty token is no credential: refused like the no-token case.
+    with pytest.raises(ValueError, match="refusing to bind"):
+        MavlinkSourceTransport(
+            name="d", connection=FakeConn(), endpoint="udpin:0.0.0.0:14550", token=""
+        )
+
+
+def test_whitespace_token_currently_accepted_documented_gap():
+    # Salvaged from the retired deliverables suite before its deletion (T-10.2a):
+    # netauth.validate_bind uses `not token`, so a whitespace-only string is truthy
+    # and passes as a "credential" on a non-loopback bind. The HTTP surfaces
+    # normalize whitespace->None at their config layer; the transport-options path
+    # does not. Documented behavior, pre-existing; the normalization decision is a
+    # NEXTSTEPS backlog item — if validate_bind ever strips whitespace, flip this
+    # test to assert the refusal.
+    t = MavlinkSourceTransport(
+        name="d",
+        connection=FakeConn(),
+        endpoint="udpin:0.0.0.0:14550",
+        token="   ",
+    )
+    assert t.name == "d"

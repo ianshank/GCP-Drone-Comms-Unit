@@ -13,9 +13,10 @@ from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.mavlink.bridge import LandingTargetBridge
 from jetson_yolo_gcs.mavlink.pose import VehiclePose
 from jetson_yolo_gcs.mavlink.timesync import TimeSync
-from jetson_yolo_gcs.pipeline import Pipeline, _should_log_drop
+from jetson_yolo_gcs.pipeline import Pipeline
 from jetson_yolo_gcs.streaming.camera import Frame
 from jetson_yolo_gcs.utils.fps import FpsCounter
+from jetson_yolo_gcs.utils.log_throttle import should_log_throttled
 from tests.conftest import FakeCamera, FakeClock, FakeDetector, FakeStreamWriter
 
 
@@ -574,7 +575,7 @@ def test_snapshot_uses_configured_liveness_timeout() -> None:
     [(1, 100, True), (2, 100, False), (100, 100, True), (200, 100, True), (3, 1, True)],
 )
 def test_should_log_drop(count: int, every: int, expected: bool) -> None:
-    assert _should_log_drop(count, every) is expected
+    assert should_log_throttled(count, every) is expected
 
 
 def test_repeated_detection_drops_are_counted_not_relogged() -> None:

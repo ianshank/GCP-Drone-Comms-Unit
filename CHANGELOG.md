@@ -8,6 +8,33 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed (code-hygiene-modularity T-5.1a / T-10.2a / T-2.3a — dead code, no behavior change)
+- `meshsa.fpv.camera` (`CaptureWriter`, `Frame`, the `CameraSource` protocol, and the
+  `CameraSettings`/`ProberSettings` config groups) and `AddressProber`/`ProbeResult`: no
+  production wiring existed; the jetson package's `streaming/camera.py` is the live,
+  strictly better capture path (design D-1). Configs still carrying `camera:`/`prober:`
+  keys keep loading (pydantic ignores unknown keys).
+- `TelemetryStore.age_s`/`.history` and the backing ring (no readers); the constructor
+  still accepts/validates `history_len` so the monitor/replay tools are unaffected.
+- `meshsa.fpv.version.SUPPORTED_DATASET_SCHEMAS` (derived set with no consumer;
+  `is_dataset_compatible` is the runtime check) and `meshsa.fpv.crsf`'s unused
+  package-level re-exports.
+- `meshsa.llm.server.MAX_PROMPT_CHARS` alias (use `DEFAULT_MAX_PROMPT_CHARS`).
+- `deliverables/meshsa-ui-validation`'s mavlink bind-guard patch + strict-xfail test:
+  the shipped guard in `transports/mavlink_source.py` is stricter (the patch's regex
+  parser failed open on bracketed IPv6); its empty/whitespace-token assertions were
+  salvaged into `tests/test_mavlink_source.py` first.
+- TS scaffolding: `scripts/src/hello.ts`, `scripts/post-merge.sh`, the root Makefile's
+  dead `db-migrate`/`db-studio` targets. `flightctl/configs/jetson_gateway.yolo.json`
+  aligned to the shipped detection-ingest default (`8099`→`8097`, stale since `fab3ab1`).
+
+### Changed
+- Service literals (ports, hosts, queue/backoff, endpoints, CoT stale + PLI interval)
+  are single-sourced from `meshsa.defaults` (T-3.5a); all values numerically unchanged,
+  enforced by pinned-literal tests and the new `literal_guard` CI check. Slow soak tests
+  moved to the nightly workflow per `docs/specs/m2-soak-fuzz.md` §7 (CI-internal only; a
+  250-cycle smoke slice of the same fuzz stays per-PR).
+
 ### Added
 
 #### Charter alignment audit (2026-07-31)

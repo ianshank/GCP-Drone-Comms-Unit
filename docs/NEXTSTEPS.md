@@ -36,6 +36,19 @@
 > `openspec/changes/code-hygiene-modularity/`. Does **not** open M3+ and does **not** clear the
 > Initiative-C M2 gate (`c_gate_met` untouched).
 
+- [ ] **Maintainer decision (T-5.1b): wire or retire the pre-flight arm-gating carve-out.**
+      `ArmGuard`, `crsf/rc.py`, `CrsfLink.send_rc`, the `RCLink` protocol, and
+      `FlightLogger.record_rc` implement the ratified 2026-06-12 carve-out (CHARTER §3),
+      are unit-tested, and are marked as such in their module docstrings — but no
+      production entry point uses them. Either wire an entry point or amend the charter
+      to retire the capability; a hygiene commit must not decide this (§6).
+- [ ] **Maintainer decision: whitespace-only bearer tokens.** `netauth.validate_bind`
+      accepts `"   "` as a credential (`not token` is falsy-only); the HTTP surfaces
+      normalize whitespace→None at their config layer, the transport-options path
+      (`mavlink_source`, `detection_ingest`) does not. Documented by
+      `test_mavlink_source.py::test_whitespace_token_currently_accepted_documented_gap`;
+      decide normalize-in-netauth vs document-as-is (a behavior change on a pathological
+      input either way).
 - [x] **T-0 — Spec + preconditions:** OpenSpec bundle authored; CHARTER §3 jetson-amendment
       wording drafted for maintainer ratification.
 - [x] **T-1 — Six verified bug fixes:** `meshsa.ui` `/api/*` responses now carry

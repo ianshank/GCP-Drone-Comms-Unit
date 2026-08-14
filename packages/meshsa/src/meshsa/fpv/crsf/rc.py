@@ -1,5 +1,10 @@
 """RC_CHANNELS_PACKED helpers: 11-bit channel packing + us<->tick mapping.
 
+Implements part of the ratified 2026-06-12 pre-flight arm-gating carve-out
+(CHARTER.md §3) alongside ``CrsfLink.send_rc``, the ``RCLink`` protocol, and
+``FlightLogger.record_rc``. Not yet wired to a production entry point; retiring
+any of it is a §6 decision, not a hygiene change (design D-1 / T-5.1b).
+
 CRSF packs 16 channels of 11 bits each into a 22-byte payload, **LSB-first**
 (little-endian bit order — distinct from the big-endian *telemetry* payloads).
 The microsecond<->tick mapping endpoints are passed in (sourced from

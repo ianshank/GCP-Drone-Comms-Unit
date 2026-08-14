@@ -46,11 +46,11 @@
       mypy, `bind_guard`, governance hook tests). (Landed: `dbd4b20` — pytest/mypy/ruff/
       py_compile only; the promised `bind_guard` + governance-hook steps did not ship.
       Residual tracked as T-2.2b.)
-- [ ] T-2.2b Residual of T-2.2: `validate-pre-pr.sh` adds the governance hook tests,
+- [x] T-2.2b Residual of T-2.2: `validate-pre-pr.sh` adds the governance hook tests,
       `bind_guard.py`, `validate_workforce.py`, and the T-2.8/T-2.10 checkers; fix the
       `cd -` bug in `step_py_test` (a meshsa pytest failure leaves the cwd in
       `packages/meshsa`, so the jetson suite's directory guard silently skips it).
-- [ ] T-2.3a Safe deletions half of T-2.3: fix the two invalid `COPY` lines in the root
+- [x] T-2.3a Safe deletions half of T-2.3: fix the two invalid `COPY` lines in the root
       `Dockerfile` (`2>/dev/null || true` parses as extra COPY source paths); delete
       `scripts/src/hello.ts`, `scripts/post-merge.sh`, the dead `Makefile`
       `db-migrate`/`db-studio` targets.
@@ -153,11 +153,11 @@
       `PipelineSettings.model_fields` instead of a re-hardcoded literal.
 
 ## Phase 5 — `fpv/` prune and decouple
-- [ ] T-5.1a Safe deletions (design D-1): `AddressProber`/`ProbeResult`/`ProberSettings`,
+- [x] T-5.1a Safe deletions (design D-1): `AddressProber`/`ProbeResult`/`ProberSettings`,
       `fpv/camera.py` + `CameraSource` + unused `CameraSettings` fields,
       `TelemetryStore.age_s`/`.history`, `SUPPORTED_DATASET_SCHEMAS`, `crsf/__init__.py`
       re-exports, `llm/server.py`'s `MAX_PROMPT_CHARS` alias. `CHANGELOG.md` entry.
-- [ ] T-5.1b Ratified-carve-out surface kept and marked (design D-1): module notes on
+- [x] T-5.1b Ratified-carve-out surface kept and marked (design D-1): module notes on
       `arm_guard.py`, `crsf/rc.py`, `send_rc`, `RCLink`, `record_rc`; `NEXTSTEPS.md` decision
       item for a maintainer (wire an entry point, or amend the charter to retire it).
 - [ ] T-5.2 `HealthReport`/`HealthState` move to a neutral module; `meshsa/_logging.py` leaf;
@@ -262,7 +262,7 @@
       `meshsa.ui` code (`UIConfig.watchdog_heartbeat_s`, a heartbeat loop in `ui/cli.py`, the
       `Type=notify` unit moved to `ops/`, `sdnotify` added to the `ui` extra); tests exercise
       the real package code, not an inlined copy.
-- [ ] T-10.2a Delete the already-applied
+- [x] T-10.2a Delete the already-applied
       `deliverables/meshsa-ui-validation/patches/mavlink_source_bind_guard.py` and its
       `tests/test_mavlink_bind_guard.py` (the shipped guard in
       `transports/mavlink_source.py` is stricter — the patch's regex parser fails open on

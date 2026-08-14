@@ -154,14 +154,6 @@ setup: install hooks-install ## Full first-time setup (install + hooks)
 db-push: ## Push Drizzle schema to database (development)
 	$(PNPM) --filter @workspace/db run push
 
-.PHONY: db-migrate
-db-migrate: ## Run pending Drizzle migrations
-	$(PNPM) --filter @workspace/db run migrate
-
-.PHONY: db-studio
-db-studio: ## Open Drizzle Studio (database browser)
-	$(PNPM) --filter @workspace/db run studio
-
 # ── Cleaning ──────────────────────────────────────────────────────────────────
 .PHONY: clean
 clean: ## Remove build artefacts (dist/, .tsbuildinfo, coverage/)

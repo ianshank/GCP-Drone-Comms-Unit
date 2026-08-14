@@ -1,4 +1,9 @@
-"""TelemetryStore: latest/age/history, ring bound, type isolation (§5.2)."""
+"""TelemetryStore: latest-value semantics and type isolation (§5.2).
+
+The ``age_s``/``history`` accessors and their ring were removed in T-5.1a
+(no production readers); the constructor still validates ``history_len`` for
+compatibility with the monitor/replay tools that thread it.
+"""
 
 from __future__ import annotations
 
@@ -17,32 +22,15 @@ def test_rejects_nonpositive_history_len():
         TelemetryStore(history_len=0)
 
 
-def test_latest_and_age():
+def test_latest_returns_newest_with_timestamp():
     store = TelemetryStore()
     assert store.latest(LinkStatistics) is None
-    assert store.age_s(LinkStatistics, now=10.0) is None
     store.update(_ls(99), t_mono=5.0)
     msg, t = store.latest(LinkStatistics)
     assert msg.uplink_lq == 99
     assert t == 5.0
-    assert store.age_s(LinkStatistics, now=7.5) == pytest.approx(2.5)
-
-
-def test_history_is_bounded_and_ordered():
-    store = TelemetryStore(history_len=3)
-    for i in range(5):
-        store.update(_ls(i), t_mono=float(i))
-    hist = store.history(LinkStatistics, n=10)
-    # Ring keeps only the last 3, oldest-first.
-    assert [m.uplink_lq for m, _ in hist] == [2, 3, 4]
-    # Requesting fewer returns the most recent slice.
-    assert [m.uplink_lq for m, _ in store.history(LinkStatistics, n=2)] == [3, 4]
-    assert store.history(LinkStatistics, n=0) == []
-
-
-def test_history_empty_for_unseen_type():
-    store = TelemetryStore()
-    assert store.history(Attitude, n=5) == []
+    store.update(_ls(42), t_mono=6.0)
+    assert store.latest(LinkStatistics)[0].uplink_lq == 42
 
 
 def test_type_isolation():
