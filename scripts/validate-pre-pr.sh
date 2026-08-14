@@ -15,7 +15,8 @@
 #       pyproject.toml/mypy.ini
 #   9.  Python test suite (pytest) — packages/meshsa, and packages/jetson_yolo_gcs
 #       if present (each package's own coverage-gated suite)
-#   10. Python syntax check (py_compile) — every *.py under packages/,
+#   10. Governance gate (T-2.2b) — hook tests, bind_guard, workforce roster lint
+#   11. Python syntax check (py_compile) — every *.py under packages/,
 #       flightctl/, tools/, deliverables/ (not deliverables/ alone)
 #
 # Usage:
@@ -148,7 +149,11 @@ step_py_typecheck() {
 }
 
 step_py_test() {
-  cd packages/meshsa && python -m pytest --tb=short -q 2>&1 && cd - >/dev/null
+  # Subshell, not `cd … && cd -`: with the old form a pytest failure skipped the
+  # `cd -`, leaving the whole script's cwd inside packages/meshsa — which made the
+  # next step's `[[ ! -d packages/jetson_yolo_gcs ]]` guard silently skip the jetson
+  # suite and count it as passing.
+  (cd packages/meshsa && python -m pytest --tb=short -q 2>&1)
 }
 
 step_py_test_jetson() {
@@ -156,7 +161,19 @@ step_py_test_jetson() {
     warn "packages/jetson_yolo_gcs not present — skipping"
     return 0
   fi
-  cd packages/jetson_yolo_gcs && python -m pytest --tb=short -q 2>&1 && cd - >/dev/null
+  (cd packages/jetson_yolo_gcs && python -m pytest --tb=short -q 2>&1)
+}
+
+step_governance_tests() {
+  python -m pytest tools/claude_hooks/tests tools/tests -q 2>&1
+}
+
+step_bind_guard() {
+  python tools/claude_hooks/bind_guard.py 2>&1
+}
+
+step_workforce() {
+  python tools/validate_workforce.py 2>&1
 }
 
 step_py_syntax() {
@@ -200,6 +217,9 @@ run_step "Python formatting (ruff)"  step_py_format
 run_step "Python type checking"      step_py_typecheck
 run_step "Python test suite (meshsa)"       step_py_test
 run_step "Python test suite (jetson_yolo_gcs)" step_py_test_jetson
+run_step "Governance hook tests"     step_governance_tests
+run_step "Bind guard"                step_bind_guard
+run_step "Workforce roster lint"     step_workforce
 run_step "Python syntax check"       step_py_syntax
 
 # ── Summary ───────────────────────────────────────────────────────────────────

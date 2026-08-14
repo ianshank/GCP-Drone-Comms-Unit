@@ -59,6 +59,11 @@ def _check(name: str, data: bytes) -> None:
     _SNAP.mkdir(exist_ok=True)
     path = _SNAP / name
     if os.environ.get("MESHSA_UPDATE_SNAPSHOTS"):  # pragma: no cover - dev regen path
+        # Regen is a local-dev action only: if the variable ever leaked into a CI
+        # environment, every wire-format assertion would silently rewrite its golden
+        # file and pass. Refuse instead of regenerating.
+        if os.environ.get("CI"):
+            raise RuntimeError("MESHSA_UPDATE_SNAPSHOTS is set in CI; refusing to regenerate")
         path.write_bytes(data)
         return
     assert data == path.read_bytes(), f"wire format for {name} changed"

@@ -30,6 +30,9 @@ from meshsa.transports.pacing import Pacer
 #: Soak scale for the per-PR run; the nightly fuzz multiplies this out.
 LINK_CYCLES = 500
 FUZZ_CYCLES = 5_000
+#: Per-PR smoke slice of the fuzz (spec §5: test parameters are named constants in the
+#: test module, never env knobs — a lost override must not silently shrink the nightly run).
+FUZZ_SMOKE_CYCLES = 250
 #: Interlock freshness window (mirrors HeartbeatHealth's default shape, set explicitly).
 HEARTBEAT_MAX_AGE_S = 2.0
 #: Pacer profile: the FTS-facing shape (sustained cap with a small burst allowance).
@@ -159,10 +162,13 @@ async def test_backoff_caps_retry_rate_and_resets_cleanly():
     assert backoff.current == BACKOFF_INITIAL_S
 
 
-@pytest.mark.slow
-async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
-    """Nightly fuzz: random outage/recovery timings never wedge the gate or the schedule."""
-    rng = random.Random(0x4D32)  # fixed seed ("M2"): deterministic soak
+async def _soak_fuzz(cycles: int) -> None:
+    """Fuzz body shared by the nightly run and the per-PR smoke slice.
+
+    Random outage/recovery timings never wedge the gate or the schedule. The seed is
+    fixed ("M2"): the soak is deterministic regardless of cycle count.
+    """
+    rng = random.Random(0x4D32)
     clock = ManualClock()
     sleep = RecordingSleep(clock)
     health = HeartbeatHealth(clock, max_age_s=HEARTBEAT_MAX_AGE_S)
@@ -170,7 +176,7 @@ async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
         initial_s=BACKOFF_INITIAL_S, max_s=BACKOFF_MAX_S, factor=BACKOFF_FACTOR, sleep=sleep
     )
 
-    for _ in range(FUZZ_CYCLES):
+    for _ in range(cycles):
         up_beats = rng.randint(1, 5)
         for _ in range(up_beats):
             health.beat()
@@ -189,3 +195,15 @@ async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
         assert BACKOFF_INITIAL_S <= backoff.current <= BACKOFF_MAX_S
 
     assert max(sleep.delays) <= BACKOFF_MAX_S  # no delay ever exceeded the cap
+
+
+async def test_fuzzed_link_cycles_smoke():
+    """Per-PR smoke slice of the fuzz: the randomized beat/reset/outage interleaving the
+    structured soaks above never exercise, at a cycle count cheap enough for every run."""
+    await _soak_fuzz(FUZZ_SMOKE_CYCLES)
+
+
+@pytest.mark.slow
+async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
+    """Nightly fuzz (spec §7): the full randomized outage/recovery soak."""
+    await _soak_fuzz(FUZZ_CYCLES)

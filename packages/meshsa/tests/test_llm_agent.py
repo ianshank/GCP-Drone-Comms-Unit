@@ -9,8 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import pytest
-
 from meshsa.llm.agent import SAAgent, _extract_text
 from meshsa.llm.sources import DroneState, StaticTelemetrySource, StaticTrackSource, Track
 from meshsa.llm.tools import GET_DRONE_STATE, LIST_TRACKS, ToolDispatcher
@@ -159,7 +157,6 @@ def test_extract_text_joins_and_strips() -> None:
     assert _extract_text(blocks) == "ab"
 
 
-@pytest.mark.anyio
 async def test_build_agent_resolves_env_vars() -> None:
     import sys
     from unittest.mock import MagicMock, patch

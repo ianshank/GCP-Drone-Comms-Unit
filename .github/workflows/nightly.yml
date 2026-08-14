@@ -1,13 +1,19 @@
 name: nightly
 
-# Scheduled deeper run that the per-PR `ci` workflow intentionally skips:
-#   * installs the FULL optional dependency graph
-#     ([dev,meshtastic,health,mavlink,msp,fpv,camera,llm]) so mypy/tests run against the
-#     real meshtastic/pypubsub/aiohttp/pymavlink/yamspy/pyserial/pyarrow/anthropic types —
-#     this catches optional-dependency typing drift the [dev]-only CI cannot see, and
-#     exercises the fpv-log-convert Parquet path and the SA-assistant (llm) path.
-#   * runs any @pytest.mark.slow soak/fuzz tests; Hypothesis explores fresh
-#     randomized inputs on each nightly run.
+# Scheduled deeper run. Precisely: the meshsa suite on py3.12 with fuller extras + the
+# @slow fuzz + randomized Hypothesis + mypy against real optional-dependency types.
+#   * Fuller extras ([dev,meshtastic,health,mavlink,msp,fpv,camera,llm]) un-skip the
+#     tests PR CI's [dev,inference] install skips (test_fpv_convert.py's pyarrow trio,
+#     test_node.py's pubsub test) and catch optional-dependency typing drift.
+#   * Runs the full suite (slow included) under the same --cov-fail-under=97 gate, so
+#     the gate is also enforced on the path that includes the 5,000-cycle link-loss
+#     fuzz (per-PR CI runs -m "not slow" plus a 250-cycle smoke slice — see
+#     docs/specs/m2-soak-fuzz.md §7).
+#   * HYPOTHESIS_PROFILE=nightly explores fresh randomized inputs; print_blob is on, so
+#     a failure log carries a paste-able @reproduce_failure decorator that outlives this
+#     ephemeral runner.
+# This is NOT a superset of PR CI: no py3.10/3.11, no jetson_yolo_gcs suite, no
+# lint/format/governance/shell/build jobs.
 
 on:
   schedule:
@@ -16,10 +22,12 @@ on:
 
 permissions:
   contents: read
+  issues: write # the on-failure step files/updates a tracking issue
 
 jobs:
   soak:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -39,4 +47,24 @@ jobs:
 
       - name: Full suite + slow soak tests
         working-directory: packages/meshsa
-        run: pytest -m "slow or not slow"
+        env:
+          HYPOTHESIS_PROFILE: nightly
+        run: pytest
+
+      - name: Surface failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          body="Nightly soak/fuzz run failed: ${run_url}
+          Hypothesis ran the randomized 'nightly' profile with print_blob on — for a
+          property-test failure the job log contains a @reproduce_failure decorator.
+          Triage owner: repo maintainer (see CONTRIBUTING.md flaky-test policy)."
+          num=$(gh issue list --state open --search "in:title nightly soak/fuzz failure" \
+            --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$body"
+          else
+            gh issue create --title "nightly soak/fuzz failure" --body "$body"
+          fi

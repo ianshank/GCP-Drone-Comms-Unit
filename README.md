@@ -1,6 +1,6 @@
 # GCP-Drone-Comms-Unit — Development Workspace
 
-[![Validate](https://img.shields.io/badge/validate-passing-brightgreen)](#validation)
+[![CI](https://github.com/ianshank/GCP-Drone-Comms-Unit/actions/workflows/ci.yml/badge.svg)](https://github.com/ianshank/GCP-Drone-Comms-Unit/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node.js-24.x-brightgreen)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-workspace-orange)](https://pnpm.io/)

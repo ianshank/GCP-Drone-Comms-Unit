@@ -80,8 +80,11 @@ dev = [
     # aiohttp is needed by the test suite (AiohttpTransport + the _require_aiohttp
     # success path), so `[dev]` alone can run the full suite without `[inference]`.
     "aiohttp>=3.9",
-    "ruff>=0.6",
-    "mypy>=1.10",
+    # Pinned exactly (code-hygiene-modularity T-2.7): CI, pre-commit, and local runs must
+    # agree on lint/type verdicts; tools/check_tool_pins.py enforces the pre-commit match
+    # and dependabot proposes updates. Captured from a fresh green install (2026-08-14).
+    "ruff==0.16.3",
+    "mypy==2.3.0",
     "pre-commit>=3.7",
     "build>=1.2",
     "twine>=5",
@@ -109,7 +112,7 @@ meshsa = ["py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=97"
+addopts = "--cov=meshsa --cov-report=term-missing --cov-fail-under=97 --strict-markers"
 testpaths = ["tests"]
 # Make flightctl/ (the live service glue, outside the package) importable for its
 # glue tests without per-file sys.path mutation. Relative to this rootdir.

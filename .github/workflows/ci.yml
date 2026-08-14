@@ -8,10 +8,20 @@ on:
 permissions:
   contents: read
 
+# Rapid pushes to a PR branch supersede each other; cancel the stale run. Pushes to main
+# are never cancelled — every landed commit keeps a complete CI verdict (bisect integrity).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   test:
     name: test (py${{ matrix.python }})
     runs-on: ubuntu-latest
+    # Budget note: the meshsa suite itself runs in ~17s (measured 2026-08-14); the
+    # timeout is dominated by pip install. If this limit is ever approached, the suite
+    # has regressed — investigate before raising it.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +40,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e "packages/meshsa[dev,inference]"
           # tools/claude_hooks (governance.py) depends on pyyaml, not a meshsa dependency.
-          pip install pyyaml types-PyYAML
+          # Pinned: this job's verdict must not drift with an upstream release.
+          pip install pyyaml==6.0.3 types-PyYAML==6.0.12.20260724
 
       - name: Lint
         run: ruff check packages/meshsa flightctl tools deliverables --exclude archive
@@ -54,7 +65,27 @@ jobs:
 
       - name: Test
         working-directory: packages/meshsa
-        run: pytest
+        # -m "not slow": the 5,000-cycle link-loss fuzz is the nightly workflow's job
+        # (docs/specs/m2-soak-fuzz.md §7); a 250-cycle smoke slice of the same fuzz body
+        # stays in this gate. Coverage measured identical (99.31%) with and without the
+        # slow test. Hypothesis runs the derandomized "ci" profile (tests/conftest.py).
+        run: pytest -m "not slow" --cov-report=xml
+
+      - name: Coverage summary
+        working-directory: packages/meshsa
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          r = ET.parse("coverage.xml").getroot()
+          print(f"**meshsa coverage**: {float(r.get('line-rate'))*100:.2f}% lines, "
+                f"{float(r.get('branch-rate'))*100:.2f}% branches (gate: 97%)")
+          EOF
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-meshsa-py${{ matrix.python }}
+          path: packages/meshsa/coverage.xml
 
       - name: Build sdist + wheel
         working-directory: packages/meshsa
@@ -65,6 +96,8 @@ jobs:
   perception:
     name: perception (py${{ matrix.python }})
     runs-on: ubuntu-latest
+    # Suite runs in ~3s (measured 2026-08-14); the timeout is install-dominated.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -95,7 +128,23 @@ jobs:
 
       - name: Test
         working-directory: packages/jetson_yolo_gcs
-        run: pytest
+        run: pytest --cov-report=xml
+
+      - name: Coverage summary
+        working-directory: packages/jetson_yolo_gcs
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          r = ET.parse("coverage.xml").getroot()
+          print(f"**jetson_yolo_gcs coverage**: {float(r.get('line-rate'))*100:.2f}% lines, "
+                f"{float(r.get('branch-rate'))*100:.2f}% branches (gate: 96%)")
+          EOF
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-jetson-py${{ matrix.python }}
+          path: packages/jetson_yolo_gcs/coverage.xml
 
       - name: Build sdist + wheel
         working-directory: packages/jetson_yolo_gcs
@@ -106,6 +155,7 @@ jobs:
   governance:
     name: governance
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -118,10 +168,21 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install pydantic pyyaml pytest
+          # Pinned: this job executes the scope-freeze/bind-guard tooling, whose Pydantic
+          # models are extra="forbid" — its verdict must not drift with an upstream release.
+          pip install pydantic==2.13.4 pyyaml==6.0.3 pytest==9.1.1 pytest-cov==7.1.0
 
-      - name: Governance hook tests
-        run: python -m pytest tools/claude_hooks/tests tools/tests -q
+      - name: Governance hook tests (coverage report-only)
+        # Coverage is measured, not gated, for the tools tree (baseline 91% on
+        # 2026-08-14; scope_freeze.py is subprocess-tested and reads low until it gains
+        # in-process tests — tracked in the code-hygiene-modularity bundle). A floor is
+        # set once the number is stable.
+        run: |
+          python -m pytest tools/claude_hooks/tests tools/tests -q \
+            --cov=tools/claude_hooks --cov-report=term | tee /tmp/tools-cov.txt
+          grep -E '^TOTAL' /tmp/tools-cov.txt \
+            | awk '{print "**tools/claude_hooks coverage (report-only)**: " $NF}' \
+            >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Bind guard
         run: python tools/claude_hooks/bind_guard.py
@@ -132,15 +193,16 @@ jobs:
   shell:
     name: shell lint
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install shellcheck
+        # Installed explicitly rather than trusting the runner image to keep shipping it.
+        run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+
       - name: Syntax check (bash -n)
-        run: |
-          files=$(git ls-files '*.sh')
-          for f in $files; do bash -n "$f"; done
+        run: git ls-files -z '*.sh' | xargs -0 -n1 bash -n
 
       - name: ShellCheck
-        run: |
-          files=$(git ls-files '*.sh')
-          shellcheck -x --severity=warning $files
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck -x --severity=warning
