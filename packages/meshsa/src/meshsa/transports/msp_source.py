@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from ..defaults import DEFAULT_QUEUE_MAXSIZE
 from ..protocols import Clock
 from ..registry import transport_registry
 from .polling_source import PollingSourceTransport
@@ -76,7 +77,7 @@ class MspSourceTransport(PollingSourceTransport):
         alt_scale: float = 1.0,
         poll_interval_s: float = 1.0,
         clock: Clock | None = None,
-        queue_maxsize: int = 1000,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         log_every_n: int = 100,
         log_interval_s: float = 30.0,
         **_options: Any,

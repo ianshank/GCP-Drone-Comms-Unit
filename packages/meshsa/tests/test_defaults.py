@@ -1,10 +1,16 @@
 """Tests for meshsa.defaults — the shared operational-default constants and service-port
-table (code-hygiene-modularity T-1.4)."""
+table (code-hygiene-modularity T-1.4, pins and adoption asserts T-2.8/T-3.5a)."""
 
 from __future__ import annotations
 
-from meshsa import defaults
-from meshsa.config import HealthConfig
+import inspect
+
+from meshsa import defaults, netauth
+from meshsa.cli import parse_args
+from meshsa.config import HealthConfig, NodeConfig, RouterConfig, ScoutConfig
+from meshsa.transports.detection_ingest import DetectionIngestTransport
+from meshsa.transports.tak import TakMulticastTransport, TakTcpTransport
+from meshsa.ui.config import UIConfig
 
 
 def test_service_ports_are_unique():
@@ -63,3 +69,64 @@ def test_pinned_literal_values_are_preserved():
         defaults.DEFAULT_BACKOFF_FACTOR,
     ) == (1.0, 30.0, 2.0)
     assert defaults.DEFAULT_MAVLINK_ENDPOINT == "udpin:127.0.0.1:14550"
+    assert defaults.PORT_TAK_MULTICAST == 6969
+    assert defaults.PORT_FTS_REST == 19023
+    assert defaults.DEFAULT_TAK_MULTICAST_GROUP == "239.2.3.1"
+    assert defaults.DEFAULT_MULTICAST_IFACE == "0.0.0.0"
+    assert defaults.DEFAULT_COT_STALE_S == 120.0
+    assert defaults.DEFAULT_PLI_INTERVAL_S == 30.0
+
+
+def test_host_constants_pinned_and_semantically_loopback():
+    # Two constants by design (bind default vs outbound connect target): every listener
+    # bind is guarded fail-closed by netauth.validate_bind, but outbound targets have no
+    # guard — a shared constant would let one edit silently redirect egress. The
+    # is_loopback pin is the semantic half: a non-loopback value here would flip every
+    # listener to refuse-at-startup (loud) but silently redirect every egress default.
+    assert defaults.DEFAULT_LOOPBACK_HOST == "127.0.0.1"
+    assert netauth.is_loopback(defaults.DEFAULT_LOOPBACK_HOST)
+    assert defaults.DEFAULT_LOCAL_TARGET_HOST == "127.0.0.1"
+    assert netauth.is_loopback(defaults.DEFAULT_LOCAL_TARGET_HOST)
+
+
+def _default_of(cls: type, param: str) -> object:
+    return inspect.signature(cls.__init__).parameters[param].default
+
+
+def test_transport_constructor_defaults_adopt_the_table():
+    # The class of bug this catches: a sweep (or later edit) re-typing a literal that
+    # drifts from the table — config models are covered by their own defaults, but
+    # constructor keyword defaults and argparse defaults are invisible to them.
+    assert _default_of(DetectionIngestTransport, "host") == defaults.DEFAULT_LOOPBACK_HOST
+    assert _default_of(DetectionIngestTransport, "port") == defaults.PORT_DETECTION_INGEST
+    assert _default_of(DetectionIngestTransport, "queue_maxsize") == defaults.DEFAULT_QUEUE_MAXSIZE
+    assert _default_of(TakTcpTransport, "host") == defaults.DEFAULT_LOCAL_TARGET_HOST
+    assert _default_of(TakTcpTransport, "backoff_max_s") == defaults.DEFAULT_BACKOFF_MAX_S
+    assert _default_of(TakMulticastTransport, "group") == defaults.DEFAULT_TAK_MULTICAST_GROUP
+    assert _default_of(TakMulticastTransport, "port") == defaults.PORT_TAK_MULTICAST
+    assert _default_of(TakMulticastTransport, "iface") == defaults.DEFAULT_MULTICAST_IFACE
+
+
+def test_config_model_defaults_adopt_the_table():
+    assert RouterConfig().queue_maxsize == defaults.DEFAULT_QUEUE_MAXSIZE
+    assert HealthConfig().host == defaults.DEFAULT_LOOPBACK_HOST
+    assert ScoutConfig().station_host == defaults.DEFAULT_LOOPBACK_HOST
+    assert ScoutConfig().station_port == defaults.PORT_SCOUT_STATION
+    assert UIConfig().host == defaults.DEFAULT_LOOPBACK_HOST
+    assert UIConfig().port == defaults.PORT_UI
+    cfg = NodeConfig(uid="u", callsign="c")
+    assert cfg.pli_interval_s == defaults.DEFAULT_PLI_INTERVAL_S
+    assert cfg.default_stale_s == defaults.DEFAULT_COT_STALE_S
+
+
+def test_cli_argparse_defaults_adopt_the_table(monkeypatch):
+    # Guards the exact mis-mapping this sweep's review caught pre-execution: swapping
+    # --fts-port's default (8087, PORT_FTS_TCP) for PORT_HEALTH (8098) would have been
+    # an operator-visible egress change no other test observed.
+    for key in ("FTS_HOST", "FTS_PORT", "HEALTHZ_HOST", "HEALTHZ_PORT"):
+        monkeypatch.delenv(f"MESHSA_{key}", raising=False)
+    args = parse_args([])
+    assert args.fts_host == defaults.DEFAULT_LOCAL_TARGET_HOST
+    assert args.fts_port == defaults.PORT_FTS_TCP
+    assert args.healthz_host == defaults.DEFAULT_LOOPBACK_HOST
+    assert args.healthz_port == defaults.PORT_HEALTH

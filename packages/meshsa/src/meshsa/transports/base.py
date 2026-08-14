@@ -8,11 +8,13 @@ from collections.abc import AsyncIterator
 
 import structlog
 
+from ..defaults import DEFAULT_QUEUE_MAXSIZE
+
 _log = structlog.get_logger("meshsa.transport")
 
 
 class AbstractTransport(abc.ABC):
-    def __init__(self, name: str, queue_maxsize: int = 1000) -> None:
+    def __init__(self, name: str, queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE) -> None:
         self.name = name
         self._inbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=queue_maxsize)
         self._running = False

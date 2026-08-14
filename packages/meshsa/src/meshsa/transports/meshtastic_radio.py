@@ -22,6 +22,12 @@ from typing import Any, cast
 
 import structlog
 
+from ..defaults import (
+    DEFAULT_BACKOFF_FACTOR,
+    DEFAULT_BACKOFF_INITIAL_S,
+    DEFAULT_BACKOFF_MAX_S,
+    DEFAULT_QUEUE_MAXSIZE,
+)
 from ..registry import transport_registry
 from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
@@ -102,11 +108,11 @@ class MeshtasticTransport(AbstractTransport):
         want_ack: bool = False,
         channel_index: int = 0,
         reconnect: bool = True,
-        backoff_initial_s: float = 1.0,
-        backoff_max_s: float = 30.0,
-        backoff_factor: float = 2.0,
+        backoff_initial_s: float = DEFAULT_BACKOFF_INITIAL_S,
+        backoff_max_s: float = DEFAULT_BACKOFF_MAX_S,
+        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
         sleep: SleepFn | None = None,
-        queue_maxsize: int = 1000,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         mesh: dict[str, Any] | None = None,
         provision: Provisioner | None = None,
         **options: Any,

@@ -11,7 +11,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from ._parsing import parse_float, parse_int
-from .defaults import PORT_HEALTH
+from .defaults import (
+    DEFAULT_COT_STALE_S,
+    DEFAULT_LOOPBACK_HOST,
+    DEFAULT_PLI_INTERVAL_S,
+    DEFAULT_QUEUE_MAXSIZE,
+    PORT_HEALTH,
+    PORT_SCOUT_STATION,
+)
 from .models import NodeTier
 from .ui.config import UIConfig
 
@@ -48,7 +55,7 @@ class TransportConfig(BaseModel):
 
 class RouterConfig(BaseModel):
     dedupe_cache_size: int = 2048
-    queue_maxsize: int = 1000
+    queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
 
 
 class MeshConfig(BaseModel):
@@ -138,7 +145,7 @@ class HealthConfig(BaseModel):
     """
 
     enabled: bool = False
-    host: str = "127.0.0.1"
+    host: str = DEFAULT_LOOPBACK_HOST
     port: int = PORT_HEALTH
     token: str | None = None
     metrics_enabled: bool = False
@@ -214,8 +221,8 @@ class ScoutConfig(BaseModel):
     camera_v_fov_deg: float = Field(default=42.0, gt=0.0, lt=180.0)
     dem_path: str | None = None
     store_path: str = ":memory:"
-    station_host: str = "127.0.0.1"
-    station_port: int = 8099
+    station_host: str = DEFAULT_LOOPBACK_HOST
+    station_port: int = PORT_SCOUT_STATION
     station_token: str = ""
 
     @classmethod
@@ -243,8 +250,8 @@ class NodeConfig(BaseModel):
     uid: str
     callsign: str
     tier: NodeTier = NodeTier.USER
-    pli_interval_s: float = 30.0
-    default_stale_s: float = 120.0
+    pli_interval_s: float = DEFAULT_PLI_INTERVAL_S
+    default_stale_s: float = DEFAULT_COT_STALE_S
     mesh: MeshConfig = Field(default_factory=MeshConfig)
     router: RouterConfig = Field(default_factory=RouterConfig)
     health: HealthConfig = Field(default_factory=HealthConfig)

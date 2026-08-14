@@ -6,6 +6,7 @@ loops, exactly as on a real mesh)."""
 
 from __future__ import annotations
 
+from ..defaults import DEFAULT_QUEUE_MAXSIZE
 from ..registry import transport_registry
 from .base import AbstractTransport
 
@@ -25,7 +26,10 @@ class LoopbackBus:
 
 class LoopbackTransport(AbstractTransport):
     def __init__(
-        self, name: str = "loopback", bus: LoopbackBus | None = None, queue_maxsize: int = 1000
+        self,
+        name: str = "loopback",
+        bus: LoopbackBus | None = None,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
     ) -> None:
         super().__init__(name, queue_maxsize)
         self.bus = bus or LoopbackBus()
@@ -46,11 +50,16 @@ class NullTransport(AbstractTransport):
 
 @transport_registry.register("loopback")
 def _make_loopback(
-    name: str = "loopback", bus: LoopbackBus | None = None, queue_maxsize: int = 1000, **_: object
+    name: str = "loopback",
+    bus: LoopbackBus | None = None,
+    queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
+    **_: object,
 ) -> LoopbackTransport:
     return LoopbackTransport(name=name, bus=bus, queue_maxsize=queue_maxsize)
 
 
 @transport_registry.register("null")
-def _make_null(name: str = "null", queue_maxsize: int = 1000, **_: object) -> NullTransport:
+def _make_null(
+    name: str = "null", queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE, **_: object
+) -> NullTransport:
     return NullTransport(name=name, queue_maxsize=queue_maxsize)

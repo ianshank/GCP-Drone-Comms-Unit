@@ -81,6 +81,11 @@ class StreamSettings(BaseSettings):
 class MavlinkSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MAVLINK_", env_file=_ENV_FILE, extra="ignore")
 
+    #: The *sender* end of the MAVLink UDP rendezvous whose listener side is meshsa's
+    #: ``defaults.DEFAULT_MAVLINK_ENDPOINT`` (``udpin:…:14550``). Deliberately not
+    #: imported from meshsa (separate distribution); the meshsa service-port table
+    #: records 14550 as the shared external convention. literal_guard carries a
+    #: declared exception for this file (.claude/governance.yaml).
     endpoint: str = "udpout:127.0.0.1:14550"
     #: This unit's own MAVLink IDs (companion computer), sent as the message source.
     source_system: int = Field(default=1, ge=0, le=255)

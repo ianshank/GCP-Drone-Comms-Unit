@@ -187,6 +187,9 @@ jobs:
       - name: Bind guard
         run: python tools/claude_hooks/bind_guard.py
 
+      - name: Literal guard
+        run: python tools/claude_hooks/literal_guard.py
+
       - name: Workforce roster lint
         run: python tools/validate_workforce.py
 

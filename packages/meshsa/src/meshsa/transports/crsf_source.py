@@ -33,6 +33,7 @@ from typing import Any
 
 import structlog
 
+from ..defaults import DEFAULT_QUEUE_MAXSIZE
 from ..fpv.config import CrsfLinkSettings, ParserSettings
 from ..fpv.crsf.link import CrsfLink
 from ..fpv.crsf.telemetry import GpsSensor, TelemetryParser
@@ -72,7 +73,7 @@ class CrsfSourceTransport(PollingSourceTransport):
         callsign: str | None = None,
         poll_interval_s: float = 1.0,
         clock: Clock | None = None,
-        queue_maxsize: int = 1000,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         **_options: Any,
     ) -> None:
         self._settings = settings or CrsfLinkSettings(**_options)

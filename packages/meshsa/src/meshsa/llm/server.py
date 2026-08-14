@@ -21,6 +21,7 @@ import structlog
 from pydantic import BaseModel
 
 from .._parsing import parse_int
+from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_LLM
 
 # ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
 # ``as`` alias makes the re-export visible to mypy's ``no_implicit_reexport``.
@@ -52,8 +53,8 @@ ENV_MAX_PROMPT_CHARS = "MESHSA_LLM_MAX_PROMPT_CHARS"
 # Default bind is loopback: the ``/chat`` endpoint discloses live drone/track
 # positions and spends model tokens, so it must never be reachable off-host
 # unless the operator opts in *and* sets ``MESHSA_LLM_TOKEN`` (see validate_bind).
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8090
+DEFAULT_HOST = DEFAULT_LOOPBACK_HOST
+DEFAULT_PORT = PORT_LLM
 ENV_HOST = "MESHSA_LLM_HOST"
 ENV_PORT = "MESHSA_LLM_PORT"
 ENV_TOKEN = "MESHSA_LLM_TOKEN"

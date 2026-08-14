@@ -23,6 +23,8 @@ from typing import Any, Protocol
 import structlog
 from pydantic import BaseModel
 
+from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_FTS_REST, PORT_MAVLINK2REST
+
 _log = structlog.get_logger("meshsa.llm.sources")
 
 # GLOBAL_POSITION_INT field scaling (see MAVLink common message set).
@@ -32,11 +34,15 @@ _CM_PER_M = 100.0  # vx/vy: centimeters per second
 _CDEG = 100.0  # hdg: centidegrees
 _HDG_UNKNOWN = 65535  # MAVLink sentinel for "heading not available"
 
-# Default endpoints for the HTTP sources — the single source of truth, reused by
-# ``meshsa.llm.server`` when resolving configuration from the environment.
-DEFAULT_MAVLINK2REST_URL = "http://127.0.0.1:8088"
+# Default endpoints for the HTTP sources — reused by ``meshsa.llm.server`` when
+# resolving configuration from the environment. Ports come from the service-port
+# table (meshsa.defaults) so it stays the authority for every port this codebase
+# talks to, including external tools' upstream conventions.
+DEFAULT_MAVLINK2REST_URL = f"http://{DEFAULT_LOOPBACK_HOST}:{PORT_MAVLINK2REST}"
 DEFAULT_DRONE_UID = "uav-1"
-DEFAULT_FTS_TRACKS_URL = "http://127.0.0.1:19023/ManageGeoObject/getCoTGeoObject"
+DEFAULT_FTS_TRACKS_URL = (
+    f"http://{DEFAULT_LOOPBACK_HOST}:{PORT_FTS_REST}/ManageGeoObject/getCoTGeoObject"
+)
 
 
 class DroneState(BaseModel):

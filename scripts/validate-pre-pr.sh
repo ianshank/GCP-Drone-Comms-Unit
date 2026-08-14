@@ -172,6 +172,10 @@ step_bind_guard() {
   python tools/claude_hooks/bind_guard.py 2>&1
 }
 
+step_literal_guard() {
+  python tools/claude_hooks/literal_guard.py 2>&1
+}
+
 step_workforce() {
   python tools/validate_workforce.py 2>&1
 }
@@ -228,6 +232,7 @@ run_step "Python test suite (meshsa)"       step_py_test
 run_step "Python test suite (jetson_yolo_gcs)" step_py_test_jetson
 run_step "Governance hook tests"     step_governance_tests
 run_step "Bind guard"                step_bind_guard
+run_step "Literal guard"             step_literal_guard
 run_step "Workforce roster lint"     step_workforce
 run_step "Tool-pin sync"             step_tool_pins
 run_step "Task-checkbox sync (advisory)" step_task_sync

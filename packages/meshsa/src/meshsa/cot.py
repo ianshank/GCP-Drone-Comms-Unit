@@ -15,6 +15,7 @@ from typing import Any
 import structlog
 from pydantic import ValidationError
 
+from .defaults import DEFAULT_COT_STALE_S
 from .errors import MeshSAError
 from .models import UNKNOWN_ERROR_M, Detection, Envelope, MessageKind, Position, Telemetry
 from .registry import codec_registry
@@ -40,7 +41,7 @@ class CotCodec:
     def __init__(
         self,
         *,
-        stale_s: float = 120.0,
+        stale_s: float = DEFAULT_COT_STALE_S,
         how: str = "m-g",
         pli_type: str = "a-f-G-U-C",
         chat_type: str = "b-t-f",
