@@ -6,8 +6,8 @@ Please report suspected security vulnerabilities **privately** rather than via p
 issues:
 
 1. Open a private security advisory on GitHub
-   (`Security` -> `Advisories` -> `Report a vulnerability`), OR
-2. Email the maintainers (replace with a real address before public release).
+   (`Security` -> `Advisories` -> `Report a vulnerability`) — this is the preferred,
+   always-available channel and reaches the maintainers directly.
 
 Include:
 - A description of the vulnerability and its impact.
@@ -32,5 +32,5 @@ mitigation within 30 days, depending on severity.
 
 ## Supported versions
 
-The project is at `0.2.0` and is pre-1.0. Only the latest commit on `main` is
+The project is pre-1.0 (`meshsa` 0.3.0). Only the latest commit on `main` is
 currently supported for security fixes.

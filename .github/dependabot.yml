@@ -1,0 +1,19 @@
+# Keeps the exact tool pins (ruff/mypy in the package [dev] extras, SHA-pinned workflow
+# actions) from rotting: pins without update automation are staleness by design.
+# tools/check_tool_pins.py fails CI if a pyproject pin and the pre-commit rev diverge,
+# so a dependabot bump of one surfaces the required bump of the other.
+# The pnpm workspace is intentionally absent until its CI job lands (T-2.3b).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /packages/meshsa
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /packages/jetson_yolo_gcs
+    schedule:
+      interval: weekly

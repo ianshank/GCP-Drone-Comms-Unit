@@ -1,0 +1,3 @@
+# Default owner for every file: review requests route here automatically.
+# Scoped AGENTS.md files govern agent behavior; this file governs human review.
+* @ianshank

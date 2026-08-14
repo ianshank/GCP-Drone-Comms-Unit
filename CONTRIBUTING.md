@@ -54,6 +54,24 @@ AI coding agents should read [AGENTS.md](AGENTS.md) first, then any nested
 - Update `CHANGELOG.md` under `## [Unreleased]` for any user-visible change.
 - Run `pre-commit run -a` and `make test lint type` locally before pushing.
 
+### Required checks
+
+A PR is mergeable when every `ci` workflow job is green: `test` (py3.10–3.12: ruff,
+mypy, pytest with the coverage gate, build), `perception` (same for
+`packages/jetson_yolo_gcs`), `governance` (hook tests, `bind_guard`, workforce lint,
+gitleaks), and `shell` lint. Branch protection on `main` is expected to require these
+four checks plus a CODEOWNERS review; pushing directly to `main` is blocked locally by
+pre-commit (`no-commit-to-branch`).
+
+### Flaky-test policy
+
+Per-PR CI is deterministic by construction: Hypothesis runs the derandomized `ci`
+profile, and the link-loss fuzz uses a fixed seed. The `nightly` workflow explores
+randomized inputs (`HYPOTHESIS_PROFILE=nightly`, `print_blob` on). A nightly failure
+files/updates a `nightly soak/fuzz failure` issue automatically; triage it within a
+day using the `@reproduce_failure` decorator from the log. Do not retry-until-green:
+a red on the derandomized profile is a real regression, never flake.
+
 ## Backward compatibility
 
 Wire-format changes go through `meshsa.version`:
