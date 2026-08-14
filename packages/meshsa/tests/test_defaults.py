@@ -9,7 +9,7 @@ from pathlib import Path
 
 from meshsa import defaults, netauth
 from meshsa.cli import parse_args
-from meshsa.config import HealthConfig, NodeConfig, RouterConfig, ScoutConfig
+from meshsa.config import HealthConfig, NemotronConfig, NodeConfig, RouterConfig, ScoutConfig
 from meshsa.transports.detection_ingest import DetectionIngestTransport
 from meshsa.transports.tak import TakMulticastTransport, TakTcpTransport
 from meshsa.ui.config import UIConfig
@@ -77,6 +77,17 @@ def test_pinned_literal_values_are_preserved():
     assert defaults.DEFAULT_MULTICAST_IFACE == "0.0.0.0"
     assert defaults.DEFAULT_COT_STALE_S == 120.0
     assert defaults.DEFAULT_PLI_INTERVAL_S == 30.0
+    assert defaults.DEFAULT_INFERENCE_BACKOFF_MAX_S == 30.0
+    assert defaults.DEFAULT_INFERENCE_BACKOFF_BASE == 2.0
+
+
+def test_inference_and_transport_backoff_stay_independent_knobs():
+    # defaults.py argues these are separate policies that merely agree today. Equal
+    # values make that claim invisible to any value assertion, so pin it structurally:
+    # aliasing one to the other would couple radio reconnect tuning to LLM retries.
+    src = Path(inspect.getfile(defaults)).read_text(encoding="utf-8")
+    assert "DEFAULT_INFERENCE_BACKOFF_MAX_S = DEFAULT_BACKOFF_MAX_S" not in src
+    assert "DEFAULT_INFERENCE_BACKOFF_BASE = DEFAULT_BACKOFF_FACTOR" not in src
 
 
 def test_host_constants_pinned_and_semantically_loopback():
@@ -152,6 +163,10 @@ def test_config_model_defaults_adopt_the_table():
     cfg = NodeConfig(uid="u", callsign="c")
     assert cfg.pli_interval_s == defaults.DEFAULT_PLI_INTERVAL_S
     assert cfg.default_stale_s == defaults.DEFAULT_COT_STALE_S
+    # NemotronConfig declares its defaults via Field(default=...), the shape that
+    # silently evaded literal_guard's magics rule until T-2.8's Field() unwrap.
+    assert NemotronConfig().backoff_max_s == defaults.DEFAULT_INFERENCE_BACKOFF_MAX_S
+    assert NemotronConfig().backoff_base == defaults.DEFAULT_INFERENCE_BACKOFF_BASE
 
 
 def test_cli_argparse_defaults_adopt_the_table(monkeypatch):

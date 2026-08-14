@@ -111,6 +111,36 @@ def test_unreachable_baseline_is_not_a_failure(tmp_path: Path) -> None:
     assert main(["--repo-root", str(repo), "--baseline", "deadbeefdeadbeef"]) == 0
 
 
+def test_capital_x_and_asterisk_bullets_are_recognised(tmp_path: Path) -> None:
+    # Both are valid GitHub-flavored Markdown; treating them as "no checkbox" reported
+    # a landed task as "not found in any bundle" instead of reconciling it.
+    repo, _ = _repo_with_bundle(tmp_path, "- [X] T-1.1 caps\n* [x] T-1.2 star bullet\n")
+    states = bundle_checkbox_states(repo)
+    assert list(states["T-1.1"].values()) == [True]
+    assert list(states["T-1.2"].values()) == [True]
+
+
+def test_duplicate_id_in_one_file_resolves_to_unchecked(tmp_path: Path) -> None:
+    # Keyed by path, so last-write-wins would silently pick one mark. An id listed
+    # checked in one phase and unchecked in another must not report a confident "done".
+    repo, _ = _repo_with_bundle(tmp_path, "- [x] T-1.1 phase A\n- [ ] T-1.1 phase B\n")
+    states = bundle_checkbox_states(repo)
+    assert list(states["T-1.1"].values()) == [False]
+
+
+def test_archived_bundles_are_reconciled_too(tmp_path: Path) -> None:
+    # Nothing exercised the archive glob, so deleting it survived every test.
+    repo, baseline = _repo_with_bundle(tmp_path, "- [x] T-1.1 active\n")
+    arch = repo / "openspec/changes/archive/2026-08-01-old"
+    arch.mkdir(parents=True)
+    (arch / "tasks.md").write_text("- [ ] T-9.9 archived, unchecked\n", encoding="utf-8")
+    (repo / "f.txt").write_text("x", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "T-9.9: landed against an archived bundle")
+    warnings, _ = reconcile(repo, baseline)
+    assert any("T-9.9" in w and "still unchecked" in w for w in warnings)
+
+
 def test_indented_checkbox_is_seen(tmp_path: Path) -> None:
     # The line regex is ^-anchored; gating .strip() on the line already being
     # unindented made every indented sub-task invisible, so a landed-but-unchecked

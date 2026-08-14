@@ -105,7 +105,10 @@ def subject_task_ids(subject: str) -> list[str]:
 def bundle_checkbox_states(repo_root: Path) -> dict[str, dict[Path, bool]]:
     """``{task_id: {bundle_path: checked}}`` across every bundle tasks.md."""
     states: dict[str, dict[Path, bool]] = {}
-    line_re = re.compile(r"^- \[(?P<mark>[ x])\] (?P<id>T-\d+\.\d+[a-z]?)\b")
+    # `[X]` is valid GitHub-flavored Markdown for a checked box, and `*` is a valid
+    # bullet — treating either as "no checkbox here" silently reported a landed task as
+    # "not found in any bundle" rather than reconciling it.
+    line_re = re.compile(r"^[-*] \[(?P<mark>[ xX])\] (?P<id>T-\d+\.\d+[a-z]?)\b")
     for pattern in BUNDLE_GLOBS:
         for tasks_md in repo_root.glob(pattern):
             for line in tasks_md.read_text(encoding="utf-8").splitlines():
@@ -113,8 +116,17 @@ def bundle_checkbox_states(repo_root: Path) -> dict[str, dict[Path, bool]]:
                 # sub-task ("  - [ ] T-1.2 ...") was silently invisible when the
                 # strip was gated on the line already being unindented.
                 match = line_re.match(line.strip())
-                if match:
-                    states.setdefault(match.group("id"), {})[tasks_md] = match.group("mark") == "x"
+                if not match:
+                    continue
+                checked = match.group("mark").lower() == "x"
+                seen = states.setdefault(match.group("id"), {})
+                if tasks_md in seen and seen[tasks_md] != checked:
+                    # Same id listed twice in one file with different marks: last-write-
+                    # wins would silently pick one. Record the ambiguity as unchecked so
+                    # reconcile() surfaces it rather than reporting a confident answer.
+                    seen[tasks_md] = False
+                else:
+                    seen.setdefault(tasks_md, checked)
     return states
 
 

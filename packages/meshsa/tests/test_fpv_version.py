@@ -13,6 +13,15 @@ def test_window_is_self_consistent():
     assert fv.MIN_COMPATIBLE_DATASET <= fv.DATASET_SCHEMA
 
 
+def test_window_endpoints_are_exclusive_boundaries():
+    # Replaces the frozenset-identity assertion that went with SUPPORTED_DATASET_SCHEMAS
+    # in T-5.1a: without this, `test_window_is_self_consistent` is just `1 <= 2`.
+    assert not fv.is_dataset_compatible(fv.MIN_COMPATIBLE_DATASET - 1)
+    assert not fv.is_dataset_compatible(fv.DATASET_SCHEMA + 1)
+    assert fv.is_dataset_compatible(fv.MIN_COMPATIBLE_DATASET)
+    assert fv.is_dataset_compatible(fv.DATASET_SCHEMA)
+
+
 @pytest.mark.parametrize("v", list(range(fv.MIN_COMPATIBLE_DATASET, fv.DATASET_SCHEMA + 1)))
 def test_supported_schemas_are_compatible(v):
     assert fv.is_dataset_compatible(v)

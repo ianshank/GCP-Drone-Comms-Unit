@@ -6,6 +6,9 @@ All inputs are pinned (ts/msg_id/stale_s) so encodings are deterministic.
 
 import os
 import pathlib
+import sys
+
+import pytest
 
 from meshsa import CompactCodec, CotCodec, Envelope, JsonCodec, MessageKind
 
@@ -87,3 +90,22 @@ def test_rich_json_snapshot():
 
 def test_rich_cot_snapshot():
     _check("pli_rich.cot.xml", CotCodec(stale_s=120.0).encode(_canonical_rich_pli()))
+
+
+def test_snapshot_regen_refuses_under_ci(monkeypatch, tmp_path):
+    # The guard exists because MESHSA_UPDATE_SNAPSHOTS leaking into a CI environment
+    # would make every wire-format assertion rewrite its own golden file and pass.
+    # It lives on a `# pragma: no cover` dev path, so without this test it never runs.
+    monkeypatch.setenv("MESHSA_UPDATE_SNAPSHOTS", "1")
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setattr(sys.modules[__name__], "_SNAP", tmp_path)
+    with pytest.raises(RuntimeError, match="refusing to regenerate"):
+        _check("probe.bin", b"x")
+
+
+def test_snapshot_regen_allowed_locally(monkeypatch, tmp_path):
+    monkeypatch.setenv("MESHSA_UPDATE_SNAPSHOTS", "1")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(sys.modules[__name__], "_SNAP", tmp_path)
+    _check("probe.bin", b"x")  # writes rather than asserts
+    assert (tmp_path / "probe.bin").read_bytes() == b"x"

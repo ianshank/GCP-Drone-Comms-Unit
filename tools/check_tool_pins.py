@@ -60,14 +60,28 @@ def pyproject_pins(text: str, rel_path: str) -> dict[str, str]:
 
 
 def precommit_revs(text: str) -> dict[str, str]:
-    """Tool versions pinned by the pre-commit mirror revs (leading ``v`` stripped)."""
-    data = yaml.safe_load(text)
+    """Tool versions pinned by the pre-commit mirror revs (leading ``v`` stripped).
+
+    An empty or comment-only file parses to ``None``, not ``{}`` — calling ``.get`` on
+    that raised an uncaught ``AttributeError``, turning a truncated config into a
+    traceback instead of a reported problem. A repo entry whose ``rev`` is missing or
+    empty is reported as a missing pin (see :func:`check`), not as a distinct version.
+    """
+    data = yaml.safe_load(text) or {}
+    if not isinstance(data, dict):
+        return {}
     revs: dict[str, str] = {}
-    for repo in data.get("repos", []):
+    for repo in data.get("repos") or []:
+        if not isinstance(repo, dict):
+            continue
         url = str(repo.get("repo", ""))
         for suffix, tool in PRECOMMIT_REPOS.items():
             if url.rstrip("/").endswith(suffix):
-                revs[tool] = str(repo.get("rev", "")).lstrip("v")
+                rev = str(repo.get("rev") or "").lstrip("v")
+                if tool in revs and revs[tool] != rev:
+                    revs[tool] = f"CONFLICT({revs[tool]} vs {rev} in .pre-commit-config.yaml)"
+                else:
+                    revs[tool] = rev
     return revs
 
 
@@ -91,12 +105,16 @@ def check(repo_root: Path) -> list[str]:
 
     for tool in TOOLS:
         versions = {name: pins.get(tool) for name, pins in sources.items()}
-        missing = [name for name, version in versions.items() if version is None]
+        # Falsy, not just None: a mirror repo present with an empty/missing `rev` yields
+        # "", which previously escaped the missing check, landed in `present` as a
+        # distinct version, and was then filtered out of the detail string — producing a
+        # "pins disagree" message that listed only the sources that agreed.
+        missing = [name for name, version in versions.items() if not version]
         problems.extend(f"{name}: no exact {tool} pin found" for name in missing)
-        present = {version for version in versions.values() if version is not None}
+        present = {version for version in versions.values() if version}
         if len(present) > 1:
             detail = ", ".join(
-                f"{name}={version}" for name, version in sorted(versions.items()) if version
+                f"{name}={version or '<missing>'}" for name, version in sorted(versions.items())
             )
             problems.append(f"{tool} pins disagree: {detail}")
     return problems

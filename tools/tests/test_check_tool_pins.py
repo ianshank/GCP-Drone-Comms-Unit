@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tools.check_tool_pins import check, main, precommit_revs, pyproject_pins
 
 PYPROJECT_OK = 'dev = [\n    "ruff==0.16.3",\n    "mypy==2.3.0",\n]\n'
@@ -62,6 +64,37 @@ def test_missing_files_fail(tmp_path: Path) -> None:
     problems = check(tmp_path)
     assert any("missing pyproject" in p for p in problems)
     assert any("missing .pre-commit-config.yaml" in p for p in problems)
+
+
+@pytest.mark.parametrize("text", ["", "---\n", "# only a comment\n", "[]\n"])
+def test_empty_precommit_config_is_a_clean_problem_not_a_crash(text: str, tmp_path: Path) -> None:
+    # yaml.safe_load("") is None, not {} — calling .get on it raised an uncaught
+    # AttributeError, so a truncated config produced a traceback instead of a verdict.
+    repo = _write_repo(tmp_path, PYPROJECT_OK, text)
+    problems = check(repo)
+    assert any("no exact ruff pin" in p for p in problems)
+    assert main(["--repo-root", str(repo)]) == 1
+
+
+def test_repo_entry_without_a_rev_reports_a_missing_pin_and_names_the_file(
+    tmp_path: Path,
+) -> None:
+    pc = "repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    hooks: []\n"
+    repo = _write_repo(tmp_path, PYPROJECT_OK, pc)
+    problems = check(repo)
+    assert any("no exact ruff pin" in p and ".pre-commit-config.yaml" in p for p in problems)
+
+
+def test_duplicate_mirror_repos_conflict_like_duplicate_pyproject_pins() -> None:
+    text = (
+        PRECOMMIT_OK
+        + """
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks: [{id: ruff}]
+"""
+    )
+    assert precommit_revs(text)["ruff"].startswith("CONFLICT(")
 
 
 def test_real_repo_is_in_sync() -> None:

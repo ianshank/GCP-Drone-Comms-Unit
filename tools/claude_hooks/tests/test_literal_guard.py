@@ -158,6 +158,58 @@ class TestMagicsRule:
         assert scan_file(source, "a.py", PORTS) == []
 
 
+class TestMagicsBindingShapes:
+    """Mutation-driven: every earlier fixture was a single-parameter module-scope def,
+    so the suffix-slice pairing of args to defaults was never actually exercised."""
+
+    def test_multi_parameter_signature_picks_the_right_default(self) -> None:
+        # The shape of DetectionIngestTransport.__init__: leading params without
+        # defaults, then the magic one. A prefix slice instead of a suffix slice pairs
+        # `queue_maxsize` with the wrong value and this is what catches it.
+        source = "def f(host, port, queue_maxsize=1000): ...\n"
+        assert [(f.rule, f.line) for f in scan_file(source, "a.py", PORTS)] == [("magics", 1)]
+
+    def test_async_def_and_positional_only_are_scanned(self) -> None:
+        source = "async def a(queue_maxsize: int = 1000): ...\ndef p(backoff_max_s=30.0, /): ...\n"
+        assert [f.rule for f in scan_file(source, "a.py", PORTS)] == ["magics", "magics"]
+
+    def test_required_keyword_only_arg_has_no_default(self) -> None:
+        source = "def g(*, queue_maxsize, backoff_max_s=30.0): ...\n"
+        assert [f.line for f in scan_file(source, "a.py", PORTS)] == [1]
+
+
+class TestRuleScopeIsWholeFile:
+    def test_port_and_host_inside_a_function_body_are_flagged(self) -> None:
+        # Literals hide inside call arguments in real code, not just at module scope.
+        source = 'def run():\n    sock.bind(("0.0.0.0", 8100))\n'
+        assert {f.rule for f in scan_file(source, "a.py", PORTS)} == {"hosts", "ports"}
+
+    def test_tcp_endpoint_schemes_are_flagged_like_udp(self) -> None:
+        source = 'a = "tcpin:0.0.0.0:5760"\nb = "tcpout:10.0.0.1:5760"\n'
+        assert [f.rule for f in scan_file(source, "a.py", PORTS)].count("endpoints") == 2
+
+
+class TestKnownNonDetections:
+    """Pin the shapes the rules deliberately do NOT reach, so widening is a decision
+    someone makes on purpose rather than a silent behavior change."""
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "f = lambda queue_maxsize=1000: 0\n",
+            "class C:\n    def __init__(self):\n        self.backoff_max_s = 30.0\n",
+            "backoff_initial_s, backoff_max_s = 1.0, 30.0\n",
+            "queue_maxsize: int = Field(default_factory=lambda: 1000)\n",
+            'h = "::"\n',
+        ],
+    )
+    def test_uncovered_binding_shapes_are_documented(self, source: str) -> None:
+        assert scan_file(source, "a.py", PORTS) == []
+
+    def test_field_wrapper_without_a_default_is_not_a_finding(self) -> None:
+        assert scan_file("queue_maxsize: int = Field(ge=1)\n", "a.py", PORTS) == []
+
+
 class TestSyntaxError:
     def test_unparsable_file_is_a_finding(self) -> None:
         findings = scan_file("def broken(:\n", "a.py", PORTS)
@@ -308,6 +360,17 @@ class TestLoaderIntegration:
         )
         with pytest.raises(GovernanceConfigError, match="rule"):
             load_governance(config_path)
+
+    def test_real_repo_scans_clean_under_the_checked_in_policy(self) -> None:
+        # The T-3.5a sweep's invariant was enforced only by the CI step; this makes the
+        # checked-in tree's cleanliness a test assertion in its own right.
+        root = Path(__file__).resolve().parents[3]
+        config = load_governance(root / ".claude" / "governance.yaml").literal_guard
+        assert config is not None
+        violations, excepted, scanned = scan_repo(root, config)
+        assert violations == [], [v.render() for v in violations]
+        assert scanned > 100, "scan globs no longer select the tree"
+        assert excepted, "declared waivers stopped being reported"
 
     def test_real_repo_governance_config_is_valid(self) -> None:
         # The checked-in .claude/governance.yaml must always satisfy the loader —
