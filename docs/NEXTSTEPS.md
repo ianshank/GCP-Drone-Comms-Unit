@@ -43,12 +43,16 @@
       production entry point uses them. Either wire an entry point or amend the charter
       to retire the capability; a hygiene commit must not decide this (§6).
 - [ ] **Maintainer decision: whitespace-only bearer tokens.** `netauth.validate_bind`
-      accepts `"   "` as a credential (`not token` is falsy-only); the HTTP surfaces
-      normalize whitespace→None at their config layer, the transport-options path
-      (`mavlink_source`, `detection_ingest`) does not. Documented by
+      accepts `"   "` as a credential (`not token` is falsy-only). Normalization is
+      uneven, so the consequence differs by surface: `llm/server.py::resolve_config`
+      and `ui/config.py` map whitespace→`None` and refuse; `scout/cli.py`'s
+      `station_token or None` normalizes empty only, so a whitespace token binds but
+      is unmatchable (`netauth.authorize` strips the presented credential, not the
+      configured one) — denial, not exposure; the transport-options path
+      (`mavlink_source`, `detection_ingest`) neither normalizes nor authenticates
+      datagrams, and is the variant that actually widens a bind. Documented by
       `test_mavlink_source.py::test_whitespace_token_currently_accepted_documented_gap`;
-      decide normalize-in-netauth vs document-as-is (a behavior change on a pathological
-      input either way).
+      decide normalize-in-`netauth` (one place, covers all four) vs document-as-is.
 - [x] **T-0 — Spec + preconditions:** OpenSpec bundle authored; CHARTER §3 jetson-amendment
       wording drafted for maintainer ratification.
 - [x] **T-1 — Six verified bug fixes:** `meshsa.ui` `/api/*` responses now carry

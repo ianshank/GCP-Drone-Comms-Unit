@@ -213,11 +213,19 @@ def test_extract_endpoint_host_and_bind_validation():
 def test_whitespace_token_currently_accepted_documented_gap():
     # Salvaged from the retired deliverables suite before its deletion (T-10.2a):
     # netauth.validate_bind uses `not token`, so a whitespace-only string is truthy
-    # and passes as a "credential" on a non-loopback bind. The HTTP surfaces
-    # normalize whitespace->None at their config layer; the transport-options path
-    # does not. Documented behavior, pre-existing; the normalization decision is a
-    # NEXTSTEPS backlog item — if validate_bind ever strips whitespace, flip this
-    # test to assert the refusal.
+    # and passes as a "credential" on a non-loopback bind.
+    #
+    # Normalization is uneven, so the consequence differs by surface: llm/server.py
+    # (resolve_config) and ui/config.py map whitespace->None and therefore refuse;
+    # scout/cli.py's `station_token or None` normalizes empty only, so a whitespace
+    # token there binds but can never match (netauth.authorize strips the presented
+    # credential, not the configured one) — denial, not exposure. The transport
+    # options path (here, and detection_ingest) neither normalizes nor authenticates
+    # datagrams, so this is the variant that actually widens a bind.
+    #
+    # Documented behavior, pre-existing; the normalization decision is a NEXTSTEPS
+    # maintainer item — if validate_bind ever strips whitespace, flip this test to
+    # assert the refusal.
     t = MavlinkSourceTransport(
         name="d",
         connection=FakeConn(),

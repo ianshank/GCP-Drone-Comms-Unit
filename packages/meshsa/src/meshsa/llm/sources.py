@@ -23,7 +23,7 @@ from typing import Any, Protocol
 import structlog
 from pydantic import BaseModel
 
-from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_FTS_REST, PORT_MAVLINK2REST
+from ..defaults import DEFAULT_LOCAL_TARGET_HOST, PORT_FTS_REST, PORT_MAVLINK2REST
 
 _log = structlog.get_logger("meshsa.llm.sources")
 
@@ -37,11 +37,15 @@ _HDG_UNKNOWN = 65535  # MAVLink sentinel for "heading not available"
 # Default endpoints for the HTTP sources — reused by ``meshsa.llm.server`` when
 # resolving configuration from the environment. Ports come from the service-port
 # table (meshsa.defaults) so it stays the authority for every port this codebase
-# talks to, including external tools' upstream conventions.
-DEFAULT_MAVLINK2REST_URL = f"http://{DEFAULT_LOOPBACK_HOST}:{PORT_MAVLINK2REST}"
+# talks to, including external tools' upstream conventions. These are outbound
+# *connect targets*, so they use DEFAULT_LOCAL_TARGET_HOST, never the bind-side
+# DEFAULT_LOOPBACK_HOST: the two constants are deliberately distinct so a future
+# edit to the bind default (loud — every listener re-validates) can never silently
+# retarget egress (quiet — nothing validates a connect target).
+DEFAULT_MAVLINK2REST_URL = f"http://{DEFAULT_LOCAL_TARGET_HOST}:{PORT_MAVLINK2REST}"
 DEFAULT_DRONE_UID = "uav-1"
 DEFAULT_FTS_TRACKS_URL = (
-    f"http://{DEFAULT_LOOPBACK_HOST}:{PORT_FTS_REST}/ManageGeoObject/getCoTGeoObject"
+    f"http://{DEFAULT_LOCAL_TARGET_HOST}:{PORT_FTS_REST}/ManageGeoObject/getCoTGeoObject"
 )
 
 

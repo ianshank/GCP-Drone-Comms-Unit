@@ -173,10 +173,11 @@ jobs:
           pip install pydantic==2.13.4 pyyaml==6.0.3 pytest==9.1.1 pytest-cov==7.1.0
 
       - name: Governance hook tests (coverage report-only)
-        # Coverage is measured, not gated, for the tools tree (baseline 91% on
-        # 2026-08-14; scope_freeze.py is subprocess-tested and reads low until it gains
-        # in-process tests — tracked in the code-hygiene-modularity bundle). A floor is
-        # set once the number is stable.
+        # Coverage is measured, not gated, for the tools tree: scope_freeze.py is
+        # subprocess-tested and reads low until it gains in-process tests (tracked in
+        # the code-hygiene-modularity bundle), so a floor set today would encode that
+        # artifact. The step summary carries the current number; a floor lands once it
+        # is stable (measure-first, then gate).
         run: |
           python -m pytest tools/claude_hooks/tests tools/tests -q \
             --cov=tools/claude_hooks --cov-report=term | tee /tmp/tools-cov.txt

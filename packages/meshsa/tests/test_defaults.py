@@ -3,7 +3,9 @@ table (code-hygiene-modularity T-1.4, pins and adoption asserts T-2.8/T-3.5a).""
 
 from __future__ import annotations
 
+import ast
 import inspect
+from pathlib import Path
 
 from meshsa import defaults, netauth
 from meshsa.cli import parse_args
@@ -87,6 +89,39 @@ def test_host_constants_pinned_and_semantically_loopback():
     assert netauth.is_loopback(defaults.DEFAULT_LOOPBACK_HOST)
     assert defaults.DEFAULT_LOCAL_TARGET_HOST == "127.0.0.1"
     assert netauth.is_loopback(defaults.DEFAULT_LOCAL_TARGET_HOST)
+
+
+#: Modules that only ever *connect out* — they open no listener, so importing the
+#: bind-side default would be a category error. Keeping them free of that import is
+#: the only mechanical guard available: both host constants hold "127.0.0.1", so a
+#: value assertion cannot tell a misuse from correct code (this test exists because
+#: llm/sources.py did exactly that and no value test noticed).
+_CLIENT_ONLY_MODULES = ("llm/sources.py",)
+
+
+def _imported_names(module_rel_path: str) -> set[str]:
+    src_root = Path(inspect.getfile(defaults)).parent
+    tree = ast.parse((src_root / module_rel_path).read_text(encoding="utf-8"))
+    return {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+
+
+def test_client_only_modules_never_import_the_bind_host_default():
+    for rel_path in _CLIENT_ONLY_MODULES:
+        imported = _imported_names(rel_path)
+        assert "DEFAULT_LOOPBACK_HOST" not in imported, (
+            f"{rel_path} opens no listener; an outbound target must use "
+            f"DEFAULT_LOCAL_TARGET_HOST so a future edit to the bind default "
+            f"(loud — every listener re-validates) cannot silently retarget egress"
+        )
+        assert "DEFAULT_LOCAL_TARGET_HOST" in imported, (
+            f"{rel_path} should source its connect-target host from "
+            f"defaults.DEFAULT_LOCAL_TARGET_HOST"
+        )
 
 
 def _default_of(cls: type, param: str) -> object:

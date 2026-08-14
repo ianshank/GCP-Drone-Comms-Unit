@@ -12,6 +12,11 @@ out/
 
 # ── Test & coverage ───────────────────────────────────────────────────────────
 coverage/
+# `--cov-report=xml` (CI, and any local CI-parity run) writes coverage.xml into the
+# package directory; it is a build artifact uploaded by actions/upload-artifact, never
+# committed.
+coverage.xml
+htmlcov/
 .vitest-cache/
 .vitest/
 html/
