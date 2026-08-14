@@ -32,8 +32,9 @@ ratified extension (see [CHARTER.md](CHARTER.md) §3).
 ### M1 — Telemetry → CoT MVP (done)
 `mavlink_source` + `msp_source` + `crsf_source` + `telemetry`/`cot` codecs → CoT **air** tracks;
 FreeTAKServer on the unit; verified end-to-end on hardware. FPV ground-side subsystem
-(`meshsa.fpv`) with CRSF link health, flight logging, camera capture, and the pre-flight
-`ArmGuard` interlock.
+(`meshsa.fpv`) with CRSF link health, flight logging, and the pre-flight `ArmGuard`
+interlock. (Its camera-capture module was retired in `code-hygiene-modularity` T-5.1a —
+the live capture path is `packages/jetson_yolo_gcs`'s `streaming/camera.py`.)
 
 ### M2 — Hardening & productization (in progress)
 TLS CoT (`:8089`) + signed ATAK data packages; transport/endpoint **authentication**;

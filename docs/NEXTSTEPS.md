@@ -329,9 +329,12 @@ Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
 - [x] **Human sign-off on the CHARTER §3 carve-out** (RC-TX scope expansion) — ratified 2026-06-12.
 - [ ] Bench validation (§8): live LinkStats on hardware, voltage calibration, ratio sweep,
       antenna-removal transitions, `!FS!` end-to-end — thresholds remain provisional until then.
-- [x] Phase 2: camera wired into the existing `frames.jsonl`/`video` stub via a `CaptureWriter`
-      daemon (`fpv/camera.py`) reading an injected `CameraSource` — additive, `DATASET_SCHEMA`
-      stays 2; only the capture backend is `# pragma: no cover` glue (shipped, see ARCHITECTURE).
+- [x] ~~Phase 2: camera wired into the existing `frames.jsonl`/`video` stub via a
+      `CaptureWriter` daemon (`fpv/camera.py`).~~ **Removed in `code-hygiene-modularity`
+      T-5.1a**: never wired to a production entry point, and superseded by
+      `packages/jetson_yolo_gcs`'s live `streaming/camera.py`. The `frames.jsonl`/manifest
+      `video` contract is unchanged (`FlightLogger` still takes `video_meta`);
+      `DATASET_SCHEMA` stays 2.
 - [x] Additive `crsf_source` transport so CRSF telemetry becomes an ATAK air track (0.3.0;
       decodes GPS 0x02 → `GpsSensor` → `telemetry` codec; `DATASET_SCHEMA` 1 → 2).
 

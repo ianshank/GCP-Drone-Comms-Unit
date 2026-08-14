@@ -63,8 +63,8 @@ AI coding agents should read [AGENTS.md](AGENTS.md) first, then any nested
 
 A PR is mergeable when every `ci` workflow job is green: `test` (py3.10–3.12: ruff,
 mypy, pytest with the coverage gate, build), `perception` (same for
-`packages/jetson_yolo_gcs`), `governance` (hook tests, `bind_guard`, workforce lint,
-gitleaks), and `shell` lint. Branch protection on `main` is expected to require these
+`packages/jetson_yolo_gcs`), `governance` (hook tests, `bind_guard`, `literal_guard`,
+workforce lint, tool-pin sync, gitleaks), and `shell` lint. Branch protection on `main` is expected to require these
 four checks plus a CODEOWNERS review; pushing directly to `main` is blocked locally by
 pre-commit (`no-commit-to-branch`).
 

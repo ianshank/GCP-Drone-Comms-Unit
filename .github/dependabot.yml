@@ -9,6 +9,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Required, not optional: check_tool_pins.py fails CI when a pyproject ruff/mypy pin
+  # and the matching pre-commit rev disagree. Without this ecosystem dependabot could
+  # only ever move one side, so every ruff/mypy bump PR would land red and need a hand
+  # edit. With both enabled the two PRs are each red alone and green once merged as a
+  # pair — that is the intended signal.
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
   - package-ecosystem: pip
     directory: /packages/meshsa
     schedule:

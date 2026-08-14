@@ -22,6 +22,15 @@ DEFAULT_BACKOFF_INITIAL_S = 1.0
 DEFAULT_BACKOFF_MAX_S = 30.0
 DEFAULT_BACKOFF_FACTOR = 2.0
 
+#: Retry policy for the inference HTTP client. Numerically equal to the transport
+#: reconnect schedule above, but deliberately a SEPARATE pair: a reconnecting radio
+#: transport and an outbound model API are different policies that happen to agree
+#: today, and sharing one constant would make a transport tuning change silently
+#: retune inference retries. (Same reasoning as DEFAULT_LOOPBACK_HOST vs
+#: DEFAULT_LOCAL_TARGET_HOST — equal values, independent knobs.)
+DEFAULT_INFERENCE_BACKOFF_MAX_S = 30.0
+DEFAULT_INFERENCE_BACKOFF_BASE = 2.0
+
 #: Default MAVLink source endpoint (a local, listening UDP port — the common SITL/companion
 #: computer convention).
 DEFAULT_MAVLINK_ENDPOINT = "udpin:127.0.0.1:14550"

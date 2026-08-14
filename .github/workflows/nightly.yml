@@ -53,18 +53,33 @@ jobs:
 
       - name: Surface failure as an issue
         if: failure()
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -uo pipefail
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          body="Nightly soak/fuzz run failed: ${run_url}
-          Hypothesis ran the randomized 'nightly' profile with print_blob on — for a
-          property-test failure the job log contains a @reproduce_failure decorator.
-          Triage owner: repo maintainer (see CONTRIBUTING.md flaky-test policy)."
-          num=$(gh issue list --state open --search "in:title nightly soak/fuzz failure" \
-            --json number --jq '.[0].number' || true)
-          if [ -n "$num" ]; then
-            gh issue comment "$num" --body "$body"
+          # Emit the triage pointer before touching the API: if gh is unavailable or
+          # unauthorized, the operator still gets the run URL from the log.
+          echo "::notice title=Nightly soak/fuzz failed::${run_url}"
+          body=$(printf '%s\n' \
+            "Nightly soak/fuzz run failed: ${run_url}" \
+            "Hypothesis ran the randomized 'nightly' profile with print_blob on — for a" \
+            "property-test failure the job log contains a @reproduce_failure decorator." \
+            "Triage owner: repo maintainer (see CONTRIBUTING.md flaky-test policy).")
+          # `first(.[].number) // empty` yields an EMPTY string when nothing matches.
+          # `.[0].number` yields the literal string "null", which passes `[ -n ]` and
+          # sends `gh issue comment null` — so the very first failure (the case with no
+          # open issue yet) would never file one.
+          if ! num=$(gh issue list --state open --search "in:title nightly soak/fuzz failure" \
+              --json number --jq 'first(.[].number) // empty'); then
+            echo "::warning title=Issue filing skipped::gh issue list failed (auth/rate limit?); failure is at ${run_url}"
+            exit 0
+          fi
+          if [ -n "${num}" ]; then
+            gh issue comment "${num}" --body "${body}" \
+              || echo "::warning title=Issue filing skipped::gh issue comment on #${num} failed"
           else
-            gh issue create --title "nightly soak/fuzz failure" --body "$body"
+            gh issue create --title "nightly soak/fuzz failure" --body "${body}" \
+              || echo "::warning title=Issue filing skipped::gh issue create failed"
           fi

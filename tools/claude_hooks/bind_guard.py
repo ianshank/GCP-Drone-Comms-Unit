@@ -70,7 +70,10 @@ LISTENER_TRIGGERS: Final[frozenset[str]] = frozenset(
 #: T-2.4: widened to include tools/ (but excluding tests and the linter itself).
 SCAN_GLOBS: Final[tuple[str, ...]] = (
     "packages/**/src/**/*.py",
-    "flightctl/*.py",
+    # Recursive, matching literal_guard: the one-level `flightctl/*.py` form left
+    # flightctl/sim/ (and any future subpackage) invisible to the bind guard, while
+    # tasks.md T-2.4 recorded the recursive form as landed.
+    "flightctl/**/*.py",
     "tools/**/*.py",
 )
 

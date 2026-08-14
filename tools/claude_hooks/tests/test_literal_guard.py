@@ -126,6 +126,37 @@ class TestMagicsRule:
         source = "def f(queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE): ...\n"
         assert scan_file(source, "a.py", PORTS) == []
 
+    def test_pydantic_field_wrapper_is_unwrapped(self) -> None:
+        # Regression: Field(...) is the dominant declaration idiom in this repo, and
+        # the rule silently did nothing for every config model because the bound value
+        # is an ast.Call rather than a constant. A live instance (NemotronConfig's
+        # backoff_max_s) sat unflagged through a "clean" run.
+        source = (
+            "class C(BaseModel):\n"
+            "    backoff_max_s: float = Field(default=30.0, ge=0.0)\n"
+            "    queue_maxsize: int = Field(default=500)\n"
+            "    backoff_factor: float = Field(2.0)\n"  # positional default
+        )
+        findings = scan_file(source, "a.py", PORTS)
+        assert [f.rule for f in findings] == ["magics"] * 3
+
+    def test_field_wrapper_with_symbolic_default_is_clean(self) -> None:
+        source = (
+            "class C(BaseModel):\n"
+            "    backoff_max_s: float = Field(default=DEFAULT_BACKOFF_MAX_S, ge=0.0)\n"
+            "    queue_maxsize: int = Field(default=DEFAULT_QUEUE_MAXSIZE)\n"
+        )
+        assert scan_file(source, "a.py", PORTS) == []
+
+    def test_dataclass_field_wrapper_is_unwrapped(self) -> None:
+        source = "@dataclass\nclass C:\n    queue_maxsize: int = field(default=1000)\n"
+        assert [f.rule for f in scan_file(source, "a.py", PORTS)] == ["magics"]
+
+    def test_non_field_call_default_is_not_unwrapped(self) -> None:
+        # A computed default is not a re-typed literal; only Field/field unwrap.
+        source = "class C:\n    queue_maxsize: int = compute_size(1000)\n"
+        assert scan_file(source, "a.py", PORTS) == []
+
 
 class TestSyntaxError:
     def test_unparsable_file_is_a_finding(self) -> None:

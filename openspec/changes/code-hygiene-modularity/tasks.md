@@ -58,8 +58,9 @@
       `git mv artifacts/mockup-sandbox lib/api-client-react archive/`; update
       `tsconfig.json`/`pnpm-workspace.yaml`; new CI `ts` job
       (`pnpm install --frozen-lockfile && pnpm -r run typecheck && pnpm -r run lint && pnpm -r run test`).
-      Note: `deliverables/meshsa-ui-validation/tests` (52 tests) deliberately gets no CI
-      leg — the tree retires in T-10.2b.
+      Note: `deliverables/meshsa-ui-validation/tests` (38 tests, after T-10.2a deleted
+      `test_mavlink_bind_guard.py`) deliberately gets no CI leg — the tree retires in
+      T-10.2b.
 - [x] T-2.4 `bind_guard.SCAN_GLOBS` widened to include `flightctl/**/*.py` and
       `tools/**/*.py`, excluding `tools/**/tests/**` and `bind_guard.py` itself
       (design D-9); pre-scan documented before fixes; flip the salvaged
@@ -100,6 +101,16 @@
       reconciliation; advisory, baseline-scoped, multi-bundle-tolerant),
       `.agents/skills/config-literal-sweep/`, reconciliation section in
       `spec-driven-change`, `pre-pr-validator` extension.
+- [ ] T-2.12 Coverage blind spots surfaced by the T-2.7 measurement pass, all
+      measure-first-then-gate: (a) `flightctl/` is mypy'd and ruff'd, and its glue runs
+      under `packages/meshsa`'s suite via `pythonpath`, but `[tool.coverage.run]
+      source = ["meshsa"]` means none of its executed lines are measured — add it to the
+      source list, measure, then set a floor; (b) `tools/` is measured report-only in the
+      governance job — set a floor once `scope_freeze.py`'s subprocess-only tests are
+      replaced with in-process ones; (c) `packages/meshsa/tests/` needs no gate but its
+      `fpv/tools/convert.py` reads ~55% under CI's `[dev,inference]` extras because
+      pyarrow is absent — that path is covered only by the nightly full-extras run, which
+      is worth stating in the test conventions rather than leaving as a surprise.
 - [x] T-2.11 Repo-governance pack: `CODEOWNERS`, PR + issue templates,
       `.github/dependabot.yml` (pip + github-actions), SHA-pinned workflow actions,
       CI gitleaks step, `SECURITY.md` placeholder replaced with GitHub private

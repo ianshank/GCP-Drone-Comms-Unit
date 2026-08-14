@@ -72,16 +72,26 @@ jobs:
         run: pytest -m "not slow" --cov-report=xml
 
       - name: Coverage summary
+        # always(): the gate lives in addopts (--cov-fail-under=97), so the step that
+        # publishes the number would otherwise be skipped in exactly the run where the
+        # number is the failure.
+        if: always()
         working-directory: packages/meshsa
         run: |
           python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-          import xml.etree.ElementTree as ET
-          r = ET.parse("coverage.xml").getroot()
+          import pathlib, sys, xml.etree.ElementTree as ET
+          p = pathlib.Path("coverage.xml")
+          if not p.is_file():
+              print("**meshsa coverage**: coverage.xml not produced (pytest failed before "
+                    "writing it, or --cov-report=xml was dropped)")
+              sys.exit(0)
+          r = ET.parse(p).getroot()
           print(f"**meshsa coverage**: {float(r.get('line-rate'))*100:.2f}% lines, "
                 f"{float(r.get('branch-rate'))*100:.2f}% branches (gate: 97%)")
           EOF
 
       - name: Upload coverage artifact
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-meshsa-py${{ matrix.python }}
@@ -131,16 +141,25 @@ jobs:
         run: pytest --cov-report=xml
 
       - name: Coverage summary
+        # always(): see the meshsa job — the gate is in addopts, so without this the
+        # number is missing from the summary precisely when it caused the failure.
+        if: always()
         working-directory: packages/jetson_yolo_gcs
         run: |
           python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-          import xml.etree.ElementTree as ET
-          r = ET.parse("coverage.xml").getroot()
+          import pathlib, sys, xml.etree.ElementTree as ET
+          p = pathlib.Path("coverage.xml")
+          if not p.is_file():
+              print("**jetson_yolo_gcs coverage**: coverage.xml not produced (pytest failed "
+                    "before writing it, or --cov-report=xml was dropped)")
+              sys.exit(0)
+          r = ET.parse(p).getroot()
           print(f"**jetson_yolo_gcs coverage**: {float(r.get('line-rate'))*100:.2f}% lines, "
                 f"{float(r.get('branch-rate'))*100:.2f}% branches (gate: 96%)")
           EOF
 
       - name: Upload coverage artifact
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-jetson-py${{ matrix.python }}
@@ -178,12 +197,19 @@ jobs:
         # the code-hygiene-modularity bundle), so a floor set today would encode that
         # artifact. The step summary carries the current number; a floor lands once it
         # is stable (measure-first, then gate).
+        #
+        # `shell: bash` is load-bearing, not cosmetic: the default runner shell is
+        # `bash -e` WITHOUT pipefail, so `pytest | tee` would exit with tee's status and
+        # a fully failing suite would report this job green.
+        shell: bash
         run: |
           python -m pytest tools/claude_hooks/tests tools/tests -q \
-            --cov=tools/claude_hooks --cov-report=term | tee /tmp/tools-cov.txt
-          grep -E '^TOTAL' /tmp/tools-cov.txt \
+            --cov=tools --cov-report=term | tee /tmp/tools-cov.txt
+          if ! grep -E '^TOTAL' /tmp/tools-cov.txt \
             | awk '{print "**tools/claude_hooks coverage (report-only)**: " $NF}' \
-            >> "$GITHUB_STEP_SUMMARY" || true
+            >> "$GITHUB_STEP_SUMMARY"; then
+            echo "::warning title=Coverage summary missing::no TOTAL line in the pytest --cov output"
+          fi
 
       - name: Bind guard
         run: python tools/claude_hooks/bind_guard.py

@@ -44,6 +44,43 @@ BUNDLE_GLOBS: Final[tuple[str, ...]] = (
 )
 
 
+def _git_ok(repo_root: Path, *args: str) -> bool:
+    """Whether ``git <args>`` succeeds in ``repo_root`` (no output captured)."""
+    return (
+        subprocess.run(  # noqa: S603 (fixed argv)
+            ["git", *args],
+            cwd=repo_root,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def is_git_repo(repo_root: Path) -> bool:
+    """Whether ``repo_root`` is inside a git work tree at all.
+
+    Kept distinct from :func:`baseline_reachable` so a genuinely broken invocation
+    (run outside a checkout) still reports an operational error, rather than being
+    silently absorbed by the missing-baseline path below.
+    """
+    return _git_ok(repo_root, "rev-parse", "--git-dir")
+
+
+def baseline_reachable(repo_root: Path, baseline: str) -> bool:
+    """Whether ``baseline`` resolves to a commit in this clone.
+
+    It routinely will not: a squash merge replaces the branch's commits (so the
+    recorded SHA vanishes from ``main``), and ``actions/checkout`` defaults to
+    ``fetch-depth: 1``. Both are normal, neither is a checker failure — but
+    ``git log <missing>..HEAD`` exits 128, and validate-pre-pr.sh counts any
+    nonzero as a failed step, which would turn this advisory check into a hard
+    red for every contributor after this branch merges.
+    """
+    return _git_ok(repo_root, "cat-file", "-e", f"{baseline}^{{commit}}")
+
+
 def commit_subjects(repo_root: Path, baseline: str) -> list[str]:
     """Subjects of commits after ``baseline`` up to HEAD (empty list if none)."""
     result = subprocess.run(  # noqa: S603 (fixed argv)
@@ -72,7 +109,10 @@ def bundle_checkbox_states(repo_root: Path) -> dict[str, dict[Path, bool]]:
     for pattern in BUNDLE_GLOBS:
         for tasks_md in repo_root.glob(pattern):
             for line in tasks_md.read_text(encoding="utf-8").splitlines():
-                match = line_re.match(line.strip() if line.startswith("- [") else line)
+                # Strip unconditionally: the regex is ^-anchored, so an INDENTED
+                # sub-task ("  - [ ] T-1.2 ...") was silently invisible when the
+                # strip was gated on the line already being unindented.
+                match = line_re.match(line.strip())
                 if match:
                     states.setdefault(match.group("id"), {})[tasks_md] = match.group("mark") == "x"
     return states
@@ -112,8 +152,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     repo_root = (args.repo_root or Path(__file__).resolve().parents[1]).resolve()
     try:
+        if not is_git_repo(repo_root):
+            print(f"task sync: cannot run: {repo_root} is not a git work tree", file=sys.stderr)
+            return 1
+        if not baseline_reachable(repo_root, args.baseline):
+            print(
+                f"task sync: baseline {args.baseline} is not in this clone "
+                f"(squash merge or shallow checkout); nothing to reconcile"
+            )
+            return 0
         warnings, examined = reconcile(repo_root, args.baseline)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        OSError,
+        UnicodeDecodeError,
+    ) as exc:
         print(f"task sync: cannot run: {exc}", file=sys.stderr)
         return 1
     for warning in warnings:

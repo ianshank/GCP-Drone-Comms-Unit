@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field, model_validator
 from ._parsing import parse_float, parse_int
 from .defaults import (
     DEFAULT_COT_STALE_S,
+    DEFAULT_INFERENCE_BACKOFF_BASE,
+    DEFAULT_INFERENCE_BACKOFF_MAX_S,
     DEFAULT_LOOPBACK_HOST,
     DEFAULT_PLI_INTERVAL_S,
     DEFAULT_QUEUE_MAXSIZE,
@@ -75,8 +77,8 @@ class NemotronConfig(BaseModel):
     max_tokens: int = 512
     timeout_s: float = 30.0
     max_retries: int = 3
-    backoff_base: float = Field(default=2.0, ge=1.0)
-    backoff_max_s: float = Field(default=30.0, ge=0.0)
+    backoff_base: float = Field(default=DEFAULT_INFERENCE_BACKOFF_BASE, ge=1.0)
+    backoff_max_s: float = Field(default=DEFAULT_INFERENCE_BACKOFF_MAX_S, ge=0.0)
     insight_prefix: str = Field(default="[AI Insight]", min_length=1)
     # ── Track-B hardening (spec §5). Every field defaults to the prior behavior:
     #    0 / "" / "text" / () are all no-ops, so an existing deployment is unchanged. ──

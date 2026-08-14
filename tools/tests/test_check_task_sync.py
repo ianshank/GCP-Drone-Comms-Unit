@@ -97,5 +97,24 @@ def test_unknown_and_ambiguous_ids_warn_and_skip(tmp_path: Path) -> None:
 
 
 def test_operational_error_exits_nonzero(tmp_path: Path) -> None:
-    # Not a git repo: the checker cannot run, which is the one nonzero case.
+    # Not a git repo: the checker cannot run, which is the one nonzero case. Kept
+    # distinct from the unreachable-baseline path below, which is routine and exits 0.
     assert main(["--repo-root", str(tmp_path)]) == 1
+
+
+def test_unreachable_baseline_is_not_a_failure(tmp_path: Path) -> None:
+    # A squash merge drops the recorded baseline SHA from main, and CI checkouts are
+    # shallow by default. Both are normal; since validate-pre-pr.sh counts any nonzero
+    # as a failed step, exiting 1 here would turn this advisory check into a hard red
+    # for every contributor the moment the tracking branch merges.
+    repo, _ = _repo_with_bundle(tmp_path, "- [x] T-1.1 done\n")
+    assert main(["--repo-root", str(repo), "--baseline", "deadbeefdeadbeef"]) == 0
+
+
+def test_indented_checkbox_is_seen(tmp_path: Path) -> None:
+    # The line regex is ^-anchored; gating .strip() on the line already being
+    # unindented made every indented sub-task invisible, so a landed-but-unchecked
+    # sub-task reported as "not found in any bundle" instead of "still unchecked".
+    repo, _ = _repo_with_bundle(tmp_path, "- [x] T-1.1 top\n  - [ ] T-1.2 indented sub-item\n")
+    states = bundle_checkbox_states(repo)
+    assert list(states["T-1.2"].values()) == [False]

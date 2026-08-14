@@ -140,12 +140,34 @@ def _num_value(node: ast.expr) -> float | None:
     return None
 
 
+def _unwrap_field_default(value: ast.expr) -> ast.expr:
+    """Unwrap ``Field(default=X, ...)`` / ``field(default=X)`` to ``X``.
+
+    Pydantic's ``Field()`` is the dominant declaration idiom in this repo, so without
+    this the ``magics`` rule silently does nothing for every config model: the bound
+    value is an ``ast.Call``, not a constant, and the numeric check below rejects it.
+    A positional ``Field(30.0)`` is handled too. Anything else is returned unchanged.
+    """
+    if not isinstance(value, ast.Call):
+        return value
+    func = value.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    if name not in ("Field", "field"):
+        return value
+    for keyword in value.keywords:
+        if keyword.arg == "default":
+            return keyword.value
+    if value.args:
+        return value.args[0]
+    return value
+
+
 def _iter_magic_bindings(tree: ast.Module) -> list[tuple[str, ast.expr, int]]:
     """Every (name, default-value expression, line) binding a MAGIC_NAMES name.
 
     Covers function-signature defaults (positional and keyword-only), call keywords
-    (constructor call sites, ``Field(...)``-style), and module/class-level
-    ``name = value`` / ``name: T = value`` assignments.
+    (constructor call sites), and module/class-level ``name = value`` /
+    ``name: T = value`` assignments, unwrapping ``Field(default=...)`` wrappers.
     """
     bindings: list[tuple[str, ast.expr, int]] = []
     for node in ast.walk(tree):
@@ -168,11 +190,13 @@ def _iter_magic_bindings(tree: ast.Module) -> list[tuple[str, ast.expr, int]]:
                 and isinstance(node.target, ast.Name)
                 and node.target.id in MAGIC_NAMES
             ):
-                bindings.append((node.target.id, node.value, node.value.lineno))
+                unwrapped = _unwrap_field_default(node.value)
+                bindings.append((node.target.id, unwrapped, node.value.lineno))
         elif isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id in MAGIC_NAMES:
-                    bindings.append((target.id, node.value, node.value.lineno))
+                    unwrapped = _unwrap_field_default(node.value)
+                    bindings.append((target.id, unwrapped, node.value.lineno))
     return bindings
 
 

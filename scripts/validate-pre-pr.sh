@@ -15,9 +15,17 @@
 #       pyproject.toml/mypy.ini
 #   9.  Python test suite (pytest) — packages/meshsa, and packages/jetson_yolo_gcs
 #       if present (each package's own coverage-gated suite)
-#   10. Governance gate (T-2.2b) — hook tests, bind_guard, workforce roster lint
-#   11. Python syntax check (py_compile) — every *.py under packages/,
+#   10. Governance hook tests (tools/claude_hooks/tests, tools/tests)
+#   11. Bind guard — every listener routes through meshsa.netauth.validate_bind
+#   12. Literal guard — service literals sourced from meshsa/defaults.py
+#   13. Workforce roster lint (.claude/agents)
+#   14. Tool-pin sync — pre-commit revs == pyproject ruff/mypy pins
+#   15. Task-checkbox sync (advisory; warns, never fails the gate)
+#   16. Skills trackable — .gitignore must not re-exclude .agents/skills/
+#   17. Python syntax check (py_compile) — every *.py under packages/,
 #       flightctl/, tools/, deliverables/ (not deliverables/ alone)
+#
+# Steps 10-16 are the T-2.2b governance gate.
 #
 # Usage:
 #   bash scripts/validate-pre-pr.sh

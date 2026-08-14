@@ -189,7 +189,6 @@ for the step-by-step integration guide.
 │   ├── api-client-react/    # React API hooks
 │   └── db/                  # Drizzle ORM schema + client
 ├── scripts/
-│   ├── post-merge.sh        # Post-merge setup (runs after task merges)
 │   ├── validate-pre-pr.sh   # Full pre-PR validation gate
 │   └── hooks/               # Git hook scripts
 ├── Makefile                 # Developer convenience targets
