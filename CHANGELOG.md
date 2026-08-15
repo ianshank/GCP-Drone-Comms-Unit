@@ -8,6 +8,24 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+#### Logging & observability follow-up
+- `transports/base.py::_ingest_nowait` throttles its inbox-full warning (first drop,
+  then every 100th) instead of logging every single dropped frame under sustained
+  backpressure; the log line now also carries the running `dropped_inbox_full` count.
+- `bind_guard.py`'s logger (previously configured but never called) now emits an
+  `INFO` line for every governance-declared bind-guard exception it encounters, so
+  which files run an unguarded listener by policy is visible in output, not just in
+  `.claude/governance.yaml`.
+- `check_tool_pins.py` and `check_task_sync.py` gained `logging` (`DEBUG` on start,
+  `WARNING`/`ERROR` on findings/failures) alongside their existing stdout/stderr
+  output, matching `bind_guard.py`/`literal_guard.py`'s pattern.
+- `netauth.py::validate_bind`'s accept path was audited against this request and left
+  unchanged: `test_validate_bind_does_not_log_when_the_bind_is_allowed` already pins
+  silence-on-accept as the intended behavior (only the fail-closed refusal logs), so
+  adding a log line there would have broken a deliberate, tested design decision
+  rather than closed a gap.
+
 ### Removed (code-hygiene-modularity T-5.1a / T-10.2a / T-2.3a — dead code, no behavior change)
 - `meshsa.fpv.camera` (`CaptureWriter`, `Frame`, the `CameraSource` protocol, and the
   `CameraSettings`/`ProberSettings` config groups) and `AddressProber`/`ProbeResult`: no
@@ -36,6 +54,128 @@ Versions follow [Semantic Versioning](https://semver.org/).
   250-cycle smoke slice of the same fuzz stays per-PR).
 
 ### Added
+
+#### CI/CD determinism & hardening (T-2.7/T-2.9)
+- `ci.yml`/`nightly.yml`: per-ref concurrency groups (`cancel-in-progress` disabled on
+  `main` so bisects stay intact) and explicit `timeout-minutes` on every job.
+- meshsa `Test` step runs `pytest -m "not slow"`; the 5,000-cycle link-loss fuzz moved to
+  a nightly-only `@pytest.mark.slow` per `docs/specs/m2-soak-fuzz.md` §7, with a distinct
+  250-cycle `FUZZ_SMOKE_CYCLES` smoke slice (own seed, `FUZZ_SMOKE_SEED`) staying per-PR —
+  coverage measured identical (99.31%) with/without the slow tests.
+- `nightly.yml` runs the full suite (slow included) under the same 97%/96% coverage
+  gates, exports `HYPOTHESIS_PROFILE=nightly`, and files/updates a GitHub issue on
+  failure instead of failing silently.
+- Coverage visibility: `--cov-report=xml` for both packages, uploaded as CI artifacts,
+  plus a coverage summary line in `$GITHUB_STEP_SUMMARY`. Governance job additionally
+  runs `tools/claude_hooks`+`tools` tests with report-only coverage.
+- `ruff`/`mypy` pinned to the same measured-green versions in both packages' `[dev]`
+  extras and `.pre-commit-config.yaml` (enforced by the new `check_tool_pins.py`, see
+  below); governance-job and test-job pip installs pinned explicitly
+  (`pyyaml==6.0.3`, `types-PyYAML==6.0.12.20260724`) rather than left to transitive
+  resolution.
+- `--strict-markers` added to both packages' pytest `addopts`; Hypothesis `ci`/`nightly`
+  profiles registered in `packages/meshsa/tests/conftest.py` (`derandomize`/
+  `max_examples` differ; `HYPOTHESIS_PROFILE` env var selects).
+- `tests/test_snapshots.py`'s `MESHSA_UPDATE_SNAPSHOTS` regen escape hatch now refuses to
+  run when `CI` is set, instead of silently rewriting golden files.
+- `scripts/validate-pre-pr.sh`: fixed a subshell bug where a failing meshsa suite
+  silently skipped the jetson suite and reported success; added the governance-hook,
+  bind_guard, literal_guard, and validate_workforce steps it previously only documented.
+- Root `Dockerfile`: dropped shell-isms (`2>/dev/null || true`) from `COPY`
+  instructions, which are not interpreted by a shell.
+
+#### Repo-governance pack (T-2.11)
+- `CODEOWNERS`, `.github/pull_request_template.md` (embeds the verification-commands
+  block), minimal bug/feature issue templates.
+- `.github/dependabot.yml` covering `pip` (both packages) and `github-actions`
+  ecosystems, so the new version pins stay current.
+- GitHub Actions in all four workflows pinned to commit SHAs.
+- A `gitleaks` step added to the governance CI job (pre-commit's hook is
+  `--no-verify`-bypassable; CI's copy is not).
+- `SECURITY.md`: replaced the placeholder contact address with GitHub
+  private-vulnerability-reporting instructions.
+
+#### Deterministic validators (T-2.8/T-2.10)
+- `tools/claude_hooks/literal_guard.py`: AST-based checker forbidding re-typed service
+  literals (ports, hosts, queue/backoff magic numbers, transport endpoint strings)
+  outside `meshsa.defaults`; the port set is derived by parsing `defaults.py` rather
+  than hardcoded, queue/backoff matching is name-keyed (value-matching collides with
+  geometry/unit-conversion constants elsewhere), and `Field(default=...)`/`field(...)`
+  defaults are unwrapped so pydantic models are covered too. Exceptions are
+  `{path, rule, rationale}` entries under the new `.claude/governance.yaml`
+  `literal_guard:` section.
+- `tools/check_tool_pins.py`: verifies `ruff`/`mypy` pins agree between both packages'
+  `pyproject.toml` `[dev]` extras and `.pre-commit-config.yaml`; required governance job
+  step.
+- `tools/check_task_sync.py`: advisory reconciliation of OpenSpec bundle checkboxes
+  against git commit history (a landed, still-unchecked task warns but never fails the
+  build — a stale or unreachable baseline, e.g. after a squash-merge, is a routine,
+  zero-exit case, not an operational error).
+- New pinned-literal regression tests in `packages/meshsa/tests/test_defaults.py`:
+  every `PORT_*` value, the queue/backoff triples, `DEFAULT_MAVLINK_ENDPOINT`, and the
+  loopback/local-target host split are asserted against fixed literals (not just
+  cross-checked against the table they're defined in), plus constructor- and
+  argparse-default adoption checks via `inspect.signature`.
+- `tools/validate_skills.py` (T-2.10a): the mechanical twin of `validate_workforce.py`
+  for `.agents/skills/*/SKILL.md` — until now nothing checked a skill's frontmatter,
+  its `name`-vs-directory agreement, or whether the repo-relative paths it cites still
+  exist, the same class of drift this pass spent most of its time fixing by hand
+  elsewhere. Wired into `validate-pre-pr.sh`, the CI governance job, and
+  `tools/Makefile`'s `checkers` target.
+
+### Fixed
+
+#### Peer-review hardening (post-Phase-D/E/F review rounds)
+- CI: the governance-job coverage step piped through `tee` under the default
+  (non-`pipefail`) `bash -e` shell, so a failing governance test suite still reported a
+  green job; the step now runs under an explicit `shell: bash` with `pipefail`.
+- `nightly.yml`'s failure-issue lookup used `--jq '.[0].number'`, which returns the
+  string `"null"` (not empty) on no match, so the very first nightly failure never
+  actually filed a tracking issue; fixed to `--jq 'first(.[].number) // empty'` with
+  `set -uo pipefail` and explicit `::warning` fallbacks instead of silent `|| true`.
+- `literal_guard.py`'s magic-number rule missed pydantic `Field(default=...)` values
+  entirely (caught live: `NemotronConfig.backoff_max_s` duplicated
+  `DEFAULT_BACKOFF_MAX_S` as a bare `30.0`, undetected); fixed via a `Field()`/
+  `field()` default-unwrap helper, and `DEFAULT_INFERENCE_BACKOFF_MAX_S`/
+  `DEFAULT_INFERENCE_BACKOFF_BASE` were added as constants distinct from the transport
+  reconnect backoff (numerically equal today, but a radio-tuning change must not
+  silently retune LLM inference retries).
+- `check_task_sync.py`: an unreachable baseline SHA (expected after a squash-merge) was
+  exiting 1, turning an advisory check into a hard failure for the first contributor
+  after this branch merges; split into a genuine-operational-error path (not a git
+  repo, exits 1) and a routine-miss path (exits 0). A conditional `.strip()` also
+  dropped indented sub-task checkboxes from matching; now stripped unconditionally.
+  Capital-`X` and `*`-bullet checkboxes are now recognized, and a task id duplicated
+  within one file resolves to "unchecked" instead of last-write-wins.
+- `bind_guard.py`'s `SCAN_GLOBS` used a one-level `flightctl/*.py` while
+  `literal_guard.py` used recursive `flightctl/**/*.py`, leaving `flightctl/sim/`
+  unscanned by the bind guard; aligned to the recursive glob.
+- `check_tool_pins.py` crashed (`AttributeError`) on an empty/truncated
+  `.pre-commit-config.yaml` (`yaml.safe_load("")` returns `None`, not `{}`); also fixed
+  a rev-less mirror entry being flagged as "pins disagree" while being omitted from the
+  detail message, and added CONFLICT-detection for duplicate mirror entries with
+  different revs (parity with the existing pyproject-side duplicate handling).
+- `test_link_loss_soak.py`: the per-PR smoke fuzz and the nightly 5,000-cycle fuzz
+  shared one seed, making the smoke run's entire draw sequence a strict prefix of the
+  nightly run's (proven by replay — the first 1,495 draws were identical); the smoke
+  test now uses a distinct seed. The soak assertion was also strengthened from a
+  near-tautological bounds check to asserting the actual backoff formula
+  (`current == min(before * BACKOFF_FACTOR, BACKOFF_MAX_S)`).
+- `scripts/src/hello.ts`'s deletion had left `scripts/package.json`'s `hello` script and
+  `scripts/tsconfig.json`'s `include` pointing at an empty directory, breaking
+  `tsc -p scripts` (and therefore `pnpm -r run typecheck`) with no CI job to catch it;
+  fixed both references.
+- Two assertions had gone vacuous after dead-code deletion: a coverage-driven guard
+  test whose branch could never fail, and `test_fpv_version.py`'s window-consistency
+  test after `SUPPORTED_DATASET_SCHEMAS` was removed; both replaced with assertions on
+  actual runtime behavior (`is_dataset_compatible()` boundaries, the CI snapshot-regen
+  guard's two branches).
+- The CI `gitleaks` step added in T-2.11 had never actually been run against this
+  content: pre-existing test fixtures (`nvapi-test`, the fake NVIDIA-style key prefix
+  used throughout `test_inference.py`/`test_config.py`/`test_node.py`/`test_health.py`)
+  trip the default `generic-api-key` rule on length/entropy alone. Caught by running
+  the pinned CI binary locally before opening this PR, not by CI itself (a real gap in
+  "verify before you claim green"). Added `nvapi-test` to `.gitleaks.toml`'s stopwords.
 
 #### Charter alignment audit (2026-07-31)
 - `docs/CHARTER_ALIGNMENT_AUDIT_PLAN.md` — repeatable Phase A–E method for scanning the codebase

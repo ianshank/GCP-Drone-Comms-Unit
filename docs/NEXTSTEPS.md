@@ -64,12 +64,32 @@
       see CHANGELOG); `meshsa.llm.sources` narrowed two bare `except Exception` swallows.
 - [x] **T-2 — Gate widening:** pre-commit and `scripts/validate-pre-pr.sh` now run real Python
       lint/format/type/test steps repo-wide (previously `deliverables/`-only / syntax-only);
-      `bind_guard`'s scan scope widened to include `tools/**/*.py`.
-- [ ] **T-2.3 (deferred, part of T-2):** archive `artifacts/mockup-sandbox` and
-      `lib/api-client-react` into `archive/`, fix the root Dockerfile's invalid
-      `COPY … 2>/dev/null || true` lines, update `tsconfig`/`pnpm-workspace.yaml`, and add a new
-      `ts` CI job for `api-spec`/`api-zod`/`api-server`. Deferred pending a Node.js/pnpm toolchain
-      in this working environment to verify the workspace surgery safely — not dropped.
+      `bind_guard`'s scan scope widened to include `tools/**/*.py` and `flightctl/**/*.py`.
+- [x] **T-2.3a:** fixed the root Dockerfile's invalid `COPY … 2>/dev/null || true` lines (`COPY`
+      is not a shell instruction); deleted dead TS scaffolding (`scripts/src/hello.ts`,
+      `scripts/post-merge.sh`, the root Makefile's `db-migrate`/`db-studio` targets).
+- [ ] **T-2.3b (deferred, part of T-2):** archive `artifacts/mockup-sandbox` and
+      `lib/api-client-react` into `archive/`, update `tsconfig`/`pnpm-workspace.yaml`, and add a
+      new `ts` CI job for `api-spec`/`api-zod`/`api-server`. Deferred pending a Node.js/pnpm
+      toolchain in this working environment to verify the workspace surgery safely — not dropped.
+- [x] **T-2.7 — CI determinism & hardening:** per-ref concurrency groups (main never cancelled),
+      `timeout-minutes` on every job, the 5,000-cycle link-loss fuzz moved to `nightly.yml`
+      (`@pytest.mark.slow`, per `docs/specs/m2-soak-fuzz.md` §7) with a distinct-seeded 250-cycle
+      smoke slice staying per-PR, `--cov-report=xml` artifacts + `$GITHUB_STEP_SUMMARY` coverage
+      lines, and a `validate-pre-pr.sh` subshell fix (a failing meshsa suite no longer silently
+      skips the jetson suite).
+- [x] **T-2.8 — `literal_guard` + governance:** `tools/claude_hooks/literal_guard.py` (AST-based,
+      ports/hosts/queue-backoff/endpoints, `.claude/governance.yaml` `literal_guard:` exceptions).
+- [x] **T-2.9 — Hypothesis profiles:** `ci` (derandomized) / `nightly` (randomized, `print_blob`)
+      profiles in `packages/meshsa/tests/conftest.py`, selected via `HYPOTHESIS_PROFILE`;
+      `--strict-markers` on both packages.
+- [x] **T-2.10 — pin-sync + task-sync + skills:** `tools/check_tool_pins.py` (ruff/mypy pins,
+      pyproject vs. pre-commit), `tools/check_task_sync.py` (advisory OpenSpec-checkbox-vs-git
+      reconciliation), `.agents/skills/config-literal-sweep/`.
+- [x] **T-2.11 — Repo-governance pack:** `CODEOWNERS`, PR/issue templates, `dependabot.yml`
+      (`pip` + `github-actions`), SHA-pinned Actions across all four workflows, a CI `gitleaks`
+      step (pre-commit's copy is `--no-verify`-bypassable), `SECURITY.md` real reporting
+      instructions.
 - [ ] **T-3 — Shared foundations (8 commits):** extract `_web.py` (consolidated auth scaffold for
       the four aiohttp factories), `_envconfig.py`, `_frame_codec.py`, `_geojson.py`, `_queues.py`,
       `mavlink_constants.py`, `_logging.py`; characterization-first (route/status/header pins
@@ -384,7 +404,7 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
       `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions.
 
 ### M2 auth-audit findings (2026-07-08 — see [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md))
-Full evidence-backed enumeration of the 16-row surface inventory (12 network-bound; the rest
+Full evidence-backed enumeration of the 17-row surface inventory (12 network-bound; the rest
 serial / non-network / nonexistent) and its auth/encryption posture (the Track 0.2 / E.3
 prerequisite before the maintainer rules on the commanding M2 gate).
 - [x] **[security] `/healthz`+`/metrics` was the one fail-open aiohttp surface** (`health.py`).

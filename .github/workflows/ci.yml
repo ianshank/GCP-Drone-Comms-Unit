@@ -220,6 +220,9 @@ jobs:
       - name: Workforce roster lint
         run: python tools/validate_workforce.py
 
+      - name: Skills playbook lint
+        run: python tools/validate_skills.py
+
       - name: Tool-pin sync
         run: python tools/check_tool_pins.py
 

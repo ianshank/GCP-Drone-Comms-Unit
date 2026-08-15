@@ -19,18 +19,22 @@
 #   11. Bind guard — every listener routes through meshsa.netauth.validate_bind
 #   12. Literal guard — service literals sourced from meshsa/defaults.py
 #   13. Workforce roster lint (.claude/agents)
-#   14. Tool-pin sync — pre-commit revs == pyproject ruff/mypy pins
-#   15. Task-checkbox sync (advisory; warns, never fails the gate)
-#   16. Skills trackable — .gitignore must not re-exclude .agents/skills/
-#   17. Python syntax check (py_compile) — every *.py under packages/,
+#   14. Skills playbook lint — .agents/skills/*/SKILL.md frontmatter, name-vs-dir
+#       agreement, and cited repo-path existence (tools/validate_skills.py)
+#   15. Tool-pin sync — pre-commit revs == pyproject ruff/mypy pins
+#   16. Task-checkbox sync (advisory; warns, never fails the gate)
+#   17. Skills trackable — .gitignore must not re-exclude .agents/skills/
+#   18. Python syntax check (py_compile) — every *.py under packages/,
 #       flightctl/, tools/, deliverables/ (not deliverables/ alone)
 #
-# Steps 10-16 are the T-2.2b governance gate.
+# Steps 10-17 are the T-2.2b governance gate.
 #
 # Usage:
 #   bash scripts/validate-pre-pr.sh
 #   # Or via Makefile:
-#   make validate
+#   make validate-pre-pr
+#   # (root `make validate` only runs the TS steps above — 1-4 — not the Python
+#   # or governance steps; use `make validate-pre-pr` for the full gate below.)
 #
 # Exit codes:
 #   0  All checks passed
@@ -188,6 +192,10 @@ step_workforce() {
   python tools/validate_workforce.py 2>&1
 }
 
+step_skills_lint() {
+  python tools/validate_skills.py 2>&1
+}
+
 step_tool_pins() {
   python tools/check_tool_pins.py 2>&1
 }
@@ -257,6 +265,7 @@ run_step "Governance hook tests"     step_governance_tests
 run_step "Bind guard"                step_bind_guard
 run_step "Literal guard"             step_literal_guard
 run_step "Workforce roster lint"     step_workforce
+run_step "Skills playbook lint"      step_skills_lint
 run_step "Tool-pin sync"             step_tool_pins
 run_step "Task-checkbox sync (advisory)" step_task_sync
 run_step "Skills trackable (.gitignore)" step_skills_tracked

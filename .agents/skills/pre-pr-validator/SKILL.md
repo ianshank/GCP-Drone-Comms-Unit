@@ -50,6 +50,9 @@ argument-hint: "Branch diff and verification gates to run"
    - `python tools/claude_hooks/literal_guard.py` (service literals sourced from `meshsa/defaults.py`; exceptions-only output — see the `config-literal-sweep` skill for the fix loop)
    - `python tools/check_tool_pins.py` (pre-commit revs == pyproject ruff/mypy pins)
    - `python tools/check_task_sync.py` (advisory: bundle checkboxes vs commit subjects)
+   - `python tools/validate_workforce.py` (`.claude/agents/*.md` roster frontmatter + Relationship line)
+   - `python tools/validate_skills.py` (`.agents/skills/*/SKILL.md` frontmatter, name-vs-directory
+     agreement, and cited repo-path existence)
    - `git check-ignore .agents/skills/<new-skill>/SKILL.md && echo BROKEN || echo ok` when adding a skill (the `.gitignore` `.agents/*` rule must never regress to `.agents/`, which silently untracked new skill files)
    Determinism note: per-PR Hypothesis runs the derandomized `ci` profile; set `HYPOTHESIS_PROFILE=nightly` only to reproduce a nightly exploration failure (the log's `@reproduce_failure` blob replays it exactly).
 6. **No-numpy invariant (bounded exception: the tracker backend)**: the base package and all pure

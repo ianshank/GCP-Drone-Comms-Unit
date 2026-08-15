@@ -19,12 +19,15 @@ Exits 1 on any mismatch or missing pin, 0 when all sources agree.
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import sys
 from pathlib import Path
 from typing import Final
 
 import yaml
+
+_log = logging.getLogger("tools.check_tool_pins")
 
 #: pyproject files whose [dev] extras must carry exact pins.
 PYPROJECTS: Final[tuple[str, ...]] = (
@@ -122,14 +125,17 @@ def check(repo_root: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point; exits 1 on any mismatch, 0 when in sync."""
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo-root", type=Path, default=None)
     args = parser.parse_args(argv)
     repo_root = (args.repo_root or Path(__file__).resolve().parents[1]).resolve()
+    _log.debug("checking tool-pin sync under %s", repo_root)
     problems = check(repo_root)
     for problem in problems:
         print(f"tool pins: {problem}")
     if problems:
+        _log.warning("tool-pin sync check found %d problem(s)", len(problems))
         return 1
     print("tool pins: in sync (ruff, mypy across pyprojects + pre-commit)")
     return 0

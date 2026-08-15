@@ -57,7 +57,8 @@ AI coding agents should read [AGENTS.md](AGENTS.md) first, then any nested
   enforced by each package's `pyproject.toml` `addopts`; new code should keep the suite at 100%.
   Always run the full suite — a single-file run fails the gate even when its tests pass.
 - Update `CHANGELOG.md` under `## [Unreleased]` for any user-visible change.
-- Run `pre-commit run -a` and `make test lint type` locally before pushing.
+- Run `pre-commit run -a` and `make -f tools/Makefile test lint type` locally before
+  pushing (or the full gate: `make validate-pre-pr`).
 
 ### Required checks
 

@@ -101,6 +101,14 @@
       reconciliation; advisory, baseline-scoped, multi-bundle-tolerant),
       `.agents/skills/config-literal-sweep/`, reconciliation section in
       `spec-driven-change`, `pre-pr-validator` extension.
+- [x] T-2.10a Skills roster validator: `tools/validate_skills.py`, the mechanical twin of
+      `validate_workforce.py` for `.agents/skills/*/SKILL.md` — required frontmatter keys
+      (`name`, `description`, `argument-hint`), `name` == skill directory, the `"Use
+      when:"` description-prefix convention, at least one `## ` body heading, and
+      existence of repo-root-relative paths cited in backtick spans (package-relative
+      shorthand and glob/template tokens deliberately left unchecked — see the module
+      docstring). Wired into `validate-pre-pr.sh`, the CI governance job, and
+      `tools/Makefile`'s `checkers` target.
 - [ ] T-2.12 Coverage blind spots surfaced by the T-2.7 measurement pass, all
       measure-first-then-gate: (a) `flightctl/` is mypy'd and ruff'd, and its glue runs
       under `packages/meshsa`'s suite via `pythonpath`, but `[tool.coverage.run]
@@ -290,10 +298,16 @@
       always-raising method deleted; the `jetson_gateway.yolo.json` detection-ingest config
       leg removed (no emitter exists for it) with a `NEXTSTEPS.md` Initiative-D item recording
       the decision.
-- [ ] T-10.4 Remaining stale-doc claims corrected: `docs/AUDIT_M2_AUTH.md` residual rows,
-      `NEXTSTEPS.md`'s stale G0.3 instructions (following them today would strict-XPASS the
-      salvaged test), the `docs/C4.md`/`docs/architecture/C4.md` name collision (the former
-      stays canonical), a pointer from the root `NEXTSTEPS.md` to `docs/NEXTSTEPS.md`,
+- [x] T-10.4a `NEXTSTEPS.md`'s stale G0.3 instructions fixed (marked done — the guard shipped
+      2026-07-24, predating this deliverable; the patch it pointed to was deleted in T-10.2a as
+      redundant/less-safe) and a pointer from the root `NEXTSTEPS.md` to `docs/NEXTSTEPS.md`
+      added.
+      **Correction to this task's original premise:** `docs/C4.md` and `docs/architecture/C4.md`
+      are not a name collision needing consolidation — re-audited (2026-08-15) and confirmed they
+      describe two entirely separate subsystems (`docs/C4.md` = the Python drone-comms
+      architecture; `docs/architecture/C4.md` = the separate TypeScript/Replit validation
+      workspace). Both are independently current; no merge or rename needed.
+- [ ] T-10.4b Remaining stale-doc claims corrected: `docs/AUDIT_M2_AUTH.md` residual rows,
       `netauth`'s `NetAuthPolicy` marked as a reserved seam, `tools/claude_hooks`' duplicated
       `sys.path` bootstrap consolidated, `validate_workforce.py` adopts `pyyaml` +
       `governance.find_repo_root`, `ops/pi5-node`'s duplicate STL/PNG files replaced with a

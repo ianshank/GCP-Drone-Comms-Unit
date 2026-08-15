@@ -24,7 +24,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.protocols`              | `Transport`, `Codec`, `Clock`, `IdFactory` Protocols + defaults      |
 | `meshsa.models`                 | `Position`, `NodeInfo`, `Envelope`, `PliPayload`, `ChatPayload`, `UNKNOWN_ERROR_M` |
 | `meshsa.config`                 | `NodeConfig`, `MeshConfig`, `RouterConfig`, `HealthConfig`, `TransportConfig` |
-| `meshsa.defaults`                | Service-port constants (`PORT_HEALTH`, etc.) — the single source config models reference instead of a bare literal; further consolidation across `ui`/`llm`/`commander`/`scout`/`detection_ingest` is ongoing |
+| `meshsa.defaults`                | Service-port/host/queue/backoff/endpoint literals — the single source config models reference instead of a bare literal (`ui`/`llm`/`scout`/`detection_ingest`/transports all adopted, T-3.5a); `command/config.py`'s port is a deliberate, documented `literal_guard` exception (frozen `command/` zone, T-8.8) — not yet adopted, by design |
 | `meshsa.netauth`                 | The one audited HTTP bind-safety primitive: `is_loopback`, constant-time bearer `authorize`, fail-closed `validate_bind`; every aiohttp surface's `validate_bind` adapter delegates to it (enforced by `tools/claude_hooks/bind_guard.py`) |
 | `meshsa.registry`               | Generic `Registry[T]`; `transport_registry`, `codec_registry`        |
 | `meshsa.plugins`                | `load_plugins()` — opt-in entry-point discovery of out-of-tree drivers |
@@ -52,8 +52,8 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 
 ### Dependency injection via `Protocol`
 Anything I/O-shaped is a `typing.Protocol`. The router and node accept those types,
-not concrete classes. This is what lets the test suite drive a 1114-test (1120
-collected, 6 skipped), 99.20% coverage run without hardware (figures as of 2026-07-31;
+not concrete classes. This is what lets the test suite drive a 1113-test (1119
+collected, 6 skipped), 99.29% coverage run without hardware (figures as of 2026-08-15;
 re-check against `python -m pytest` output rather than trusting this comment on future
 reads — it has gone stale before).
 

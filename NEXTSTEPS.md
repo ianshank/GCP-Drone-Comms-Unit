@@ -3,6 +3,10 @@
 Prioritised backlog for this workspace and the
 [GCP-Drone-Comms-Unit](https://github.com/ianshank/GCP-Drone-Comms-Unit) integration.
 
+This file tracks the **TypeScript/Replit validation workspace** (Tracks 1-4 below). The
+Python drone-comms side (`packages/`, `flightctl/`, `openspec/`) has its own backlog at
+[docs/NEXTSTEPS.md](docs/NEXTSTEPS.md).
+
 Items are grouped by **track** and ordered by priority within each track.
 `[ ]` = open, `[x]` = complete.
 
@@ -48,9 +52,14 @@ Items are grouped by **track** and ordered by priority within each track.
   — Add `sdnotify>=0.3` to `[project.optional-dependencies] ui` in `pyproject.toml`
   — Tests: `test_cli_sdnotify.py` xfails must flip to xpass
 
-- [ ] **Apply G0.3 mavlink bind guard** to `packages/meshsa/src/meshsa/transports/mavlink_source.py`
-  — Follow `deliverables/meshsa-ui-validation/patches/mavlink_source_bind_guard.py`
-  — Tests: `test_mavlink_bind_guard.py::TestMavlinkBindGuard` xfails must flip to xpass
+- [x] **G0.3 mavlink bind guard — already shipped, patch retired.**
+  `transports/mavlink_source.py`'s `MavlinkSourceTransport` extracts the endpoint host and
+  validates binds via `netauth.validate_bind` (landed 2026-07-24, predates this deliverable's
+  patch). The `deliverables/meshsa-ui-validation/patches/mavlink_source_bind_guard.py` patch and
+  its `test_mavlink_bind_guard.py` xfail test were **deleted** (`code-hygiene-modularity` T-10.2a):
+  the patch's regex endpoint parser failed open on bracketed IPv6, so the shipped guard is
+  stricter, not merely equivalent. Its empty/whitespace-token assertions were salvaged into
+  `packages/meshsa/tests/test_mavlink_source.py` first.
 
 - [ ] **Drop in scenario tests** — copy all test files from `deliverables/meshsa-ui-validation/tests/`
   into `packages/meshsa/tests/`; run `pytest tests/ -v --cov=meshsa --cov-fail-under=97`

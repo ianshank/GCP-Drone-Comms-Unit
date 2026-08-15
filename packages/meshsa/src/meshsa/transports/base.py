@@ -12,6 +12,11 @@ from ..defaults import DEFAULT_QUEUE_MAXSIZE
 
 _log = structlog.get_logger("meshsa.transport")
 
+#: Throttle for the inbox-full warning: log the first drop, then every Nth
+#: drop after that, rather than one line per frame under sustained
+#: backpressure (a stuck consumer can drop thousands of frames a second).
+_DROP_LOG_INTERVAL = 100
+
 
 class AbstractTransport(abc.ABC):
     def __init__(self, name: str, queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE) -> None:
@@ -42,7 +47,12 @@ class AbstractTransport(abc.ABC):
             self._inbox.put_nowait(data)
         except asyncio.QueueFull:
             self.dropped_inbox_full += 1
-            _log.warning("inbox full; dropping frame", transport=self.name)
+            if self.dropped_inbox_full == 1 or self.dropped_inbox_full % _DROP_LOG_INTERVAL == 0:
+                _log.warning(
+                    "inbox full; dropping frame",
+                    transport=self.name,
+                    dropped_inbox_full=self.dropped_inbox_full,
+                )
 
     async def _ingest(self, data: bytes) -> None:
         """Async ingest for in-loop callers (e.g. the TAK read loop)."""

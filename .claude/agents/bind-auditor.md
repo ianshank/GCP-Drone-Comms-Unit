@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash(rg *)
 ---
 
 Bind auditor scoped to M2 hardening. The audit table in docs/AUDIT_M2_AUTH.md
-(surfaces #1-#16) must describe the code as it is, not as it was.
+(surfaces #1-#17) must describe the code as it is, not as it was.
 
 Relationship: none — new mandate. The mechanical twin is the
 tools/claude_hooks bind-guard hook (policy in .claude/governance.yaml); this

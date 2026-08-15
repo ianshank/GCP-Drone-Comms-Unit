@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from tools.check_task_sync import (
     bundle_checkbox_states,
@@ -100,6 +103,26 @@ def test_operational_error_exits_nonzero(tmp_path: Path) -> None:
     # Not a git repo: the checker cannot run, which is the one nonzero case. Kept
     # distinct from the unreachable-baseline path below, which is routine and exits 0.
     assert main(["--repo-root", str(tmp_path)]) == 1
+
+
+def test_operational_error_logs_at_error_level(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.ERROR, logger="tools.check_task_sync"):
+        assert main(["--repo-root", str(tmp_path)]) == 1
+    assert any("git work tree" in r.message for r in caplog.records)
+
+
+def test_landed_but_unchecked_task_logs_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    repo, baseline = _repo_with_bundle(tmp_path, "- [ ] T-1.2 open\n")
+    (repo / "f.txt").write_text("x", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "T-1.2: land the thing")
+    with caplog.at_level(logging.WARNING, logger="tools.check_task_sync"):
+        assert main(["--repo-root", str(repo), "--baseline", baseline]) == 0
+    assert any("warning" in r.message for r in caplog.records)
 
 
 def test_unreachable_baseline_is_not_a_failure(tmp_path: Path) -> None:

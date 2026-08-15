@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -100,3 +101,17 @@ def test_duplicate_mirror_repos_conflict_like_duplicate_pyproject_pins() -> None
 def test_real_repo_is_in_sync() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     assert check(repo_root) == []
+
+
+def test_disagreeing_rev_logs_a_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    repo = _write_repo(tmp_path, PYPROJECT_OK, PRECOMMIT_OK.replace("v0.16.3", "v0.7.4"))
+    with caplog.at_level(logging.WARNING, logger="tools.check_tool_pins"):
+        assert main(["--repo-root", str(repo)]) == 1
+    assert any("problem" in r.message for r in caplog.records)
+
+
+def test_clean_repo_logs_no_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    repo = _write_repo(tmp_path, PYPROJECT_OK, PRECOMMIT_OK)
+    with caplog.at_level(logging.WARNING, logger="tools.check_tool_pins"):
+        assert main(["--repo-root", str(repo)]) == 0
+    assert caplog.records == []

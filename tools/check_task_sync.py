@@ -20,11 +20,14 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Final
+
+_log = logging.getLogger("tools.check_task_sync")
 
 #: First commit of the tech-debt foundation branch's history window. Commits at or
 #: before this are grandfathered (their reconciliation happened in Phase A of the
@@ -158,16 +161,23 @@ def reconcile(repo_root: Path, baseline: str) -> tuple[list[str], int]:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Warnings exit 0 (advisory); only operational errors exit 1."""
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo-root", type=Path, default=None)
     parser.add_argument("--baseline", default=BASELINE_SHA)
     args = parser.parse_args(argv)
     repo_root = (args.repo_root or Path(__file__).resolve().parents[1]).resolve()
+    _log.debug("reconciling task checkboxes under %s since %s", repo_root, args.baseline)
     try:
         if not is_git_repo(repo_root):
+            _log.error("%s is not a git work tree", repo_root)
             print(f"task sync: cannot run: {repo_root} is not a git work tree", file=sys.stderr)
             return 1
         if not baseline_reachable(repo_root, args.baseline):
+            _log.info(
+                "baseline %s unreachable (squash merge or shallow checkout); skipping",
+                args.baseline,
+            )
             print(
                 f"task sync: baseline {args.baseline} is not in this clone "
                 f"(squash merge or shallow checkout); nothing to reconcile"
@@ -180,10 +190,13 @@ def main(argv: list[str] | None = None) -> int:
         OSError,
         UnicodeDecodeError,
     ) as exc:
+        _log.error("cannot run: %s", exc)
         print(f"task sync: cannot run: {exc}", file=sys.stderr)
         return 1
     for warning in warnings:
         print(f"task sync: WARNING: {warning}")
+    if warnings:
+        _log.warning("task sync found %d warning(s) across %d commit(s)", len(warnings), examined)
     print(
         f"task sync: {examined} commit(s) examined since {args.baseline}, "
         f"{len(warnings)} warning(s) (advisory — exit 0)"

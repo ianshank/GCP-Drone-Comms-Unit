@@ -123,11 +123,15 @@ secrets-check: ## Scan for leaked secrets with gitleaks
 
 # ── Validation gate (pre-PR) ──────────────────────────────────────────────────
 .PHONY: validate
-validate: typecheck lint test build secrets-check ## Run full pre-PR validation gate
+validate: typecheck lint test build secrets-check ## Run the TypeScript workspace's validation gate (this side only)
 	@echo ""
 	@echo "$(_BOLD)$(_GREEN)════════════════════════════════════════$(_RESET)"
 	@echo "$(_BOLD)$(_GREEN)  ✔  All validations passed             $(_RESET)"
 	@echo "$(_BOLD)$(_GREEN)════════════════════════════════════════$(_RESET)"
+
+.PHONY: validate-pre-pr
+validate-pre-pr: ## Run the full pre-PR gate: TS validate steps + Python lint/type/test/governance
+	bash scripts/validate-pre-pr.sh
 
 # ── Installation & setup ──────────────────────────────────────────────────────
 .PHONY: install

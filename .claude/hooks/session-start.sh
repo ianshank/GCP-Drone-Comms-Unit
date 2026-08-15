@@ -15,23 +15,33 @@ fi
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$ROOT"
 
-# Core deps (pydantic / structlog) + dev toolchain. This mirrors
-# .github/workflows/ci.yml exactly, so local gates match CI. Optional libraries
+# Core deps (pydantic / structlog) + dev toolchain, matching
+# .github/workflows/ci.yml's `Install` steps: meshsa's `test` job installs
+# `[dev,inference]` and pins pyyaml/types-PyYAML explicitly (tools/claude_hooks'
+# governance.py needs pyyaml but it isn't a meshsa dependency, so an unpinned
+# transitive resolve could drift the governance job's verdict); jetson's
+# `perception` job installs `[dev]` only. Optional libraries beyond that
 # (pymavlink, aiohttp, cv2, anthropic, ...) are covered by mypy's
-# ignore_missing_imports override, so [dev] alone is enough for a green `mypy src`.
+# ignore_missing_imports override, so this alone is enough for a green `mypy src`.
 # pip is idempotent and the container caches the result, so re-runs are cheap.
 # Best-effort pip upgrade: a Debian-managed pip cannot uninstall itself, so never
 # let that abort the hook (the existing pip installs the package fine).
 python -m pip install --quiet --upgrade pip 2>/dev/null || true
-python -m pip install --quiet -e "packages/meshsa[dev]"
+python -m pip install --quiet -e "packages/meshsa[dev,inference]"
 python -m pip install --quiet -e "packages/jetson_yolo_gcs[dev]"
+python -m pip install --quiet pyyaml==6.0.3 types-PyYAML==6.0.12.20260724
 
 # Gate invocation note: this environment ships `mypy`/`pytest` as isolated uv-tool
 # installs that don't see the project deps. Run the gates from the relevant package
 # dir via the project interpreter so they resolve correctly (ruff needs no resolution):
 #   ruff check .  |  ruff format --check .  |  python -m mypy src  |  python -m pytest
-echo "meshsa[dev] + jetson_yolo_gcs[dev] toolchains ready."
+echo "meshsa[dev,inference] + jetson_yolo_gcs[dev] toolchains ready."
 echo "Gates (run from the package dir): ruff check . | python -m mypy src | python -m pytest"
+echo "Governance checkers (run from repo root): python tools/claude_hooks/bind_guard.py |" \
+     "python tools/claude_hooks/literal_guard.py | python tools/check_tool_pins.py |" \
+     "python tools/check_task_sync.py | python tools/validate_workforce.py |" \
+     "python tools/validate_skills.py"
+echo "Or the full pre-PR gate: bash scripts/validate-pre-pr.sh"
 
 # Governance visibility: surface the current M2 gap state from the auth audit so
 # every session starts knowing how many surfaces still fail open. Guarded so a
