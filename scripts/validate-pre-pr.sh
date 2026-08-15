@@ -176,15 +176,31 @@ step_py_test_jetson() {
   (cd packages/jetson_yolo_gcs && python -m pytest --tb=short -q 2>&1)
 }
 
+# tools/claude_hooks/governance.py and tools/check_tool_pins.py both import PyYAML,
+# which isn't stdlib and isn't pulled in by a bare `pip install -e packages/meshsa`
+# (it rides in via pre-commit's mypy hook or CI's explicit pin). Without this check
+# a missing install surfaces as a raw ImportError traceback from deep inside the
+# checker instead of a clear, actionable message.
+_require_pyyaml() {
+  if ! python -c "import yaml" &>/dev/null; then
+    echo "PyYAML is required for this step but is not installed." >&2
+    echo "Install it with:  python -m pip install pyyaml" >&2
+    return 1
+  fi
+}
+
 step_governance_tests() {
+  _require_pyyaml || return 1
   python -m pytest tools/claude_hooks/tests tools/tests -q 2>&1
 }
 
 step_bind_guard() {
+  _require_pyyaml || return 1
   python tools/claude_hooks/bind_guard.py 2>&1
 }
 
 step_literal_guard() {
+  _require_pyyaml || return 1
   python tools/claude_hooks/literal_guard.py 2>&1
 }
 
@@ -197,6 +213,7 @@ step_skills_lint() {
 }
 
 step_tool_pins() {
+  _require_pyyaml || return 1
   python tools/check_tool_pins.py 2>&1
 }
 
