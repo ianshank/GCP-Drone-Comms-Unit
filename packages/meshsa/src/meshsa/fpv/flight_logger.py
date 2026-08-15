@@ -346,8 +346,9 @@ class FlightLogger:
             "telemetry_rates_hz": self._telemetry_rates(),
             "dropped_records": dropped_snapshot,
             "notes": notes_snapshot,
-            # ``None`` until capture is wired; a CaptureWriter supplies the
-            # resolution/fps/codec/file dict via the ``video_meta`` ctor arg. The
+            # ``None`` until capture is wired; a capture pipeline (the jetson
+            # package's streaming/camera.py) supplies the resolution/fps/codec/file
+            # dict via the ``video_meta`` ctor arg. The
             # stored value is already an isolated deep copy (taken in __init__), so
             # the caller's later mutations cannot reach the persisted manifest.
             "video": self._video_meta,

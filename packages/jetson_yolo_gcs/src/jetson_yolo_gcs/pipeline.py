@@ -49,9 +49,6 @@ _DEFAULT_IDLE_POLL_S: float = float(PipelineSettings.model_fields["idle_poll_s"]
 
 _log = structlog.get_logger("jetson_yolo_gcs.pipeline")
 
-#: Backwards-compatible alias for the shared throttle predicate (kept for existing importers).
-_should_log_drop = should_log_throttled
-
 
 class Pipeline:
     """Reads frames, detects, optionally streams and publishes LANDING_TARGET."""
@@ -205,7 +202,7 @@ class Pipeline:
             result = self._detector.detect(frame.data)
         except DetectionError:
             self.dropped_detections += 1
-            if _should_log_drop(self.dropped_detections, self._drop_log_every):
+            if should_log_throttled(self.dropped_detections, self._drop_log_every):
                 _log.warning("detection failed; dropping frame", dropped=self.dropped_detections)
             return True
 
@@ -219,7 +216,7 @@ class Pipeline:
                 self._stream.write(frame.data)
             except Exception:  # noqa: BLE001 - egress is best-effort; never kill the loop
                 self.dropped_stream += 1
-                if _should_log_drop(self.dropped_stream, self._drop_log_every):
+                if should_log_throttled(self.dropped_stream, self._drop_log_every):
                     _log.warning("stream write failed; dropping", dropped=self.dropped_stream)
 
         if self._bridge is not None:
@@ -285,7 +282,9 @@ class Pipeline:
             max_gap_s = 1.0 / self._min_publish_rate_hz
             if (now - self._last_publish_t) > max_gap_s:
                 self.landing_target_cadence_violations += 1
-                if _should_log_drop(self.landing_target_cadence_violations, self._drop_log_every):
+                if should_log_throttled(
+                    self.landing_target_cadence_violations, self._drop_log_every
+                ):
                     _log.warning(
                         "LANDING_TARGET publish cadence below floor",
                         gap_s=round(now - self._last_publish_t, 3),
@@ -307,7 +306,7 @@ class Pipeline:
             tracked = self._tracker.update(result)
         except Exception:  # noqa: BLE001 - advisory read-only path; a fault is counted, never fatal
             self.dropped_tracks += 1
-            if _should_log_drop(self.dropped_tracks, self._drop_log_every):
+            if should_log_throttled(self.dropped_tracks, self._drop_log_every):
                 # exc_info so a swallowed backend bug still leaves a stack trace (throttled).
                 _log.warning(
                     "tracker update failed; dropping", dropped=self.dropped_tracks, exc_info=True

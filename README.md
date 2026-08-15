@@ -1,6 +1,6 @@
 # GCP-Drone-Comms-Unit — Development Workspace
 
-[![Validate](https://img.shields.io/badge/validate-passing-brightgreen)](#validation)
+[![CI](https://github.com/ianshank/GCP-Drone-Comms-Unit/actions/workflows/ci.yml/badge.svg)](https://github.com/ianshank/GCP-Drone-Comms-Unit/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node.js-24.x-brightgreen)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-workspace-orange)](https://pnpm.io/)
@@ -189,7 +189,6 @@ for the step-by-step integration guide.
 │   ├── api-client-react/    # React API hooks
 │   └── db/                  # Drizzle ORM schema + client
 ├── scripts/
-│   ├── post-merge.sh        # Post-merge setup (runs after task merges)
 │   ├── validate-pre-pr.sh   # Full pre-PR validation gate
 │   └── hooks/               # Git hook scripts
 ├── Makefile                 # Developer convenience targets

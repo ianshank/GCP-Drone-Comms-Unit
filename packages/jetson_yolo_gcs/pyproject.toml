@@ -49,8 +49,10 @@ tracker = [
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
-    "ruff>=0.6",
-    "mypy>=1.10",
+    # Pinned exactly (code-hygiene-modularity T-2.7) — must match packages/meshsa and the
+    # pre-commit revs; tools/check_tool_pins.py enforces the match.
+    "ruff==0.16.3",
+    "mypy==2.3.0",
     "pre-commit>=3.7",
     "build>=1.2",
     "twine>=5",
@@ -71,7 +73,7 @@ where = ["src"]
 jetson_yolo_gcs = ["py.typed"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=jetson_yolo_gcs --cov-report=term-missing --cov-fail-under=96"
+addopts = "--cov=jetson_yolo_gcs --cov-report=term-missing --cov-fail-under=96 --strict-markers"
 testpaths = ["tests"]
 
 [tool.coverage.run]

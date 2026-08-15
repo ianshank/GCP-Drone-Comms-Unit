@@ -23,6 +23,7 @@ import random
 
 import pytest
 
+from meshsa import defaults
 from meshsa.command.health import HeartbeatHealth
 from meshsa.transports.backoff import Backoff
 from meshsa.transports.pacing import Pacer
@@ -30,15 +31,30 @@ from meshsa.transports.pacing import Pacer
 #: Soak scale for the per-PR run; the nightly fuzz multiplies this out.
 LINK_CYCLES = 500
 FUZZ_CYCLES = 5_000
+#: Per-PR smoke slice of the fuzz (spec §5: test parameters are named constants in the
+#: test module, never env knobs — a lost override must not silently shrink the nightly run).
+FUZZ_SMOKE_CYCLES = 250
+#: Distinct seeds so the smoke run is not a strict prefix of the nightly run.
+FUZZ_NIGHTLY_SEED = 0x4D32  # "M2"
+FUZZ_SMOKE_SEED = 0x5343  # "SC"
 #: Interlock freshness window (mirrors HeartbeatHealth's default shape, set explicitly).
 HEARTBEAT_MAX_AGE_S = 2.0
 #: Pacer profile: the FTS-facing shape (sustained cap with a small burst allowance).
 PACER_RATE_HZ = 10.0
 PACER_BURST = 5
-#: Reconnect schedule mirroring the TAK/Meshtastic supervisors' config shape.
+#: Reconnect schedule mirroring the TAK/Meshtastic supervisors' config shape. The
+#: initial delay deliberately differs from the deployed default (spec §5 mirrors the
+#: schedule's *shape*); the cap must equal the deployed cap — see the tie test below.
 BACKOFF_INITIAL_S = 0.5
 BACKOFF_MAX_S = 30.0
 BACKOFF_FACTOR = 2.0
+
+
+def test_soaked_backoff_cap_equals_deployed_cap():
+    # Spec §4: the attempt rate is bounded by 1/max_s. That claim is evidence about
+    # the deployment only while the soaked cap and the deployed default are the same
+    # number — this tie fails if either side drifts.
+    assert BACKOFF_MAX_S == defaults.DEFAULT_BACKOFF_MAX_S
 
 
 class ManualClock:
@@ -159,10 +175,16 @@ async def test_backoff_caps_retry_rate_and_resets_cleanly():
     assert backoff.current == BACKOFF_INITIAL_S
 
 
-@pytest.mark.slow
-async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
-    """Nightly fuzz: random outage/recovery timings never wedge the gate or the schedule."""
-    rng = random.Random(0x4D32)  # fixed seed ("M2"): deterministic soak
+async def _soak_fuzz(cycles: int, seed: int) -> None:
+    """Fuzz body shared by the nightly run and the per-PR smoke slice.
+
+    Random outage/recovery timings never wedge the gate or the schedule. Each caller
+    passes a fixed seed, so a run is deterministic; the seeds differ so the two runs
+    explore *disjoint* trajectories. (With a shared seed the shorter run's draw
+    sequence is a strict prefix of the longer one's, so the nightly's opening cycles
+    could only re-derive what the per-PR gate already proved.)
+    """
+    rng = random.Random(seed)
     clock = ManualClock()
     sleep = RecordingSleep(clock)
     health = HeartbeatHealth(clock, max_age_s=HEARTBEAT_MAX_AGE_S)
@@ -170,7 +192,7 @@ async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
         initial_s=BACKOFF_INITIAL_S, max_s=BACKOFF_MAX_S, factor=BACKOFF_FACTOR, sleep=sleep
     )
 
-    for _ in range(FUZZ_CYCLES):
+    for _ in range(cycles):
         up_beats = rng.randint(1, 5)
         for _ in range(up_beats):
             health.beat()
@@ -185,7 +207,34 @@ async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
         assert report is not None and not report.arm_permitted  # fail closed, always
         retries = rng.randint(1, 12)
         for _ in range(retries):
+            before = backoff.current
             await backoff.sleep_and_advance()
-        assert BACKOFF_INITIAL_S <= backoff.current <= BACKOFF_MAX_S
+            # Assert the schedule, not just its envelope: `INITIAL <= current <= MAX` is
+            # near-tautological (Backoff was constructed with exactly those bounds), so
+            # it would survive a doubling-logic bug. This pins each step instead.
+            assert sleep.delays[-1] == before
+            assert backoff.current == min(before * BACKOFF_FACTOR, BACKOFF_MAX_S)
 
     assert max(sleep.delays) <= BACKOFF_MAX_S  # no delay ever exceeded the cap
+
+
+def test_smoke_and_nightly_seeds_differ():
+    # A shared seed makes the shorter run a strict prefix of the longer one, so the
+    # nightly's first FUZZ_SMOKE_CYCLES cycles would be pure redundancy.
+    assert FUZZ_SMOKE_SEED != FUZZ_NIGHTLY_SEED
+
+
+async def test_fuzzed_link_cycles_smoke():
+    """Per-PR smoke slice: a short, independently-seeded randomized trajectory.
+
+    Cheap regression canary for the beat/reset/outage interleaving — the structured
+    soaks above cover the same modules, so this adds trajectory diversity rather than
+    line coverage; the nightly run is where the long exploration happens.
+    """
+    await _soak_fuzz(FUZZ_SMOKE_CYCLES, FUZZ_SMOKE_SEED)
+
+
+@pytest.mark.slow
+async def test_fuzzed_link_cycles_keep_interlock_and_backoff_consistent():
+    """Nightly fuzz (spec §7): the full randomized outage/recovery soak."""
+    await _soak_fuzz(FUZZ_CYCLES, FUZZ_NIGHTLY_SEED)

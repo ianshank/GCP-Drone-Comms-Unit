@@ -1,9 +1,12 @@
 {
+  // This workspace holds shell tooling (validate-pre-pr.sh) and no TypeScript sources:
+  // the placeholder src/hello.ts was deleted in T-2.3a. `files: []` keeps `tsc --noEmit`
+  // (and therefore `pnpm -r run typecheck`) exit-0 instead of failing TS18003 "No inputs
+  // were found"; restore `include` if real sources ever land here.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src"]
+  "files": []
 }

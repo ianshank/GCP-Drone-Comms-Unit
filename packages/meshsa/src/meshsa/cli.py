@@ -24,7 +24,14 @@ import structlog
 
 from ._parsing import parse_float, parse_int
 from .config import NodeConfig
-from .defaults import PORT_HEALTH
+from .defaults import (
+    DEFAULT_COT_STALE_S,
+    DEFAULT_LOCAL_TARGET_HOST,
+    DEFAULT_LOOPBACK_HOST,
+    DEFAULT_PLI_INTERVAL_S,
+    PORT_FTS_TCP,
+    PORT_HEALTH,
+)
 from .health import serve_healthz, validate_healthz_bind
 from .models import Envelope, Position
 from .node import build_node
@@ -54,8 +61,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Meshtastic app portnum (default 256 / PRIVATE_APP)",
     )
     p.add_argument("--region", default=_env("MESH_REGION", "US"))
-    p.add_argument("--fts-host", default=_env("FTS_HOST", "127.0.0.1"))
-    p.add_argument("--fts-port", type=int, default=_env_int("FTS_PORT", 8087))
+    p.add_argument("--fts-host", default=_env("FTS_HOST", DEFAULT_LOCAL_TARGET_HOST))
+    p.add_argument("--fts-port", type=int, default=_env_int("FTS_PORT", PORT_FTS_TCP))
     p.add_argument("--uid", default=_env("UID", "base-1"))
     p.add_argument("--callsign", default=_env("CALLSIGN", "BASE1"))
     p.add_argument("--lat", type=float, default=_env_float("LAT", 0.0))
@@ -63,13 +70,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--interval",
         type=float,
-        default=_env_float("PLI_INTERVAL_S", 30.0),
+        default=_env_float("PLI_INTERVAL_S", DEFAULT_PLI_INTERVAL_S),
         help="seconds between own-position broadcasts",
     )
     p.add_argument(
         "--stale",
         type=float,
-        default=_env_float("COT_STALE_S", 120.0),
+        default=_env_float("COT_STALE_S", DEFAULT_COT_STALE_S),
         help="CoT stale window in seconds",
     )
     p.add_argument(
@@ -78,7 +85,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="bytes appended to each CoT frame on TCP (e.g. '\\n')",
     )
     p.add_argument("--health", action="store_true", default=_env("HEALTH", "") != "")
-    p.add_argument("--healthz-host", default=_env("HEALTHZ_HOST", "127.0.0.1"))
+    p.add_argument("--healthz-host", default=_env("HEALTHZ_HOST", DEFAULT_LOOPBACK_HOST))
     p.add_argument("--healthz-port", type=int, default=_env_int("HEALTHZ_PORT", PORT_HEALTH))
     p.add_argument(
         "--log-level",

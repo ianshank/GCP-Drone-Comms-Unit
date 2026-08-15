@@ -29,7 +29,7 @@ MAVLink `LANDING_TARGET`).
 3. Add or update fakes-first tests before declaring behavior complete; tighten coverage on the
    safety files (`pipeline.py`, `mavlink/bridge.py`).
 4. Run from `packages/jetson_yolo_gcs`: `ruff check .`, `ruff format --check .`,
-   `python -m mypy src`, `python -m pytest` (floor 85%); `--health-check` exits 0 hardware-free.
+   `python -m mypy src`, `python -m pytest` (floor 96%); `--health-check` exits 0 hardware-free.
 
 ## Output Format
 

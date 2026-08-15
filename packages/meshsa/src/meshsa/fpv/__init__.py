@@ -14,19 +14,16 @@ surface acyclic.
 from __future__ import annotations
 
 from .arm_guard import ArmGuard
-from .camera import CaptureWriter, Frame
 from .config import (
     ArmGuardSettings,
-    CameraSettings,
     CrsfLinkSettings,
     FpvSettings,
     HealthSettings,
     LoggerSettings,
     ParserSettings,
-    ProberSettings,
 )
 from .crsf.frame import CrsfAddress, CrsfFrame, CrsfFrameType
-from .crsf.link import AddressProber, CrsfLink, ProbeResult
+from .crsf.link import CrsfLink
 from .crsf.telemetry import (
     Attitude,
     BatterySensor,
@@ -51,7 +48,7 @@ from .link_health import (
     HealthState,
     LinkHealthMonitor,
 )
-from .protocols import AlertSink, CameraSource, CrsfSerial, MonotonicClock, RCLink
+from .protocols import AlertSink, CrsfSerial, MonotonicClock, RCLink
 from .telemetry_store import TelemetryStore
 from .version import (
     DATASET_SCHEMA,
@@ -73,21 +70,16 @@ __all__ = [
     "LoggerSettings",
     "ArmGuardSettings",
     "CrsfLinkSettings",
-    "ProberSettings",
-    "CameraSettings",
     # protocols / clocks
     "RCLink",
     "AlertSink",
     "CrsfSerial",
-    "CameraSource",
     "MonotonicClock",
     # crsf wire + parsers
     "CrsfAddress",
     "CrsfFrame",
     "CrsfFrameType",
     "CrsfLink",
-    "AddressProber",
-    "ProbeResult",
     "TelemetryParser",
     "TelemetryMessage",
     "LinkStatistics",
@@ -104,9 +96,6 @@ __all__ = [
     # logger / arm guard
     "FlightLogger",
     "ArmGuard",
-    # camera
-    "CaptureWriter",
-    "Frame",
     # errors
     "FpvError",
     "TelemetryParseError",

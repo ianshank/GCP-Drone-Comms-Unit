@@ -12,11 +12,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_UI
 from .logring import VALID_LEVELS
 
-#: Default bind port; unclaimed in the docs/AUDIT_M2_AUTH.md inventory (and deliberately
-#: clear of the known scout-station / detection-ingest 8099 double-booking).
-DEFAULT_UI_PORT = 8100
+#: Default bind port, from the service-port table (meshsa.defaults). Historical note:
+#: chosen clear of 8099, which the scout station holds and detection ingest also used
+#: until the latter moved to 8097 — the table now guards against re-collision.
+DEFAULT_UI_PORT = PORT_UI
 
 
 class UIConfig(BaseModel):
@@ -29,7 +31,7 @@ class UIConfig(BaseModel):
     """
 
     enabled: bool = False
-    host: str = "127.0.0.1"
+    host: str = DEFAULT_LOOPBACK_HOST
     port: int = Field(default=DEFAULT_UI_PORT, gt=0, lt=65536)
     token: str | None = None
     map_style_url: str = "https://demotiles.maplibre.org/style.json"

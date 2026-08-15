@@ -24,7 +24,7 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 | `meshsa.protocols`              | `Transport`, `Codec`, `Clock`, `IdFactory` Protocols + defaults      |
 | `meshsa.models`                 | `Position`, `NodeInfo`, `Envelope`, `PliPayload`, `ChatPayload`, `UNKNOWN_ERROR_M` |
 | `meshsa.config`                 | `NodeConfig`, `MeshConfig`, `RouterConfig`, `HealthConfig`, `TransportConfig` |
-| `meshsa.defaults`                | Service-port constants (`PORT_HEALTH`, etc.) — the single source config models reference instead of a bare literal; further consolidation across `ui`/`llm`/`commander`/`scout`/`detection_ingest` is ongoing |
+| `meshsa.defaults`                | Service-port/host/queue/backoff/endpoint literals — the single source config models reference instead of a bare literal (`ui`/`llm`/`scout`/`detection_ingest`/transports all adopted, T-3.5a); `command/config.py`'s port is a deliberate, documented `literal_guard` exception (frozen `command/` zone, T-8.8) — not yet adopted, by design |
 | `meshsa.netauth`                 | The one audited HTTP bind-safety primitive: `is_loopback`, constant-time bearer `authorize`, fail-closed `validate_bind`; every aiohttp surface's `validate_bind` adapter delegates to it (enforced by `tools/claude_hooks/bind_guard.py`) |
 | `meshsa.registry`               | Generic `Registry[T]`; `transport_registry`, `codec_registry`        |
 | `meshsa.plugins`                | `load_plugins()` — opt-in entry-point discovery of out-of-tree drivers |
@@ -52,8 +52,8 @@ ships as `packages/meshsa`. For project layout, see [CONTRIBUTING.md](../CONTRIB
 
 ### Dependency injection via `Protocol`
 Anything I/O-shaped is a `typing.Protocol`. The router and node accept those types,
-not concrete classes. This is what lets the test suite drive a 1114-test (1120
-collected, 6 skipped), 99.20% coverage run without hardware (figures as of 2026-07-31;
+not concrete classes. This is what lets the test suite drive a 1113-test (1119
+collected, 6 skipped), 99.29% coverage run without hardware (figures as of 2026-08-15;
 re-check against `python -m pytest` output rather than trusting this comment on future
 reads — it has gone stale before).
 
@@ -179,11 +179,13 @@ Design choices that keep it consistent with the framework invariants:
   invariant (same injection + `# pragma: no cover` hardware pattern as `msp_source`). Adding
   the `GpsSensor` telemetry type made it a new persisted dataset record, so `DATASET_SCHEMA`
   bumped **1 → 2** (v1 datasets still read; older builds correctly reject a v2 dataset).
-- **Camera capture (Phase 2, shipped):** a `CaptureWriter` daemon thread (`fpv/camera.py`)
-  reads frames from an injected `CameraSource` and writes real records to the
-  `frames.jsonl` stream with the manifest `video` entry populated — additive, so
-  `DATASET_SCHEMA` stays **2**. The capture backend is the only `# pragma: no cover` glue
-  (swapped for v4l2/GStreamer on the production Jetson).
+- **Camera capture (removed from `meshsa.fpv`):** `fpv/camera.py`'s `CaptureWriter` /
+  `Frame` / `CameraSource` were deleted in `code-hygiene-modularity` T-5.1a — never wired
+  to a production entry point, and superseded by the live capture path in
+  `packages/jetson_yolo_gcs` (`streaming/camera.py`), which fails fast on an unopenable
+  pipeline and stamps a real monotonic timestamp. The flight logger still accepts a
+  `video_meta` dict, so the `frames.jsonl`/manifest `video` contract is unchanged and
+  `DATASET_SCHEMA` stays **2**. See the CHANGELOG `### Removed` entry.
 - **Command authority** is limited to a pre-flight arm interlock (`ArmGuard`) under the
   CHARTER §3 carve-out; the monitor never intervenes in flight.
 

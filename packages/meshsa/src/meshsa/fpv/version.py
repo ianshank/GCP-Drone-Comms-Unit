@@ -23,11 +23,10 @@ import warnings
 #: dataset rather than fail mid-replay. v1 datasets remain readable (see below).
 DATASET_SCHEMA = 2
 #: Oldest dataset schema this build still reads (raise only on breaking changes).
+#: The derived SUPPORTED_DATASET_SCHEMAS frozenset was removed in T-5.1a: the
+#: runtime check is :func:`is_dataset_compatible`'s range test, which had no other
+#: consumer of the materialized set.
 MIN_COMPATIBLE_DATASET = 1
-#: Full set of dataset schemas a reader accepts.
-SUPPORTED_DATASET_SCHEMAS: frozenset[int] = frozenset(
-    range(MIN_COMPATIBLE_DATASET, DATASET_SCHEMA + 1)
-)
 
 
 class DatasetCompatibilityWarning(UserWarning):

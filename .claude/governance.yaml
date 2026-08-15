@@ -59,3 +59,40 @@ bind_guard:
     # transports/meshtastic_radio.py is deliberately NOT listed: it opens no
     # listening network socket (serial/BLE links; its TCP mode is an outbound
     # TCPInterface client connect, not a bind).
+
+# literal_guard.py policy (code-hygiene-modularity T-2.8): service literals — port
+# numbers from the defaults_module port table, loopback/any-interface host strings,
+# queue/backoff defaults (name-keyed), and MAVLink endpoint strings — must be sourced
+# from the defaults module rather than re-typed at call sites. Each exception waives
+# ONE rule (or "*") for one file, with a rationale. The defaults module itself is
+# excluded in the checker (it is the canonical home, not a waiver).
+literal_guard:
+  defaults_module: "packages/meshsa/src/meshsa/defaults.py"
+  exceptions:
+    - path: "packages/meshsa/src/meshsa/command/config.py"
+      rule: "*"
+      rationale: >-
+        Frozen command zone (c_gate_met false): carries port 8095 and a loopback
+        host default that T-8.8 migrates to defaults.PORT_COMMANDER after the M2
+        gate flips. A declared exception instead of a code change, mirroring the
+        bundle's T-7.4 pattern for frozen files.
+    - path: "packages/meshsa/src/meshsa/netauth.py"
+      rule: "hosts"
+      rationale: >-
+        Defines the canonical _LOOPBACK_HOSTS validation set; it is a consumer of
+        the loopback notion itself, not a re-typed service default.
+    - path: "packages/jetson_yolo_gcs/src/jetson_yolo_gcs/core/config.py"
+      rule: "*"
+      rationale: >-
+        Separate distribution that cannot import meshsa.defaults; its udpout
+        endpoint is the sender end of the rendezvous meshsa's udpin default
+        listens on (different value, not duplication), and every literal is
+        already a pydantic-settings field with an env binding. Cross-referenced
+        from the meshsa port table's external-convention rows.
+    - path: "flightctl/sim/mavlink_fake.py"
+      rule: "endpoints"
+      rationale: >-
+        Bench simulator whose udpout loopback endpoint is CLI-overridable; it
+        deliberately mirrors the jetson sender convention, not meshsa's udpin
+        listener default — substituting DEFAULT_MAVLINK_ENDPOINT would silently
+        flip send to listen.

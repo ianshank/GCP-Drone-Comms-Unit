@@ -9,7 +9,8 @@ always-on guide is [../AGENTS.md](../AGENTS.md); tool-specific pointers live in
 
 | Skill | Use when |
 | ----- | -------- |
-| [spec-driven-change](skills/spec-driven-change/SKILL.md) | Starting any roadmap/initiative feature — author/update a spec under `docs/specs` first |
+| [spec-driven-change](skills/spec-driven-change/SKILL.md) | Starting any roadmap/initiative feature — author/update a spec under `docs/specs` first; includes the OpenSpec checkbox-reconciliation procedure |
+| [config-literal-sweep](skills/config-literal-sweep/SKILL.md) | Adding/reviewing a service default (port, host, queue/backoff, endpoint) — the `literal_guard` fix-or-waive loop |
 | [meshsa-add-transport](skills/meshsa-add-transport/SKILL.md) | Adding or changing a radio/IP/TAK transport |
 | [meshsa-add-codec](skills/meshsa-add-codec/SKILL.md) | Adding or changing wire encodings |
 | [meshsa-schema-version-bump](skills/meshsa-schema-version-bump/SKILL.md) | Changing the Envelope schema or compatibility window |

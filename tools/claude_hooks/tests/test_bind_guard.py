@@ -7,10 +7,13 @@ its own fixture files.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
+
+import pytest
 
 from tools.claude_hooks.bind_guard import (
     LISTENER_TRIGGERS,
@@ -136,6 +139,21 @@ class TestScanFile:
             [BindGuardExceptionEntry(path=TRANSPORT_REL_PATH, rationale="multicast protocol")]
         )
         assert scan_file(LISTENER_NO_GUARD, TRANSPORT_REL_PATH, config) == []
+
+    def test_declared_exception_logs_instead_of_disappearing_silently(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A governance-declared exception must still be visible somewhere (not a silent
+        # no-op) so a reviewer can see which listeners are running unguarded by policy.
+        config = _config(
+            [BindGuardExceptionEntry(path=TRANSPORT_REL_PATH, rationale="multicast protocol")]
+        )
+        with caplog.at_level(logging.INFO, logger="claude_hooks.bind_guard"):
+            scan_file(LISTENER_NO_GUARD, TRANSPORT_REL_PATH, config)
+        assert any(
+            "excepted" in record.message and TRANSPORT_REL_PATH in record.message
+            for record in caplog.records
+        )
 
     def test_exception_covers_only_its_path(self) -> None:
         config = _config([BindGuardExceptionEntry(path="somewhere/else.py", rationale="n/a")])

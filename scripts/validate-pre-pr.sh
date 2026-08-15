@@ -15,13 +15,26 @@
 #       pyproject.toml/mypy.ini
 #   9.  Python test suite (pytest) — packages/meshsa, and packages/jetson_yolo_gcs
 #       if present (each package's own coverage-gated suite)
-#   10. Python syntax check (py_compile) — every *.py under packages/,
+#   10. Governance hook tests (tools/claude_hooks/tests, tools/tests)
+#   11. Bind guard — every listener routes through meshsa.netauth.validate_bind
+#   12. Literal guard — service literals sourced from meshsa/defaults.py
+#   13. Workforce roster lint (.claude/agents)
+#   14. Skills playbook lint — .agents/skills/*/SKILL.md frontmatter, name-vs-dir
+#       agreement, and cited repo-path existence (tools/validate_skills.py)
+#   15. Tool-pin sync — pre-commit revs == pyproject ruff/mypy pins
+#   16. Task-checkbox sync (advisory; warns, never fails the gate)
+#   17. Skills trackable — .gitignore must not re-exclude .agents/skills/
+#   18. Python syntax check (py_compile) — every *.py under packages/,
 #       flightctl/, tools/, deliverables/ (not deliverables/ alone)
+#
+# Steps 10-17 are the T-2.2b governance gate.
 #
 # Usage:
 #   bash scripts/validate-pre-pr.sh
 #   # Or via Makefile:
-#   make validate
+#   make validate-pre-pr
+#   # (root `make validate` only runs the TS steps above — 1-4 — not the Python
+#   # or governance steps; use `make validate-pre-pr` for the full gate below.)
 #
 # Exit codes:
 #   0  All checks passed
@@ -148,7 +161,11 @@ step_py_typecheck() {
 }
 
 step_py_test() {
-  cd packages/meshsa && python -m pytest --tb=short -q 2>&1 && cd - >/dev/null
+  # Subshell, not `cd … && cd -`: with the old form a pytest failure skipped the
+  # `cd -`, leaving the whole script's cwd inside packages/meshsa — which made the
+  # next step's `[[ ! -d packages/jetson_yolo_gcs ]]` guard silently skip the jetson
+  # suite and count it as passing.
+  (cd packages/meshsa && python -m pytest --tb=short -q 2>&1)
 }
 
 step_py_test_jetson() {
@@ -156,7 +173,68 @@ step_py_test_jetson() {
     warn "packages/jetson_yolo_gcs not present — skipping"
     return 0
   fi
-  cd packages/jetson_yolo_gcs && python -m pytest --tb=short -q 2>&1 && cd - >/dev/null
+  (cd packages/jetson_yolo_gcs && python -m pytest --tb=short -q 2>&1)
+}
+
+# tools/claude_hooks/governance.py and tools/check_tool_pins.py both import PyYAML,
+# which isn't stdlib and isn't pulled in by a bare `pip install -e packages/meshsa`
+# (it rides in via pre-commit's mypy hook or CI's explicit pin). Without this check
+# a missing install surfaces as a raw ImportError traceback from deep inside the
+# checker instead of a clear, actionable message.
+_require_pyyaml() {
+  if ! python -c "import yaml" &>/dev/null; then
+    echo "PyYAML is required for this step but is not installed." >&2
+    echo "Install it with:  python -m pip install pyyaml" >&2
+    return 1
+  fi
+}
+
+step_governance_tests() {
+  _require_pyyaml || return 1
+  python -m pytest tools/claude_hooks/tests tools/tests -q 2>&1
+}
+
+step_bind_guard() {
+  _require_pyyaml || return 1
+  python tools/claude_hooks/bind_guard.py 2>&1
+}
+
+step_literal_guard() {
+  _require_pyyaml || return 1
+  python tools/claude_hooks/literal_guard.py 2>&1
+}
+
+step_workforce() {
+  python tools/validate_workforce.py 2>&1
+}
+
+step_skills_lint() {
+  python tools/validate_skills.py 2>&1
+}
+
+step_tool_pins() {
+  _require_pyyaml || return 1
+  python tools/check_tool_pins.py 2>&1
+}
+
+step_task_sync() {
+  # Advisory: prints warnings, fails only when it cannot run at all.
+  python tools/check_task_sync.py 2>&1
+}
+
+step_skills_tracked() {
+  # .gitignore must exclude .agents/* (contents), never .agents/ (directory):
+  # git cannot re-include files under an excluded parent, so the directory form
+  # silently untracks NEW files under .agents/skills/ despite the negations.
+  local probe=".agents/skills/.gitignore-probe"
+  touch "${probe}"
+  if git check-ignore -q "${probe}" 2>/dev/null; then
+    rm -f "${probe}"
+    echo ".gitignore regression: new files under .agents/skills/ are ignored"
+    return 1
+  fi
+  rm -f "${probe}"
+  return 0
 }
 
 step_py_syntax() {
@@ -200,6 +278,14 @@ run_step "Python formatting (ruff)"  step_py_format
 run_step "Python type checking"      step_py_typecheck
 run_step "Python test suite (meshsa)"       step_py_test
 run_step "Python test suite (jetson_yolo_gcs)" step_py_test_jetson
+run_step "Governance hook tests"     step_governance_tests
+run_step "Bind guard"                step_bind_guard
+run_step "Literal guard"             step_literal_guard
+run_step "Workforce roster lint"     step_workforce
+run_step "Skills playbook lint"      step_skills_lint
+run_step "Tool-pin sync"             step_tool_pins
+run_step "Task-checkbox sync (advisory)" step_task_sync
+run_step "Skills trackable (.gitignore)" step_skills_tracked
 run_step "Python syntax check"       step_py_syntax
 
 # ── Summary ───────────────────────────────────────────────────────────────────

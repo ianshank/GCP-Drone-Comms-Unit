@@ -87,4 +87,10 @@ stopwords = [
     "fake",
     "synthetic",
     "test-token",
+    # meshsa.inference test fixtures (test_config.py, test_inference.py, test_node.py,
+    # test_health.py): mirrors NVIDIA's real `nvapi-...` key prefix but is never a real
+    # key body, so gitleaks' generic-api-key rule flags the longer variant
+    # (`nvapi-test-key-123`) on entropy/length alone. First caught 2026-08-15 when the
+    # CI gitleaks step (T-2.11) ran against this pre-existing content for the first time.
+    "nvapi-test",
 ]

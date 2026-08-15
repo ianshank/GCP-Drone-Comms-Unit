@@ -21,6 +21,18 @@ from typing import Any, Protocol
 
 import structlog
 
+from ..defaults import (
+    DEFAULT_BACKOFF_FACTOR,
+    DEFAULT_BACKOFF_INITIAL_S,
+    DEFAULT_BACKOFF_MAX_S,
+    DEFAULT_LOCAL_TARGET_HOST,
+    DEFAULT_MULTICAST_IFACE,
+    DEFAULT_QUEUE_MAXSIZE,
+    DEFAULT_TAK_MULTICAST_GROUP,
+    PORT_FTS_TCP,
+    PORT_TAK_MULTICAST,
+    PORT_TAK_TLS,
+)
 from ..protocols import Clock
 from ..registry import transport_registry
 from .backoff import Backoff, SleepFn
@@ -57,8 +69,8 @@ class CotFramer:
 Connector = Callable[[], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
 
 #: Default CoT ports: plaintext (FreeTAKServer default) and TLS.
-_DEFAULT_PLAINTEXT_PORT = 8087
-_DEFAULT_TLS_PORT = 8089
+_DEFAULT_PLAINTEXT_PORT = PORT_FTS_TCP
+_DEFAULT_TLS_PORT = PORT_TAK_TLS
 
 
 def _resolve_tak_endpoint(host: str, port: int | None, tls: bool) -> tuple[str, int, bool]:
@@ -166,7 +178,7 @@ class TakTcpTransport(AbstractTransport):
         name: str = "tak_tcp",
         *,
         connector: Connector | None = None,
-        host: str = "127.0.0.1",
+        host: str = DEFAULT_LOCAL_TARGET_HOST,
         port: int | None = None,
         tls: bool = False,
         tls_ca_cert: str | None = None,
@@ -182,11 +194,11 @@ class TakTcpTransport(AbstractTransport):
         read_size: int = 4096,
         delimiter: bytes = b"",
         reconnect: bool = True,
-        backoff_initial_s: float = 1.0,
-        backoff_max_s: float = 30.0,
-        backoff_factor: float = 2.0,
+        backoff_initial_s: float = DEFAULT_BACKOFF_INITIAL_S,
+        backoff_max_s: float = DEFAULT_BACKOFF_MAX_S,
+        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
         sleep: SleepFn | None = None,
-        queue_maxsize: int = 1000,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         **_: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)
@@ -364,14 +376,14 @@ class TakMulticastTransport(AbstractTransport):
         name: str = "tak_multicast",
         *,
         io_factory: Callable[[], DatagramIO] | None = None,
-        group: str = "239.2.3.1",
-        port: int = 6969,
-        iface: str = "0.0.0.0",
-        backoff_initial_s: float = 1.0,
-        backoff_max_s: float = 30.0,
-        backoff_factor: float = 2.0,
+        group: str = DEFAULT_TAK_MULTICAST_GROUP,
+        port: int = PORT_TAK_MULTICAST,
+        iface: str = DEFAULT_MULTICAST_IFACE,
+        backoff_initial_s: float = DEFAULT_BACKOFF_INITIAL_S,
+        backoff_max_s: float = DEFAULT_BACKOFF_MAX_S,
+        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
         sleep: SleepFn | None = None,
-        queue_maxsize: int = 1000,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         **_: Any,
     ) -> None:
         super().__init__(name, queue_maxsize)

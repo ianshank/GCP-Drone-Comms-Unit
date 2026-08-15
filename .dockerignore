@@ -20,8 +20,11 @@ build/
 coverage/
 **/coverage/
 
-# ── Python deliverables (not part of the Node.js build) ─────────────────────
+# ── Python (drone-comms side; not part of the Node.js api-server build) ──────
 deliverables/
+packages/
+tools/
+flightctl/
 **/__pycache__/
 **/*.pyc
 **/.pytest_cache/

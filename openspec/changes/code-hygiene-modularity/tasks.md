@@ -1,9 +1,12 @@
 # Tasks — code-hygiene-modularity
 
 > Order binding. Each task: implement → tests green → ruff/mypy clean → coverage gate →
-> `bind_guard` clean → commit. Checkboxes reflect landed commits on
-> `claude/code-hygiene-modularity-xrapgv`; this file is updated in the same commit as the
-> work it tracks. Explicit stop points for review after T-2, T-4, T-6, T-7, T-8.
+> `bind_guard` clean → commit. Checkboxes reflect commits landed on `main` (originally
+> tracked on `claude/code-hygiene-modularity-xrapgv`); this file is updated in the same
+> commit as the work it tracks — `tools/check_task_sync.py` (T-2.10) reconciles it
+> against git history as an advisory check. Split tasks (T-x.ya/b) record honest partial
+> execution: the `a` half names what a commit actually delivered, the `b` half carries
+> the residual. Explicit stop points for review after T-2, T-4, T-6, T-7, T-8.
 
 ## Phase 0 — Spec + preconditions
 - [x] T-0.1 This bundle (`proposal.md`, `design.md`, `tasks.md`, three spec deltas),
@@ -37,22 +40,89 @@
       `aiohttp.ClientError | asyncio.TimeoutError | ValueError`.
 
 ## Phase 2 — Gate widening
-- [ ] T-2.1 Pre-commit ruff/format run repo-wide; mypy hooks call each package's real config;
-      fix the fallout in the same commit; CI lint scope adds `tools/`.
-- [ ] T-2.2 `scripts/validate-pre-pr.sh` gains real Python steps (both packages' pytest +
-      mypy, `bind_guard`, governance hook tests).
-- [ ] T-2.3 `git mv artifacts/mockup-sandbox lib/api-client-react archive/`; fix the two
-      invalid `COPY` lines in the root `Dockerfile`; update `tsconfig.json`/
-      `pnpm-workspace.yaml`; delete `scripts/src/hello.ts`, `scripts/post-merge.sh`, the dead
-      `Makefile` `db-migrate`/`db-studio` targets; new CI `ts` job
+- [x] T-2.1 Pre-commit ruff/format run repo-wide; mypy hooks call each package's real config;
+      fix the fallout in the same commit; CI lint scope adds `tools/`. (Landed: `12f0fc0`.)
+- [x] T-2.2 `scripts/validate-pre-pr.sh` gains real Python steps (both packages' pytest +
+      mypy, `bind_guard`, governance hook tests). (Landed: `dbd4b20` — pytest/mypy/ruff/
+      py_compile only; the promised `bind_guard` + governance-hook steps did not ship.
+      Residual tracked as T-2.2b.)
+- [x] T-2.2b Residual of T-2.2: `validate-pre-pr.sh` adds the governance hook tests,
+      `bind_guard.py`, `validate_workforce.py`, and the T-2.8/T-2.10 checkers; fix the
+      `cd -` bug in `step_py_test` (a meshsa pytest failure leaves the cwd in
+      `packages/meshsa`, so the jetson suite's directory guard silently skips it).
+- [x] T-2.3a Safe deletions half of T-2.3: fix the two invalid `COPY` lines in the root
+      `Dockerfile` (`2>/dev/null || true` parses as extra COPY source paths); delete
+      `scripts/src/hello.ts`, `scripts/post-merge.sh`, the dead `Makefile`
+      `db-migrate`/`db-studio` targets.
+- [ ] T-2.3b Archive half of T-2.3 (separate PR — folder reorg per AGENTS.md):
+      `git mv artifacts/mockup-sandbox lib/api-client-react archive/`; update
+      `tsconfig.json`/`pnpm-workspace.yaml`; new CI `ts` job
       (`pnpm install --frozen-lockfile && pnpm -r run typecheck && pnpm -r run lint && pnpm -r run test`).
-- [ ] T-2.4 `bind_guard.SCAN_GLOBS` widened to include `flightctl/**/*.py` and
+      Note: `deliverables/meshsa-ui-validation/tests` (38 tests, after T-10.2a deleted
+      `test_mavlink_bind_guard.py`) deliberately gets no CI leg — the tree retires in
+      T-10.2b.
+- [x] T-2.4 `bind_guard.SCAN_GLOBS` widened to include `flightctl/**/*.py` and
       `tools/**/*.py`, excluding `tools/**/tests/**` and `bind_guard.py` itself
       (design D-9); pre-scan documented before fixes; flip the salvaged
       `test_mavlink_bind_guard.py` strict-xfail now that the guard it expects has shipped.
-- [ ] T-2.5 Ruff config consolidated to root `ruff.toml` (path-scoped per-file-ignores);
-      `mypy.ini` gains jetson's stub-ignore overrides; verify `ruff check` output is
-      byte-identical before/after.
+      (Landed: `e5d6bcb`. The salvage landed as the always-run
+      `test_mavlink_source.py::test_extract_endpoint_host_and_bind_validation`, not a
+      strict-xfail file.)
+- [x] T-2.5a mypy half of T-2.5: `mypy.ini` gains jetson's stub-ignore overrides.
+      (Landed: `bcb6a33`.)
+- [ ] T-2.5b Ruff half of T-2.5, not yet landed: consolidate ruff config to root
+      `ruff.toml` (path-scoped per-file-ignores; the current root `ruff.toml` explicitly
+      exempts the package subtrees, which is the opposite of consolidation); verify
+      `ruff check` output is byte-identical before/after. Alternative for a maintainer:
+      ratify the split-config layout as the end state and close this task.
+- [x] T-2.6 Unplanned follow-up: fix gate-widening bugs surfaced by running mypy/ruff to
+      completion. (Landed: `0205675`; recorded so this file matches git history.)
+- [x] T-2.7 CI determinism & hardening: `concurrency` group (PR-only cancel-in-progress),
+      `timeout-minutes` on all jobs, meshsa CI step moves to `pytest -m "not slow"`
+      (spec-conformant per `docs/specs/m2-soak-fuzz.md` §7; coverage measured identical
+      at 99.31% with/without the fuzz) plus a non-slow `FUZZ_SMOKE_CYCLES = 250` smoke
+      variant, nightly runs the full suite under the same coverage gate with an
+      on-failure issue step, coverage XML artifacts + step-summary lines, shellcheck
+      installed explicitly with null-delimited file loops, `--strict-markers` (fixing the
+      stray `pytest.mark.anyio`), snapshot-regen refused when `CI` is set, README badge
+      points at the real workflow status.
+- [x] T-2.8 `tools/claude_hooks/literal_guard.py`: AST checker for service-literal drift
+      (port set derived from `defaults.py` `PORT_*`, exact-equality host defaults,
+      name-keyed queue/backoff defaults, anchored endpoint regex), governed exceptions
+      (`{path, rule, rationale}`) in `.claude/governance.yaml` — loader extended before
+      the yaml gains the key (the scope-freeze hook fails open on unknown keys); wired
+      into the CI governance job and `validate-pre-pr.sh`.
+- [x] T-2.9 Hypothesis determinism profiles in `packages/meshsa/tests/conftest.py`:
+      `ci` (derandomize, print_blob, no database, no deadline; default) and `nightly`
+      (randomized, print_blob, no deadline, wider max_examples), selected via
+      `HYPOTHESIS_PROFILE`.
+- [x] T-2.10 Drift checkers + skills: `tools/check_tool_pins.py` (pre-commit revs ==
+      pyproject dev pins; required CI step), `tools/check_task_sync.py` (checkbox-vs-git
+      reconciliation; advisory, baseline-scoped, multi-bundle-tolerant),
+      `.agents/skills/config-literal-sweep/`, reconciliation section in
+      `spec-driven-change`, `pre-pr-validator` extension.
+- [x] T-2.10a Skills roster validator: `tools/validate_skills.py`, the mechanical twin of
+      `validate_workforce.py` for `.agents/skills/*/SKILL.md` — required frontmatter keys
+      (`name`, `description`, `argument-hint`), `name` == skill directory, the `"Use
+      when:"` description-prefix convention, at least one `## ` body heading, and
+      existence of repo-root-relative paths cited in backtick spans (package-relative
+      shorthand and glob/template tokens deliberately left unchecked — see the module
+      docstring). Wired into `validate-pre-pr.sh`, the CI governance job, and
+      `tools/Makefile`'s `checkers` target.
+- [ ] T-2.12 Coverage blind spots surfaced by the T-2.7 measurement pass, all
+      measure-first-then-gate: (a) `flightctl/` is mypy'd and ruff'd, and its glue runs
+      under `packages/meshsa`'s suite via `pythonpath`, but `[tool.coverage.run]
+      source = ["meshsa"]` means none of its executed lines are measured — add it to the
+      source list, measure, then set a floor; (b) `tools/` is measured report-only in the
+      governance job — set a floor once `scope_freeze.py`'s subprocess-only tests are
+      replaced with in-process ones; (c) `packages/meshsa/tests/` needs no gate but its
+      `fpv/tools/convert.py` reads ~55% under CI's `[dev,inference]` extras because
+      pyarrow is absent — that path is covered only by the nightly full-extras run, which
+      is worth stating in the test conventions rather than leaving as a surprise.
+- [x] T-2.11 Repo-governance pack: `CODEOWNERS`, PR + issue templates,
+      `.github/dependabot.yml` (pip + github-actions), SHA-pinned workflow actions,
+      CI gitleaks step, `SECURITY.md` placeholder replaced with GitHub private
+      vulnerability reporting, CONTRIBUTING paragraph on required checks.
 
 ## Phase 3 — Shared foundations
 - [ ] T-3.1 `meshsa/_web.py` (design D-5); migrate all four app factories; salvage the
@@ -65,9 +135,16 @@
       JSON-round-tripping detections through the codec.
 - [ ] T-3.4 `meshsa/_geojson.py` (finite-value guard); `scout/store.to_geojson` and
       `ui/snapshot.py` adopt.
-- [ ] T-3.5 `meshsa/_queues.py` (`BoundedDropQueue`); adopt in `flight_logger.py`,
-      `fpv/camera.py` (fixes its unguarded cross-thread counter); `defaults.py` sweep across
-      the queue-maxsize, backoff, and endpoint-literal call sites.
+- [x] T-3.5a `defaults.py` adoption sweep across the queue-maxsize (13 sites, including
+      `RouterConfig.queue_maxsize`), backoff-triple, endpoint-literal, port, and
+      host-default call sites — worklist generated by `literal_guard` (T-2.8), values
+      pinned by snapshot tests, bind defaults (`DEFAULT_LOOPBACK_HOST`) kept distinct
+      from outbound connect targets (`DEFAULT_LOCAL_TARGET_HOST`);
+      `docs/AUDIT_M2_AUTH.md` citations refreshed to `module::symbol` form in the same
+      commit. jetson stays out (separate distribution; its `udpout` endpoint is the other
+      end of the rendezvous, and its literals already live in pydantic-settings fields).
+- [ ] T-3.5b `meshsa/_queues.py` (`BoundedDropQueue`); adopt in `flight_logger.py`,
+      `fpv/camera.py` (fixes its unguarded cross-thread counter).
 - [ ] T-3.6 Geodesy consolidation into `cv/geo.py`: `scout/survey.py`'s `_LocalFrame` gains the
       pole guard `cv/geo.py` already has; `scout/replay.py`'s hand-rolled inverse projector
       moves beside the forward one with a round-trip property test.
@@ -95,11 +172,11 @@
       `PipelineSettings.model_fields` instead of a re-hardcoded literal.
 
 ## Phase 5 — `fpv/` prune and decouple
-- [ ] T-5.1a Safe deletions (design D-1): `AddressProber`/`ProbeResult`/`ProberSettings`,
+- [x] T-5.1a Safe deletions (design D-1): `AddressProber`/`ProbeResult`/`ProberSettings`,
       `fpv/camera.py` + `CameraSource` + unused `CameraSettings` fields,
       `TelemetryStore.age_s`/`.history`, `SUPPORTED_DATASET_SCHEMAS`, `crsf/__init__.py`
       re-exports, `llm/server.py`'s `MAX_PROMPT_CHARS` alias. `CHANGELOG.md` entry.
-- [ ] T-5.1b Ratified-carve-out surface kept and marked (design D-1): module notes on
+- [x] T-5.1b Ratified-carve-out surface kept and marked (design D-1): module notes on
       `arm_guard.py`, `crsf/rc.py`, `send_rc`, `RCLink`, `record_rc`; `NEXTSTEPS.md` decision
       item for a maintainer (wire an entry point, or amend the charter to retire it).
 - [ ] T-5.2 `HealthReport`/`HealthState` move to a neutral module; `meshsa/_logging.py` leaf;
@@ -204,18 +281,33 @@
       `meshsa.ui` code (`UIConfig.watchdog_heartbeat_s`, a heartbeat loop in `ui/cli.py`, the
       `Type=notify` unit moved to `ops/`, `sdnotify` added to the `ui` extra); tests exercise
       the real package code, not an inlined copy.
-- [ ] T-10.2 `deliverables/meshsa-ui-validation/` retired (superseded patches deleted, tests
-      already salvaged in T-1.1/T-3.1); `.gitleaks.toml`, `.dockerignore`, and pre-commit
-      config cleaned of now-orphaned references.
+- [x] T-10.2a Delete the already-applied
+      `deliverables/meshsa-ui-validation/patches/mavlink_source_bind_guard.py` and its
+      `tests/test_mavlink_bind_guard.py` (the shipped guard in
+      `transports/mavlink_source.py` is stricter — the patch's regex parser fails open on
+      bracketed IPv6 — and the live in-package test is
+      `test_mavlink_source.py::test_extract_endpoint_host_and_bind_validation`); salvage
+      the empty/whitespace-token assertions into the in-package test first.
+- [ ] T-10.2b Full `deliverables/meshsa-ui-validation/` retirement (remaining scenarios
+      salvaged via T-3.1); `.gitleaks.toml`, `.dockerignore`, and pre-commit config
+      cleaned of now-orphaned references. Note: the sdnotify pair (T-10.1) is strict-xfail
+      against an inline copy of unshipped code and provides zero evidence about the
+      package until T-10.1 lands it for real.
 - [ ] T-10.3 jetson reachability: `MavlinkPoseSource` wired into `build_pipeline` (with a test
       asserting `frame="local_ned"` yields a non-`None` pose source); `TimeSync.exchange`'s
       always-raising method deleted; the `jetson_gateway.yolo.json` detection-ingest config
       leg removed (no emitter exists for it) with a `NEXTSTEPS.md` Initiative-D item recording
       the decision.
-- [ ] T-10.4 Remaining stale-doc claims corrected: `docs/AUDIT_M2_AUTH.md` residual rows,
-      `NEXTSTEPS.md`'s stale G0.3 instructions (following them today would strict-XPASS the
-      salvaged test), the `docs/C4.md`/`docs/architecture/C4.md` name collision (the former
-      stays canonical), a pointer from the root `NEXTSTEPS.md` to `docs/NEXTSTEPS.md`,
+- [x] T-10.4a `NEXTSTEPS.md`'s stale G0.3 instructions fixed (marked done — the guard shipped
+      2026-07-24, predating this deliverable; the patch it pointed to was deleted in T-10.2a as
+      redundant/less-safe) and a pointer from the root `NEXTSTEPS.md` to `docs/NEXTSTEPS.md`
+      added.
+      **Correction to this task's original premise:** `docs/C4.md` and `docs/architecture/C4.md`
+      are not a name collision needing consolidation — re-audited (2026-08-15) and confirmed they
+      describe two entirely separate subsystems (`docs/C4.md` = the Python drone-comms
+      architecture; `docs/architecture/C4.md` = the separate TypeScript/Replit validation
+      workspace). Both are independently current; no merge or rename needed.
+- [ ] T-10.4b Remaining stale-doc claims corrected: `docs/AUDIT_M2_AUTH.md` residual rows,
       `netauth`'s `NetAuthPolicy` marked as a reserved seam, `tools/claude_hooks`' duplicated
       `sys.path` bootstrap consolidated, `validate_workforce.py` adopts `pyyaml` +
       `governance.find_repo_root`, `ops/pi5-node`'s duplicate STL/PNG files replaced with a

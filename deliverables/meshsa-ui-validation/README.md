@@ -1,5 +1,17 @@
 # meshsa.ui Validation — Deliverables Package
 
+> **Retirement in progress** (code-hygiene-modularity T-10.2). The G0.3 bind-guard
+> pair (`patches/mavlink_source_bind_guard.py`, `tests/test_mavlink_bind_guard.py`)
+> was **deleted in T-10.2a**: the guard shipped in
+> `meshsa/transports/mavlink_source.py` with a strictly safer parser (the patch's
+> regex failed open on bracketed IPv6), and the live in-package coverage is
+> `packages/meshsa/tests/test_mavlink_source.py::test_extract_endpoint_host_and_bind_validation`
+> (incl. the empty/whitespace-token cases salvaged from the deleted suite).
+> References to those two files below are historical. The rest of this tree
+> retires in T-10.2b once T-3.1 salvages the remaining scenarios; note the
+> sdnotify pair's tests exercise an inline copy of unshipped code and provide no
+> evidence about the package until T-10.1 lands it for real.
+
 Execution-ready artifacts produced by the peer review and rewrite of the
 ``meshsa.ui`` validation plan for
 [GCP-Drone-Comms-Unit](https://github.com/ianshank/GCP-Drone-Comms-Unit).

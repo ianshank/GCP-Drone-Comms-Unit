@@ -24,13 +24,12 @@ threading.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
 from typing import cast
 
 import structlog
 
-from ..config import CrsfLinkSettings, ProberSettings
+from ..config import CrsfLinkSettings
 from ..protocols import CrsfSerial
 from .frame import CrsfFrame, CrsfFrameType, extract_frames
 from .rc import pack_channels, us_to_ticks
@@ -168,58 +167,3 @@ class CrsfLink:
         if self._serial is None:
             raise RuntimeError("CrsfLink is not open; call open() first")
         return self._serial
-
-
-@dataclass
-class ProbeResult:
-    """Outcome of an address probe (E1.3)."""
-
-    winner: int | None
-    counts: dict[int, int] = field(default_factory=dict)
-    confident: bool = False
-
-
-class AddressProber:
-    """Tallies non-echo, non-RC telemetry per source address and picks a winner.
-
-    Confidence requires the winning address to clear ``probe_min_telemetry_frames``
-    **and** exceed the runner-up by ``probe_margin`` (default 3x), guarding against
-    residual echo artifacts (E1.3). The timing loop lives in the monitor tool; the
-    tally + decision here is pure and fully unit-tested.
-    """
-
-    def __init__(self, settings: ProberSettings) -> None:
-        self._s = settings
-        self._candidates = frozenset(settings.probe_addresses)
-        self.counts: dict[int, int] = {}
-
-    def observe(self, frames: Iterable[CrsfFrame]) -> None:
-        """Tally non-RC frames from candidate addresses (RC echoes excluded)."""
-        for frame in frames:
-            if frame.type == CrsfFrameType.RC_CHANNELS_PACKED:
-                continue
-            if frame.addr not in self._candidates:
-                continue  # frame from an address outside the candidate set: noise
-            self.counts[frame.addr] = self.counts.get(frame.addr, 0) + 1
-
-    def drain(self, link: CrsfLink, iterations: int) -> None:
-        """Poll ``link`` ``iterations`` times, observing each batch (echo-suppressed)."""
-        for _ in range(iterations):
-            self.observe(link.poll_inbound())
-
-    def result(self) -> ProbeResult:
-        """Decide the winning address subject to the min-frames + margin gates."""
-        if not self.counts:
-            return ProbeResult(winner=None)
-        ranked = sorted(self.counts.items(), key=lambda kv: kv[1], reverse=True)
-        winner_addr, winner_count = ranked[0]
-        runner_up = ranked[1][1] if len(ranked) > 1 else 0
-        confident = (
-            winner_count >= self._s.probe_min_telemetry_frames
-            and winner_count >= self._s.probe_margin * runner_up
-        )
-        return ProbeResult(
-            winner=winner_addr if confident else None,
-            counts=dict(self.counts),
-            confident=confident,
-        )

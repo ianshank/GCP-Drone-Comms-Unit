@@ -28,7 +28,10 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY artifacts/api-server/package.json      ./artifacts/api-server/
 COPY lib/db/package.json                    ./lib/db/
 COPY lib/api-zod/package.json              ./lib/api-zod/
-COPY lib/api-client-react/package.json     ./lib/api-client-react/ 2>/dev/null || true
+# NOTE: COPY is not a shell instruction — "2>/dev/null || true" here would be parsed as
+# additional source paths (T-2.3a fix). The path exists in-tree, so copy it plainly;
+# T-2.3b removes these lines when the package moves to archive/.
+COPY lib/api-client-react/package.json     ./lib/api-client-react/
 
 # Install ALL deps (dev included — needed for build step)
 RUN pnpm install --frozen-lockfile
@@ -41,7 +44,7 @@ COPY tsconfig.base.json tsconfig.json ./
 COPY artifacts/api-server/ ./artifacts/api-server/
 COPY lib/db/              ./lib/db/
 COPY lib/api-zod/         ./lib/api-zod/
-COPY lib/api-client-react/ ./lib/api-client-react/ 2>/dev/null || true
+COPY lib/api-client-react/ ./lib/api-client-react/
 
 # Build the API server bundle
 RUN pnpm --filter @workspace/api-server run build

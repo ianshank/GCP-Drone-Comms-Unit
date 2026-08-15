@@ -8,7 +8,7 @@
       "name": "detections",
       "type": "detection_ingest",
       "codec": "detection",
-      "options": { "host": "127.0.0.1", "port": 8099 }
+      "options": { "host": "127.0.0.1", "port": 8097 }
     },
     {
       "name": "tak",

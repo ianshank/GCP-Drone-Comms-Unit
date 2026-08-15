@@ -28,9 +28,10 @@ Reading order: [CHARTER.md](CHARTER.md) → [ROADMAP.md](ROADMAP.md) → [NEXTST
 
 ## Is there a transport-wide auth framework?
 
-Partially. There is **one shared HTTP auth primitive**, `meshsa/netauth.py`: `is_loopback`
-(`netauth.py:17`), constant-time bearer `authorize` (`netauth.py:22`, `hmac.compare_digest` at
-`:37`), and fail-closed `validate_bind` (`netauth.py:40-48`). As of this branch it is reused by
+Partially. There is **one shared HTTP auth primitive**, `meshsa/netauth.py`:
+`netauth.py::is_loopback`, constant-time bearer `netauth.py::authorize` (via
+`hmac.compare_digest`), and fail-closed `netauth.py::validate_bind` (citations are
+`module::symbol` — file:line refs rotted with every import edit). As of this branch it is reused by
 **five** aiohttp surfaces — the LLM server, the commander, the scout station, the
 `/healthz`+`/metrics` server, and the operator console (`meshsa.ui`). Everything else is
 per-protocol and mostly optional: TAK uses TLS,
@@ -45,10 +46,10 @@ until one lands.
 
 | # | Surface / module | Direction | Default bind + port | Auth (default?) | Encryption (default) | Fail-closed? |
 |---|---|---|---|---|---|---|
-| 1 | `TakTcpTransport` — `transports/tak.py:163` | Outbound client | `127.0.0.1`; port `None`→**8087 plaintext** / 8089 TLS | Mutual TLS optional (`tls_client_cert/key`); **off** by default | **Plaintext by default**; TLS opt-in, `tls_verify=True` when on | Fails open (plaintext default) |
-| 2 | `TakMulticastTransport` — `transports/tak.py:361` | Bidirectional (UDP multicast) | group `239.2.3.1`, port `6969`; socket binds `("", 6969)` = **all interfaces** (`tak.py:341`) | **None** | **None / plaintext** | Fails open (inherent to multicast CoT) |
-| 3 | `Pacer` — `transports/pacing.py:19` | **Not network-facing** (token-bucket timing helper) | n/a | n/a | n/a | n/a |
-| 4 | `MeshtasticTransport` — `transports/meshtastic_radio.py:89` | Bidirectional (LoRa serial/TCP/BLE) | `connection="serial"`; no IP bind | **Link PSK claimed but NOT applied in code** — `_default_provisioner` sets only `region`, logs channel/psk/freq as device-provisioned (`meshtastic_radio.py:81-86`) | LoRa PHY only; PSK not enforced here | Fails open |
+| 1 | `TakTcpTransport` — `transports/tak.py::TakTcpTransport` | Outbound client | `127.0.0.1` (`defaults.DEFAULT_LOCAL_TARGET_HOST`); port `None`→**8087 plaintext** / 8089 TLS (`defaults.PORT_FTS_TCP`/`PORT_TAK_TLS`) | Mutual TLS optional (`tls_client_cert/key`); **off** by default | **Plaintext by default**; TLS opt-in, `tls_verify=True` when on | Fails open (plaintext default) |
+| 2 | `TakMulticastTransport` — `transports/tak.py::TakMulticastTransport` | Bidirectional (UDP multicast) | group `239.2.3.1`, port `6969` (`defaults.DEFAULT_TAK_MULTICAST_GROUP`/`PORT_TAK_MULTICAST`); socket binds `("", 6969)` = **all interfaces** (`tak.py::_default_multicast_io`) | **None** | **None / plaintext** | Fails open (inherent to multicast CoT) |
+| 3 | `Pacer` — `transports/pacing.py::Pacer` | **Not network-facing** (token-bucket timing helper) | n/a | n/a | n/a | n/a |
+| 4 | `MeshtasticTransport` — `transports/meshtastic_radio.py::MeshtasticTransport` | Bidirectional (LoRa serial/TCP/BLE) | `connection="serial"`; no IP bind | **Link PSK claimed but NOT applied in code** — `_default_provisioner` sets only `region`, logs channel/psk/freq as device-provisioned (`meshtastic_radio.py::_default_provisioner`) | LoRa PHY only; PSK not enforced here | Fails open |
 | 5 | `meshsa-llm` server — `llm/server.py` | Inbound listener | `127.0.0.1:8090` | Bearer `MESHSA_LLM_TOKEN` on `/chat`; default off, loopback; `/`+`/healthz` open | Plaintext HTTP | **Fails closed** (`validate_bind`) |
 | 6 | Commander HTTP — `flightctl/run_commander.py`, `command/config.py` | Inbound listener | `127.0.0.1:8095` | Bearer `MESHSA_CMD_TOKEN` on `/command/*`; default off, loopback. **MAVLink2 signing** optional on the autopilot leg (`MESHSA_CMD_SIGNING_KEY_FILE`) | Plaintext HTTP | **Fails closed** — **NOW** delegates to `netauth.validate_bind` (this branch; its former local guard used `token is None`, so an empty token passed when called directly) |
 | 7 | `/healthz`+`/metrics` — `health.py`, `config.py::HealthConfig.port` | Inbound listener | `127.0.0.1:8098` (moved off `8088` in `code-hygiene-modularity` T-1.4 — `8088` is `mavlink2rest`'s own upstream convention), `enabled=False` | **NOW** bearer `MESHSA_HEALTH_TOKEN` gating `/metrics`; default off, loopback; `/healthz` open | Plaintext HTTP | **NOW fails closed** (`validate_healthz_bind`, this branch) — *was fail-open* |
@@ -59,15 +60,16 @@ until one lands.
 | 12 | `MspSourceTransport` — `transports/msp_source.py` | Inbound (serial poll) | `/dev/ttyACM0` — serial, no network bind | None (physical) | n/a | n/a |
 | 13 | `CrsfSourceTransport` — `transports/crsf_source.py` | Inbound (serial poll) | pyserial — serial, no network bind | None (physical) | n/a | n/a |
 | 14 | Jetson GStreamer egress — `streaming/gstreamer.py`, `core/config.py` | Outbound (RTP/UDP) | `127.0.0.1:5600`, **`enabled=False`** (this branch) | **None** (RTP has no auth) — control is default-off + `STREAM_ENABLED=true` opt-in | None / plaintext RTP/H.264 | **NOW fails closed** (default-off; single WARNING with destination at activation) — *was on by default* |
-| 15 | Jetson `LandingTargetBridge` — `mavlink/bridge.py`, `core/config.py:75` | Bidirectional MAVLink | `udpout:127.0.0.1:14550` | **None** (no signing on this leg) | Plaintext UDP | Feature off by default; when on, **safety** fail-closed via heartbeat gate (not an auth control) |
+| 15 | Jetson `LandingTargetBridge` — `mavlink/bridge.py`, `core/config.py::MavlinkSettings.endpoint` | Bidirectional MAVLink | `udpout:127.0.0.1:14550` | **None** (no signing on this leg) | Plaintext UDP | Feature off by default; when on, **safety** fail-closed via heartbeat gate (not an auth control) |
 | 16 | Jetson health listener | — | **Does not exist** (only the gstreamer udpsink; `--health-check` is a CLI self-test) | n/a | n/a | n/a |
 | 17 | Operator console — `ui/app.py`, `ui/config.py` | Inbound listener | `127.0.0.1:8100`, `enabled=False` | Bearer `MESHSA_UI_TOKEN` on `/api/*`; `?token=` gate on `/`; default off, loopback; `/healthz` open. Read-only (`GET` + non-command `POST /api/chat`). XSS-hardened (JSON-encoded injection, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`netauth.validate_bind` inside `build_ui_app`) |
 
 ## Gap summary
 
 - **Re-derived fail-open surface count (2026-07-31): 3, and only 1 of those is an actual
-  `bind_guard`-scoped listener gap.** A naive `grep -ci 'fails open'` over this file returns 5,
-  which double-counts surface #11's status in this Gap-summary prose; after correcting rows #10/#11
+  `bind_guard`-scoped listener gap.** A naive `grep -ci 'fails open'` over this file returns 6
+  (the session-start banner's figure): 3 surface-inventory rows plus 3 Gap-summary prose lines,
+  including the quoted grep command itself; after correcting rows #10/#11
   above, the surface-inventory table has 3 rows still saying "fails open": #1 `TakTcpTransport`, #2
   `TakMulticastTransport`, #4 `MeshtasticTransport`. Of those, only **#2** is actually in
   `bind_guard`'s scope (a listener that calls `.bind()`) and is a declared, still-valid governance
@@ -84,14 +86,15 @@ until one lands.
   token — validated *before* `node.start()` in `cli.py` so a misconfig fails fast without leaking a
   started node), and a bearer gate on `/metrics`. Default (loopback, `token=None`) is unchanged.
 - **TAK UDP multicast** binds `("", 6969)` on all interfaces with no auth/encryption
-  (`tak.py:341,361-368`). Inherent to multicast CoT, but it is an unauthenticated inbound datagram
-  surface reachable on every interface by default.
+  (`tak.py::_default_multicast_io`, `tak.py::TakMulticastTransport`). Inherent to multicast CoT,
+  but it is an unauthenticated inbound datagram surface reachable on every interface by default.
 - **Plaintext by default everywhere.** All HTTP surfaces run `web.run_app`/`TCPSite` with no TLS;
   TAK TCP defaults to plaintext `:8087`; MAVLink, detection UDP, and RTP video are cleartext.
   Confidentiality depends entirely on operators enabling TAK TLS or a trusted/link-encrypted network.
 - **Meshtastic "link-layer PSK" is aspirational in code.** `_default_provisioner` applies only the
   LoRa `region` and logs channel/PSK/frequency as "device-provisioned; verify on hardware" without
-  setting them (`meshtastic_radio.py:81-86`). The mesh PSK must be pre-provisioned out-of-band.
+  setting them (`meshtastic_radio.py::_default_provisioner`). The mesh PSK must be pre-provisioned
+  out-of-band.
 - **Telemetry-ingest transports trust their source (frame contents), but the bind itself is now
   guarded.** `mavlink_source` (`udpin:14550`), `detection_ingest` (UDP `8097`), and the serial
   MSP/CRSF sources perform no authentication on inbound *frame contents*. Loopback / physical-serial
@@ -104,8 +107,14 @@ until one lands.
 
 ## What is done well
 
-- One audited primitive (`netauth.py`) with constant-time bearer comparison (`:37`) and consistent
-  fail-closed bind validation, now shared by all five HTTP surfaces.
+- One audited primitive (`netauth.py`) with constant-time bearer comparison
+  (`netauth.py::authorize`) and consistent fail-closed bind validation, now shared by all five
+  HTTP surfaces.
+- Service defaults (ports, hosts, queue/backoff, endpoint) are single-sourced in
+  `meshsa/defaults.py` as of `code-hygiene-modularity` T-3.5a, with pinned-value tests
+  (`tests/test_defaults.py`) asserting every default in this inventory is numerically unchanged
+  and `tools/claude_hooks/literal_guard.py` preventing re-typed literals. **No posture change**:
+  every row above keeps its bind, auth, and encryption behavior.
 - The commander adds MAVLink2 signing on the autopilot leg and a fail-closed pre-arm heartbeat gate
   (`command/health.py`).
 - The scout station is deliberately XSS-hardened (JSON-encoded token injection, `textContent`/DOM

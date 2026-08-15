@@ -95,10 +95,12 @@ config field, not a literal.
 - **Config pattern.** `NodeConfig.from_env` (config.py:197) resolves `MESHSA_*` env vars into
   nested sub-configs via explicit per-field maps (`HealthConfig` config.py:122, `ScoutConfig`
   config.py:140 are the table precedents).
-- **Port inventory** (`docs/AUDIT_M2_AUTH.md`): 8087/8089 TAK, 6969 TAK multicast, 8088
-  healthz, 8090 llm, 8095 commander, 8099 scout station **and** detection-ingest UDP (a known
-  double-booking flagged in NEXTSTEPS). **8100 is unclaimed** → default `MESHSA_UI_PORT`.
-- **Enforced gates.** `--cov-fail-under=97` package-wide (`packages/meshsa/pyproject.toml:106`);
+- **Port inventory** (now the `meshsa/defaults.py` PORT_* table, mirrored in
+  `docs/AUDIT_M2_AUTH.md`): 8087/8089 TAK, 6969 TAK multicast, 8098 healthz (moved off
+  8088, mavlink2rest's convention, in T-1.4), 8090 llm, 8095 commander, 8099 scout
+  station, 8097 detection-ingest UDP (moved off 8099 in `fab3ab1`). **8100** → default
+  `MESHSA_UI_PORT` (`defaults.PORT_UI`).
+- **Enforced gates.** `--cov-fail-under=97` package-wide (`packages/meshsa/pyproject.toml`);
   `ruff` (`E,F,I,UP,B,SIM`), `ruff format`, `mypy --strict`.
 - **Forward compatibility.** M3 richer-track fields arrive as *additive optional* payload keys
   (`Position.course_deg/speed_ms` pattern, `models.py`); the snapshot must pass unknown scalar
@@ -199,7 +201,7 @@ Normative rules:
 | ----- | ---- | ------- | ----------- | ------- |
 | `enabled` | `bool` | `false` | `MESHSA_UI_ENABLED` | Master switch (no listener unless true) |
 | `host` | `str` | `"127.0.0.1"` | `MESHSA_UI_HOST` | Bind address (non-loopback requires `token`) |
-| `port` | `int` | `8100` | `MESHSA_UI_PORT` | Bind port (free per audit inventory; avoids the 8099 double-booking) |
+| `port` | `int` | `8100` | `MESHSA_UI_PORT` | Bind port (`defaults.PORT_UI`; free per audit inventory) |
 | `token` | `str \| None` | `None` | `MESHSA_UI_TOKEN` | Bearer token; `""`/whitespace → `None` |
 | `map_style_url` | `str` | `"https://demotiles.maplibre.org/style.json"` | `MESHSA_UI_MAP_STYLE_URL` | MapLibre style (point at a local style for offline) |
 | `poll_interval_s` | `float` (>0) | `2.0` | `MESHSA_UI_POLL_INTERVAL_S` | Client refresh cadence |

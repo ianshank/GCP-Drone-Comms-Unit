@@ -133,43 +133,6 @@ class CrsfLinkSettings(BaseModel):
     rc_ticks_max: int = 1811
 
 
-class ProberSettings(BaseModel):
-    """Address-prober pass criteria (E1.3)."""
-
-    probe_min_telemetry_frames: int = 5
-    #: Winner must exceed runner-up by this factor to guard against echo artifacts.
-    probe_margin: float = 3.0
-    #: Candidate addresses the prober tallies; frames from other addresses are
-    #: treated as noise and ignored (flight-controller, receiver, transmitter, …).
-    probe_addresses: list[int] = Field(default_factory=lambda: [0xC8, 0xEC, 0xEE, 0xEA])
-
-
-class CameraSettings(BaseModel):
-    """FPV camera capture-core settings (Phase 2, §5.5). No magic numbers in code."""
-
-    #: Target capture frame rate (frames/second).
-    fps: int = 30
-    #: Capture frame width in pixels.
-    width: int = 1280
-    #: Capture frame height in pixels.
-    height: int = 720
-    #: Video encoder/codec the muxer targets.
-    encoder: str = "h264"
-    #: Capture device index (OpenCV ``VideoCapture`` ordinal).
-    device: int = 0
-    #: Output video filename written alongside the session JSONL streams.
-    output_basename: str = "video.mp4"
-    #: Bounded encode-queue depth; frames overflowing it are dropped-and-counted.
-    capture_queue_len: int = 256
-    #: Upper bound on capture/encode shutdown: each thread join in ``close()``
-    #: waits at most this long so a wedged encoder can never hang the caller.
-    capture_shutdown_timeout_s: float = 2.0
-    #: Idle back-off (seconds) the capture loop sleeps when ``read_frame`` returns
-    #: ``None`` (source disconnected / between frames), so a dead source can never
-    #: spin the loop at 100% CPU. Bounded so shutdown stays responsive.
-    idle_poll_s: float = 0.1
-
-
 class MonitorSettings(BaseModel):
     """``fpv-telemetry-monitor`` live-loop settings. No magic numbers in code."""
 
@@ -182,13 +145,14 @@ class MonitorSettings(BaseModel):
 class FpvSettings(BaseModel):
     """Root FPV settings; compose-and-default, no magic numbers in code."""
 
+    # ``prober`` and ``camera`` groups were removed in T-5.1a with their consumers
+    # (AddressProber, fpv/camera.py); pydantic's default extra="ignore" keeps configs
+    # still carrying those keys loading cleanly.
     parser: ParserSettings = Field(default_factory=ParserSettings)
     health: HealthSettings = Field(default_factory=HealthSettings)
     logger: LoggerSettings = Field(default_factory=LoggerSettings)
     arm_guard: ArmGuardSettings = Field(default_factory=ArmGuardSettings)
     crsf: CrsfLinkSettings = Field(default_factory=CrsfLinkSettings)
-    prober: ProberSettings = Field(default_factory=ProberSettings)
-    camera: CameraSettings = Field(default_factory=CameraSettings)
     monitor: MonitorSettings = Field(default_factory=MonitorSettings)
 
     @classmethod

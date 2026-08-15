@@ -61,8 +61,10 @@ repos:
         types: [file]
 
   # ── Python (repo-wide) ──────────────────────────────────────────────────────
+  # Revs below must match the ruff/mypy pins in both packages' pyproject [dev] extras —
+  # tools/check_tool_pins.py fails CI on a mismatch (code-hygiene-modularity T-2.10).
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+    rev: v0.16.3
     hooks:
       - id: ruff
         name: ruff (Python linter)
@@ -75,7 +77,7 @@ repos:
         exclude: "^archive/"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v2.3.0
     hooks:
       - id: mypy
         name: mypy (Python type check)
@@ -85,3 +87,8 @@ repos:
           - pytest>=8
           - aiohttp>=3.9
           - types-PyYAML
+          # Without pydantic/structlog the hook sees import-not-found cascades ("cannot
+          # subclass BaseModel (has type Any)") that CI, with real deps installed, never
+          # reports — the two environments must reach the same verdict.
+          - pydantic>=2
+          - structlog

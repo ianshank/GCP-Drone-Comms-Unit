@@ -24,7 +24,7 @@ roadmap/initiative feature gets a committed spec under `docs/specs/` before code
 | [ops](ops) | Raspberry Pi 5 provisioning and base-node systemd deployment |
 | [hardware](hardware) | 3D-printable hardware assets and generation scripts |
 | [docs](docs) | Stable plan ([CHARTER](docs/CHARTER.md), [ROADMAP](docs/ROADMAP.md)), architecture (C4/ARCHITECTURE), and audit/backlog documents |
-| [tools](tools) | Makefile shortcuts and runtime Dockerfile |
+| [tools](tools) | Makefile shortcuts, runtime Dockerfile, governance hooks (`claude_hooks/`) and the repo checkers (`bind_guard`, `literal_guard`, `check_tool_pins`, `check_task_sync`, `validate_workforce`, `validate_skills`) with their tests |
 | [.agents/skills](.agents/skills) | On-demand playbooks for repeatable agent workflows |
 | [.github/agents](.github/agents) | Focused custom agent modes |
 | [archive](archive) | Historical ZIP snapshots; treat as read-only |
@@ -43,10 +43,16 @@ package-local context.
 | Type-check | `cd packages/meshsa && mypy src` |
 | Build package | `cd packages/meshsa && python -m build` |
 | Makefile equivalent | `make -f tools/Makefile test lint type build` |
+| Both packages | `make -f tools/Makefile test-all lint-all type-all` (adds `packages/jetson_yolo_gcs`) |
+| Governance checkers | `make -f tools/Makefile checkers` (`bind_guard`, `literal_guard`, `check_tool_pins`, `check_task_sync`, `validate_workforce`, `validate_skills`) |
+| Full pre-PR gate (TS + Python + governance) | `make validate-pre-pr` (repo-root Makefile; wraps `scripts/validate-pre-pr.sh`) |
 
 Targeted pytest runs use the same project coverage config; a single test file can
 fail `--cov-fail-under=97` even when its tests pass. Use the full suite for the
-final coverage gate.
+final coverage gate. `tools/Makefile`'s targets are a convenience wrapper around
+individual gates, not a CI-equivalent single command — CI additionally runs across
+Python 3.10–3.12, `flightctl/`+`deliverables/` lint/type-check, and the shell-lint job
+(see `.github/workflows/ci.yml`).
 
 ## Engineering Rules
 
@@ -101,6 +107,7 @@ Use these playbooks when the task matches their trigger words:
 - [.agents/skills/meshsa-test-conventions/SKILL.md](.agents/skills/meshsa-test-conventions/SKILL.md)
 - [.agents/skills/ops-deploy-base-node/SKILL.md](.agents/skills/ops-deploy-base-node/SKILL.md)
 - [.agents/skills/pre-pr-validator/SKILL.md](.agents/skills/pre-pr-validator/SKILL.md)
+- [.agents/skills/config-literal-sweep/SKILL.md](.agents/skills/config-literal-sweep/SKILL.md)
 
 ## Custom Agents
 

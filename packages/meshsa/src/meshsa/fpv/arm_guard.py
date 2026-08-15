@@ -1,5 +1,9 @@
 """Pre-flight arm-gating enforcement wrapper (§5.6, §4.1).
 
+Implements the ratified 2026-06-12 pre-flight arm-gating carve-out (CHARTER.md §3).
+Not yet wired to a production entry point; retiring this is a §6 decision, not a
+hygiene change (code-hygiene-modularity design D-1 / T-5.1b).
+
 ``ArmGuard`` wraps any :class:`meshsa.fpv.protocols.RCLink` and itself satisfies
 ``RCLink`` (decorator pattern), so interposing it is transparent to callers.
 

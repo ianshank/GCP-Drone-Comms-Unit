@@ -70,7 +70,10 @@ LISTENER_TRIGGERS: Final[frozenset[str]] = frozenset(
 #: T-2.4: widened to include tools/ (but excluding tests and the linter itself).
 SCAN_GLOBS: Final[tuple[str, ...]] = (
     "packages/**/src/**/*.py",
-    "flightctl/*.py",
+    # Recursive, matching literal_guard: the one-level `flightctl/*.py` form left
+    # flightctl/sim/ (and any future subpackage) invisible to the bind guard, while
+    # tasks.md T-2.4 recorded the recursive form as landed.
+    "flightctl/**/*.py",
     "tools/**/*.py",
 )
 
@@ -218,6 +221,12 @@ def scan_file(source: str, rel_path: str, config: BindGuardConfig) -> list[Findi
         exception_paths = {entry.path for entry in config.exceptions}
         guard_aliases = _guard_import_aliases(tree, symbol)
         guarded = _calls_any(tree, guard_aliases)
+        if not guarded and rel_path in exception_paths:
+            _log.info(
+                "listener trigger excepted by governance config: %s (%d occurrence(s))",
+                rel_path,
+                len(triggers),
+            )
         if not guarded and rel_path not in exception_paths and module != canonical:
             findings.extend(
                 Finding(

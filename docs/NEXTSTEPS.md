@@ -36,6 +36,23 @@
 > `openspec/changes/code-hygiene-modularity/`. Does **not** open M3+ and does **not** clear the
 > Initiative-C M2 gate (`c_gate_met` untouched).
 
+- [ ] **Maintainer decision (T-5.1b): wire or retire the pre-flight arm-gating carve-out.**
+      `ArmGuard`, `crsf/rc.py`, `CrsfLink.send_rc`, the `RCLink` protocol, and
+      `FlightLogger.record_rc` implement the ratified 2026-06-12 carve-out (CHARTER §3),
+      are unit-tested, and are marked as such in their module docstrings — but no
+      production entry point uses them. Either wire an entry point or amend the charter
+      to retire the capability; a hygiene commit must not decide this (§6).
+- [ ] **Maintainer decision: whitespace-only bearer tokens.** `netauth.validate_bind`
+      accepts `"   "` as a credential (`not token` is falsy-only). Normalization is
+      uneven, so the consequence differs by surface: `llm/server.py::resolve_config`
+      and `ui/config.py` map whitespace→`None` and refuse; `scout/cli.py`'s
+      `station_token or None` normalizes empty only, so a whitespace token binds but
+      is unmatchable (`netauth.authorize` strips the presented credential, not the
+      configured one) — denial, not exposure; the transport-options path
+      (`mavlink_source`, `detection_ingest`) neither normalizes nor authenticates
+      datagrams, and is the variant that actually widens a bind. Documented by
+      `test_mavlink_source.py::test_whitespace_token_currently_accepted_documented_gap`;
+      decide normalize-in-`netauth` (one place, covers all four) vs document-as-is.
 - [x] **T-0 — Spec + preconditions:** OpenSpec bundle authored; CHARTER §3 jetson-amendment
       wording drafted for maintainer ratification.
 - [x] **T-1 — Six verified bug fixes:** `meshsa.ui` `/api/*` responses now carry
@@ -47,12 +64,32 @@
       see CHANGELOG); `meshsa.llm.sources` narrowed two bare `except Exception` swallows.
 - [x] **T-2 — Gate widening:** pre-commit and `scripts/validate-pre-pr.sh` now run real Python
       lint/format/type/test steps repo-wide (previously `deliverables/`-only / syntax-only);
-      `bind_guard`'s scan scope widened to include `tools/**/*.py`.
-- [ ] **T-2.3 (deferred, part of T-2):** archive `artifacts/mockup-sandbox` and
-      `lib/api-client-react` into `archive/`, fix the root Dockerfile's invalid
-      `COPY … 2>/dev/null || true` lines, update `tsconfig`/`pnpm-workspace.yaml`, and add a new
-      `ts` CI job for `api-spec`/`api-zod`/`api-server`. Deferred pending a Node.js/pnpm toolchain
-      in this working environment to verify the workspace surgery safely — not dropped.
+      `bind_guard`'s scan scope widened to include `tools/**/*.py` and `flightctl/**/*.py`.
+- [x] **T-2.3a:** fixed the root Dockerfile's invalid `COPY … 2>/dev/null || true` lines (`COPY`
+      is not a shell instruction); deleted dead TS scaffolding (`scripts/src/hello.ts`,
+      `scripts/post-merge.sh`, the root Makefile's `db-migrate`/`db-studio` targets).
+- [ ] **T-2.3b (deferred, part of T-2):** archive `artifacts/mockup-sandbox` and
+      `lib/api-client-react` into `archive/`, update `tsconfig`/`pnpm-workspace.yaml`, and add a
+      new `ts` CI job for `api-spec`/`api-zod`/`api-server`. Deferred pending a Node.js/pnpm
+      toolchain in this working environment to verify the workspace surgery safely — not dropped.
+- [x] **T-2.7 — CI determinism & hardening:** per-ref concurrency groups (main never cancelled),
+      `timeout-minutes` on every job, the 5,000-cycle link-loss fuzz moved to `nightly.yml`
+      (`@pytest.mark.slow`, per `docs/specs/m2-soak-fuzz.md` §7) with a distinct-seeded 250-cycle
+      smoke slice staying per-PR, `--cov-report=xml` artifacts + `$GITHUB_STEP_SUMMARY` coverage
+      lines, and a `validate-pre-pr.sh` subshell fix (a failing meshsa suite no longer silently
+      skips the jetson suite).
+- [x] **T-2.8 — `literal_guard` + governance:** `tools/claude_hooks/literal_guard.py` (AST-based,
+      ports/hosts/queue-backoff/endpoints, `.claude/governance.yaml` `literal_guard:` exceptions).
+- [x] **T-2.9 — Hypothesis profiles:** `ci` (derandomized) / `nightly` (randomized, `print_blob`)
+      profiles in `packages/meshsa/tests/conftest.py`, selected via `HYPOTHESIS_PROFILE`;
+      `--strict-markers` on both packages.
+- [x] **T-2.10 — pin-sync + task-sync + skills:** `tools/check_tool_pins.py` (ruff/mypy pins,
+      pyproject vs. pre-commit), `tools/check_task_sync.py` (advisory OpenSpec-checkbox-vs-git
+      reconciliation), `.agents/skills/config-literal-sweep/`.
+- [x] **T-2.11 — Repo-governance pack:** `CODEOWNERS`, PR/issue templates, `dependabot.yml`
+      (`pip` + `github-actions`), SHA-pinned Actions across all four workflows, a CI `gitleaks`
+      step (pre-commit's copy is `--no-verify`-bypassable), `SECURITY.md` real reporting
+      instructions.
 - [ ] **T-3 — Shared foundations (8 commits):** extract `_web.py` (consolidated auth scaffold for
       the four aiohttp factories), `_envconfig.py`, `_frame_codec.py`, `_geojson.py`, `_queues.py`,
       `mavlink_constants.py`, `_logging.py`; characterization-first (route/status/header pins
@@ -312,9 +349,12 @@ Implemented greenfield (Phase 0 Errata E1 + Phase 1 Spec v1.1); see
 - [x] **Human sign-off on the CHARTER §3 carve-out** (RC-TX scope expansion) — ratified 2026-06-12.
 - [ ] Bench validation (§8): live LinkStats on hardware, voltage calibration, ratio sweep,
       antenna-removal transitions, `!FS!` end-to-end — thresholds remain provisional until then.
-- [x] Phase 2: camera wired into the existing `frames.jsonl`/`video` stub via a `CaptureWriter`
-      daemon (`fpv/camera.py`) reading an injected `CameraSource` — additive, `DATASET_SCHEMA`
-      stays 2; only the capture backend is `# pragma: no cover` glue (shipped, see ARCHITECTURE).
+- [x] ~~Phase 2: camera wired into the existing `frames.jsonl`/`video` stub via a
+      `CaptureWriter` daemon (`fpv/camera.py`).~~ **Removed in `code-hygiene-modularity`
+      T-5.1a**: never wired to a production entry point, and superseded by
+      `packages/jetson_yolo_gcs`'s live `streaming/camera.py`. The `frames.jsonl`/manifest
+      `video` contract is unchanged (`FlightLogger` still takes `video_meta`);
+      `DATASET_SCHEMA` stays 2.
 - [x] Additive `crsf_source` transport so CRSF telemetry becomes an ATAK air track (0.3.0;
       decodes GPS 0x02 → `GpsSensor` → `telemetry` codec; `DATASET_SCHEMA` 1 → 2).
 
@@ -364,7 +404,7 @@ Found by automated gap analysis (source code + test coverage subagents); lint,
       `fpv/tools/replay.py` `rec[...]` KeyErrors, `mavlink_source` attribute assumptions.
 
 ### M2 auth-audit findings (2026-07-08 — see [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md))
-Full evidence-backed enumeration of the 16-row surface inventory (12 network-bound; the rest
+Full evidence-backed enumeration of the 17-row surface inventory (12 network-bound; the rest
 serial / non-network / nonexistent) and its auth/encryption posture (the Track 0.2 / E.3
 prerequisite before the maintainer rules on the commanding M2 gate).
 - [x] **[security] `/healthz`+`/metrics` was the one fail-open aiohttp surface** (`health.py`).

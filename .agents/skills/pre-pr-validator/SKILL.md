@@ -45,7 +45,16 @@ argument-hint: "Branch diff and verification gates to run"
    - Changed files missing test coverage.
    - Quality/lint/type errors found (if any), per package.
    - Recommended documentation updates (CHANGELOG.md, README.md, C4.md, ARCHITECTURE.md, NEXTSTEPS.md).
-5. **Verify zero hardcoded values**: Confirm all operational values are config fields with default values and env-var bindings.
+5. **Verify zero hardcoded values**: Confirm all operational values are config fields with default values and env-var bindings. Deterministic backing — run from the repo root:
+   - `python tools/claude_hooks/bind_guard.py` (every listener routes through `netauth.validate_bind`)
+   - `python tools/claude_hooks/literal_guard.py` (service literals sourced from `meshsa/defaults.py`; exceptions-only output — see the `config-literal-sweep` skill for the fix loop)
+   - `python tools/check_tool_pins.py` (pre-commit revs == pyproject ruff/mypy pins)
+   - `python tools/check_task_sync.py` (advisory: bundle checkboxes vs commit subjects)
+   - `python tools/validate_workforce.py` (`.claude/agents/*.md` roster frontmatter + Relationship line)
+   - `python tools/validate_skills.py` (`.agents/skills/*/SKILL.md` frontmatter, name-vs-directory
+     agreement, and cited repo-path existence)
+   - `git check-ignore .agents/skills/<new-skill>/SKILL.md && echo BROKEN || echo ok` when adding a skill (the `.gitignore` `.agents/*` rule must never regress to `.agents/`, which silently untracked new skill files)
+   Determinism note: per-PR Hypothesis runs the derandomized `ci` profile; set `HYPOTHESIS_PROFILE=nightly` only to reproduce a nightly exploration failure (the log's `@reproduce_failure` blob replays it exactly).
 6. **No-numpy invariant (bounded exception: the tracker backend)**: the base package and all pure
    logic (e.g. `geometry/ned.py`) stay numpy-free. The **sole** permitted numpy use is inside the
    optional Norfair tracker backend (`tracking/norfair_backend.py`), where numpy is a lazy,

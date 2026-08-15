@@ -18,6 +18,7 @@ from typing import Any
 
 import structlog
 
+from ..defaults import DEFAULT_LOOPBACK_HOST, DEFAULT_QUEUE_MAXSIZE, PORT_DETECTION_INGEST
 from ..netauth import is_loopback, validate_bind
 from ..registry import transport_registry
 from .base import AbstractTransport
@@ -46,9 +47,9 @@ class DetectionIngestTransport(AbstractTransport):
         self,
         name: str = "detections",
         *,
-        host: str = "127.0.0.1",
-        port: int = 8097,
-        queue_maxsize: int = 1000,
+        host: str = DEFAULT_LOOPBACK_HOST,
+        port: int = PORT_DETECTION_INGEST,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         token: str | None = None,
         **_options: Any,
     ) -> None:

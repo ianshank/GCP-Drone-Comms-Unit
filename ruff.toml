@@ -4,7 +4,7 @@
 # Kept in sync with packages/meshsa/pyproject.toml so style is uniform repo-wide.
 line-length = 100
 target-version = "py310"
-extend-exclude = [".venv", ".venv-main", ".venv-crsf", "build", "dist"]
+extend-exclude = [".venv", "build", "dist"]
 
 [lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

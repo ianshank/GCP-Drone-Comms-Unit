@@ -30,6 +30,7 @@ from typing import Any
 
 import structlog
 
+from ..defaults import DEFAULT_MAVLINK_ENDPOINT, DEFAULT_QUEUE_MAXSIZE
 from ..protocols import Clock
 from ..registry import transport_registry
 from .polling_source import PollingSourceTransport
@@ -43,7 +44,7 @@ def _default_connection_factory(options: dict[str, Any]) -> ConnectionFactory:  
     def factory() -> Any:
         from pymavlink import mavutil
 
-        endpoint = options.get("endpoint", "udpin:127.0.0.1:14550")
+        endpoint = options.get("endpoint", DEFAULT_MAVLINK_ENDPOINT)
         return mavutil.mavlink_connection(endpoint)
 
     return factory
@@ -81,10 +82,10 @@ class MavlinkSourceTransport(PollingSourceTransport):
         alt_scale: float = 1e-3,
         recv_timeout_s: float = 1.0,
         clock: Clock | None = None,
-        queue_maxsize: int = 1000,
+        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         **_options: Any,
     ) -> None:
-        endpoint = str(_options.get("endpoint", "udpin:127.0.0.1:14550"))
+        endpoint = str(_options.get("endpoint", DEFAULT_MAVLINK_ENDPOINT))
         token = _options.get("token")
         host = _extract_endpoint_host(endpoint)
         if host:

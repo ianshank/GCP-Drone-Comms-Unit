@@ -9,8 +9,8 @@ import pytest
 from meshsa.llm.agent import AgentReply
 from meshsa.llm.server import (
     DEFAULT_HOST,
+    DEFAULT_MAX_PROMPT_CHARS,
     DEFAULT_PORT,
-    MAX_PROMPT_CHARS,
     authorize,
     chat_reply,
     is_loopback,
@@ -69,7 +69,7 @@ async def test_chat_reply_non_object_payload() -> None:
 
 async def test_chat_reply_rejects_oversized_prompt_without_calling_model() -> None:
     agent = _FakeAgent(AgentReply(text="x", stop_reason="end_turn"))
-    body, status = await chat_reply(agent, {"prompt": "A" * (MAX_PROMPT_CHARS + 1)})
+    body, status = await chat_reply(agent, {"prompt": "A" * (DEFAULT_MAX_PROMPT_CHARS + 1)})
     assert status == 400
     assert "too long" in body["error"]
     assert agent.prompts == []  # cost/latency DoS guard: model never invoked
@@ -77,7 +77,7 @@ async def test_chat_reply_rejects_oversized_prompt_without_calling_model() -> No
 
 async def test_chat_reply_accepts_prompt_at_limit() -> None:
     agent = _FakeAgent(AgentReply(text="ok", stop_reason="end_turn"))
-    _body, status = await chat_reply(agent, {"prompt": "A" * MAX_PROMPT_CHARS})
+    _body, status = await chat_reply(agent, {"prompt": "A" * DEFAULT_MAX_PROMPT_CHARS})
     assert status == 200
 
 

@@ -1,5 +1,9 @@
 # Peer Review — "Vineyard SCOUT + Ground Station" plan + Revised plan
 
+> **Point-in-time record**: figures below (coverage gates 90/85) are as-of the review
+> date and preserved as evidence. Current gates are 97% (meshsa) / 96%
+> (jetson_yolo_gcs) — the package `pyproject.toml` files are authoritative.
+>
 > Reviewed 2026-07-05 against the working tree at the head of
 > `claude/peer-review-revised-plan-ks9dgl`. Every verdict was checked against actual files, not
 > the plan's prose, and then **adversarially re-reviewed against the source**. Part 1 is the

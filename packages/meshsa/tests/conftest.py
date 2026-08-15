@@ -1,10 +1,32 @@
 import itertools
+import os
 from collections.abc import Mapping
 from typing import Any
 
 import pytest
+from hypothesis import settings
 
 from meshsa import HttpResponse
+
+# Hypothesis determinism profiles (code-hygiene-modularity T-2.9).
+#
+# "ci" (default): derandomized so the per-PR gate is reproducible and branch coverage
+# cannot jitter with novel examples; database=None so a stale local example DB can never
+# make a local run diverge from CI; print_blob so any failure still prints a paste-able
+# @reproduce_failure decorator.
+# "nightly": randomized input exploration (selected via HYPOTHESIS_PROFILE=nightly in
+# nightly.yml); print_blob is what makes a failure on an ephemeral runner reproducible
+# after the runner and its .hypothesis directory are gone.
+#
+# Caveats: per-test @settings merge field-wise with the active profile, so derandomize
+# still reaches tests that pin max_examples inline, and the nightly max_examples bump
+# widens only tests without an inline value. The link-loss soak fuzz is driven by a
+# seeded random.Random, not Hypothesis — these profiles do not affect it.
+settings.register_profile("ci", derandomize=True, print_blob=True, database=None, deadline=None)
+settings.register_profile(
+    "nightly", derandomize=False, print_blob=True, deadline=None, max_examples=300
+)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "ci"))
 
 
 class FakeHttpTransport:

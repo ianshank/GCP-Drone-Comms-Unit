@@ -11,13 +11,18 @@ from meshsa.fpv import version as fv
 
 def test_window_is_self_consistent():
     assert fv.MIN_COMPATIBLE_DATASET <= fv.DATASET_SCHEMA
-    assert (
-        frozenset(range(fv.MIN_COMPATIBLE_DATASET, fv.DATASET_SCHEMA + 1))
-        == fv.SUPPORTED_DATASET_SCHEMAS
-    )
 
 
-@pytest.mark.parametrize("v", sorted(fv.SUPPORTED_DATASET_SCHEMAS))
+def test_window_endpoints_are_exclusive_boundaries():
+    # Replaces the frozenset-identity assertion that went with SUPPORTED_DATASET_SCHEMAS
+    # in T-5.1a: without this, `test_window_is_self_consistent` is just `1 <= 2`.
+    assert not fv.is_dataset_compatible(fv.MIN_COMPATIBLE_DATASET - 1)
+    assert not fv.is_dataset_compatible(fv.DATASET_SCHEMA + 1)
+    assert fv.is_dataset_compatible(fv.MIN_COMPATIBLE_DATASET)
+    assert fv.is_dataset_compatible(fv.DATASET_SCHEMA)
+
+
+@pytest.mark.parametrize("v", list(range(fv.MIN_COMPATIBLE_DATASET, fv.DATASET_SCHEMA + 1)))
 def test_supported_schemas_are_compatible(v):
     assert fv.is_dataset_compatible(v)
 
@@ -43,9 +48,8 @@ def test_dataset_schema_decoupled_from_wire_schema():
     # The fpv dataset compatibility window is governed by the fpv constants, not
     # the wire constant. If someone aliased `DATASET_SCHEMA = wire.SCHEMA_VERSION`,
     # the window's upper bound would track the wire value and this would fail.
-    assert max(fv.SUPPORTED_DATASET_SCHEMAS) == fv.DATASET_SCHEMA
-    assert min(fv.SUPPORTED_DATASET_SCHEMAS) == fv.MIN_COMPATIBLE_DATASET
     assert fv.is_dataset_compatible(fv.DATASET_SCHEMA)
+    assert fv.is_dataset_compatible(fv.MIN_COMPATIBLE_DATASET)
     # The dataset window must extend beyond the wire window's single value here;
     # an alias would collapse DATASET_SCHEMA back onto wire.SCHEMA_VERSION.
     assert fv.DATASET_SCHEMA != wire.SCHEMA_VERSION
