@@ -84,7 +84,7 @@ repos:
         files: "\\.(py)$"
         exclude: "^archive/"
         additional_dependencies:
-          - pytest>=8
+          - pytest>=9.1.1
           - aiohttp>=3.14.3
           - types-PyYAML
           # Without pydantic/structlog the hook sees import-not-found cascades ("cannot
