@@ -85,7 +85,7 @@ repos:
         exclude: "^archive/"
         additional_dependencies:
           - pytest>=8
-          - aiohttp>=3.9
+          - aiohttp>=3.14.3
           - types-PyYAML
           # Without pydantic/structlog the hook sees import-not-found cascades ("cannot
           # subclass BaseModel (has type Any)") that CI, with real deps installed, never
