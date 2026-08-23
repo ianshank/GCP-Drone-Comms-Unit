@@ -52,7 +52,7 @@ dev = [
     # Pinned exactly (code-hygiene-modularity T-2.7) — must match packages/meshsa and the
     # pre-commit revs; tools/check_tool_pins.py enforces the match.
     "ruff==0.16.3",
-    "mypy==2.3.0",
+    "mypy==2.3.1",
     "pre-commit>=3.7",
     "build>=1.2",
     "twine>=5",
