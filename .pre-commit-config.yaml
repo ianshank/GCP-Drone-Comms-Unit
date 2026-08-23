@@ -64,7 +64,7 @@ repos:
   # Revs below must match the ruff/mypy pins in both packages' pyproject [dev] extras —
   # tools/check_tool_pins.py fails CI on a mismatch (code-hygiene-modularity T-2.10).
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.3
+    rev: v0.16.4
     hooks:
       - id: ruff
         name: ruff (Python linter)
