@@ -84,7 +84,7 @@ dev = [
     # agree on lint/type verdicts; tools/check_tool_pins.py enforces the pre-commit match
     # and dependabot proposes updates. Captured from a fresh green install (2026-08-14).
     "ruff==0.16.3",
-    "mypy==2.3.0",
+    "mypy==2.3.1",
     "pre-commit>=3.7",
     "build>=1.2",
     "twine>=5",
