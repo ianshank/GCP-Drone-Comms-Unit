@@ -51,7 +51,7 @@ dev = [
     "pytest-cov>=5",
     # Pinned exactly (code-hygiene-modularity T-2.7) — must match packages/meshsa and the
     # pre-commit revs; tools/check_tool_pins.py enforces the match.
-    "ruff==0.16.3",
+    "ruff==0.16.4",
     "mypy==2.3.0",
     "pre-commit>=3.7",
     "build>=1.2",
