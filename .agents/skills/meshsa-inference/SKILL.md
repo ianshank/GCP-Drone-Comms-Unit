@@ -58,13 +58,19 @@ socket glue — testable via its injectable `session_factory`). **Unit-test agai
 
 Run from `packages/meshsa` with the extra installed
 (`pip install -e ".[dev,inference]"`): `python -m pytest`, `mypy src`, `ruff check .`,
-`ruff format --check .`. Keep `inference.py` at ~99% line+branch.
+`ruff format --check .`. Keep `inference/` at ~99% line+branch.
 
 ## References
 
-- `packages/meshsa/src/meshsa/inference.py`, `config.py` (`MESHSA_INFERENCE_*` bindings,
-  `NemotronConfig.max_pending_tasks`, `InferenceService.as_dict`)
+- `packages/meshsa/src/meshsa/inference/__init__.py` — package split
+  (code-hygiene-modularity T-4.1b) into `errors.py`, `transport.py`, `client.py`,
+  `service.py` (`InferenceService.as_dict`), `config.py`
+  (`NemotronConfig.max_pending_tasks`); this facade re-exports the full prior public
+  surface so external import paths are unaffected
+- `packages/meshsa/src/meshsa/config.py` (`MESHSA_INFERENCE_*` env-var bindings in
+  `NodeConfig.from_env`)
 - `packages/meshsa/src/meshsa/health.py` (`render_metrics` inference wiring), `metrics.py`
   (`render_prometheus(..., inference=...)`)
-- `packages/meshsa/tests/test_inference.py`, `test_inference_e2e.py`
+- `packages/meshsa/tests/test_inference_client.py`, `test_inference_service.py`,
+  `test_inference_transport.py`, `test_inference_e2e.py`
 - `docs/specs/initiative-e-inference.md` (author from TEMPLATE before Track B work)

@@ -60,9 +60,9 @@ Run from `packages/meshsa`: `python -m pytest`, `mypy src`, `ruff check .`,
 ## References
 
 - `packages/meshsa/src/meshsa/metrics.py` (`RouterMetrics`, `render_prometheus`)
-- `packages/meshsa/src/meshsa/health.py`, `config.py` (`HealthConfig`)
+- `packages/meshsa/src/meshsa/health.py` (`HealthConfig`, `render_metrics` wiring)
 - `packages/meshsa/src/meshsa/transports/polling_source.py` (`rx_frames`, link log)
-- `packages/meshsa/src/meshsa/inference.py` (`InferenceService.as_dict`) — see also
+- `packages/meshsa/src/meshsa/inference/service.py` (`InferenceService.as_dict`) — see also
   `.agents/skills/meshsa-inference/SKILL.md` for the config/behavior side of these counters
 - `packages/meshsa/tests/test_metrics.py` — `test_render_prometheus_emits_all_dashboard_metric_names`
   is the drift-guard: it asserts all 12 dashboard-referenced names (5 router + 3 per-transport +

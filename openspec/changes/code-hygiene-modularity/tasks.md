@@ -166,11 +166,21 @@
       (`svc._semaphore` → `svc._rate_gate._semaphore`, `svc._offline`/
       `_offline_dropped` → `svc._offline_queue._queue`/`._dropped`) updated
       mechanically; same fix mirrored in `tests/test_health.py`.
-- [ ] T-4.1b Residual of T-4.1: `inference.py` → package (`errors.py`,
+- [x] T-4.1b Residual of T-4.1: `inference.py` → package (`errors.py`,
       `transport.py`, `client.py`, `service.py`, `config.py` + `__init__.py`
-      facade), plus the `NemotronConfig` relocation out of `config.py` — T-4.1's
-      literal text is satisfied by T-4.1a alone; this is the fuller decomposition
-      from the original god-file scan, landed separately.
+      facade mirroring `command/__init__.py`'s plain-imports-plus-`__all__`
+      convention), plus the `NemotronConfig` relocation out of `config.py`
+      (`config.py`'s shim import placed after `RouterConfig`'s definition,
+      not at the top, to avoid a circular import through
+      `inference → router → config`). `.agents/skills/meshsa-inference/SKILL.md`
+      and `meshsa-observability/SKILL.md` path citations updated in the same
+      commit (`tools/validate_skills.py` path-existence check). `tests/test_inference.py`
+      split into `test_inference_client.py`, `test_inference_service.py`,
+      `test_inference_transport.py` (the `aiohttp` monkeypatch target moved to
+      `meshsa.inference.transport`); no dedicated `test_inference_errors.py` —
+      the error-classification helpers have no direct unit tests to move, only
+      indirect coverage via the client/service suites (unchanged from before
+      the split).
 - [x] T-4.2a `TakMulticastTransport` (+ `DatagramIO`, `_default_multicast_io`, its
       registry factory) moves to `transports/tak_multicast.py`, with a matching
       `.claude/governance.yaml` bind-guard exception entry and `docs/AUDIT_M2_AUTH.md`
