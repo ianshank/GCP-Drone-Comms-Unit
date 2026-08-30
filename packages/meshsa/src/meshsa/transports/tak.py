@@ -9,7 +9,7 @@ hard-coded — host/port/read-size/delimiter and the backoff schedule all come f
 config options.
 
 The UDP multicast CoT transport (``TakMulticastTransport``) lives in
-``tak_multicast.py`` (code-hygiene-modularity T-4.2) — it shares no code with this
+``tak_multicast.py`` (code-hygiene-modularity T-4.2a) — it shares no code with this
 TCP transport beyond the ``Transport``/``AbstractTransport`` contract. Still
 importable from here (``from meshsa.transports.tak import TakMulticastTransport``)
 via re-export for backward compatibility.

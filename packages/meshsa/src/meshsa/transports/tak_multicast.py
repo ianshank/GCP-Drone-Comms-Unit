@@ -1,6 +1,6 @@
 """TAK UDP multicast transport: exchange CoT datagrams over a multicast group.
 
-Split out of ``tak.py`` (code-hygiene-modularity T-4.2) — it shares no code with
+Split out of ``tak.py`` (code-hygiene-modularity T-4.2a) — it shares no code with
 the TCP transport (``tak.py::TakTcpTransport``) beyond the
 ``Transport``/``AbstractTransport`` contract; the two lived in one file only
 because both speak CoT/TAK. All network I/O is behind an injected ``io_factory``
