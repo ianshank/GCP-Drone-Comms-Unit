@@ -156,8 +156,21 @@
       `pipeline._to_envelope`.
 
 ## Phase 4 — Class splits (facades preserve public constructors)
-- [ ] T-4.1 `InferenceService` → `_RateGate` + `_OfflineQueue`; mechanical split of
-      `tests/test_inference.py`.
+- [x] T-4.1a `InferenceService`'s rate-limiting logic (semaphore + min-interval
+      spacing) extracted into a `_RateGate` collaborator, its offline-queue logic
+      (enqueue/drain/drop-counting) into an `_OfflineQueue` collaborator — both
+      still composed inside `InferenceService`, still in `inference.py` (the file
+      split into a package is T-4.1b). Public surface (constructor, `start`/
+      `handle_message`/`stop`/`as_dict`) unchanged, no re-export shim needed.
+      `tests/test_inference.py`'s white-box assertions on the moved private state
+      (`svc._semaphore` → `svc._rate_gate._semaphore`, `svc._offline`/
+      `_offline_dropped` → `svc._offline_queue._queue`/`._dropped`) updated
+      mechanically; same fix mirrored in `tests/test_health.py`.
+- [ ] T-4.1b Residual of T-4.1: `inference.py` → package (`errors.py`,
+      `transport.py`, `client.py`, `service.py`, `config.py` + `__init__.py`
+      facade), plus the `NemotronConfig` relocation out of `config.py` — T-4.1's
+      literal text is satisfied by T-4.1a alone; this is the fuller decomposition
+      from the original god-file scan, landed separately.
 - [x] T-4.2a `TakMulticastTransport` (+ `DatagramIO`, `_default_multicast_io`, its
       registry factory) moves to `transports/tak_multicast.py`, with a matching
       `.claude/governance.yaml` bind-guard exception entry and `docs/AUDIT_M2_AUTH.md`

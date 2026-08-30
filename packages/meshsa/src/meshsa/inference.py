@@ -353,6 +353,127 @@ class NemotronClient:
         await self._transport.aclose()
 
 
+class _RateGate:
+    """Bounds InferenceService's outbound request concurrency and rate.
+
+    Extracted from InferenceService (code-hygiene-modularity T-4.1). A
+    ``BoundedSemaphore`` caps *concurrency*; the min-interval spacing caps *rate* —
+    a semaphore alone cannot. Both are no-ops at their configured defaults (0),
+    preserving prior service behavior.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_concurrent_requests: int,
+        min_interval_s: float,
+        clock: Clock,
+        sleep: Callable[[float], Awaitable[None]],
+    ) -> None:
+        self._semaphore: asyncio.BoundedSemaphore | None = (
+            asyncio.BoundedSemaphore(max_concurrent_requests)
+            if max_concurrent_requests > 0
+            else None
+        )
+        self._min_interval_s = min_interval_s
+        self._clock = clock
+        self._sleep = sleep
+        self._interval_lock = asyncio.Lock()
+        self._last_request_at: float | None = None
+
+    async def _space(self) -> None:
+        """Enforce ``min_interval_s`` spacing between requests via the injected clock."""
+        if self._min_interval_s <= 0:
+            return
+        async with self._interval_lock:
+            now = self._clock.now()
+            if self._last_request_at is not None:
+                wait = self._min_interval_s - (now - self._last_request_at)
+                if wait > 0:
+                    await self._sleep(wait)
+            self._last_request_at = self._clock.now()
+
+    async def run(self, call: Callable[[], Awaitable[InferenceResult]]) -> InferenceResult:
+        """Space, then run ``call`` under the concurrency permit (if any).
+
+        Spacing happens *before* acquiring a permit (so a permit is never spent merely
+        waiting). The permit then wraps the whole call — **including its internal
+        retry/backoff sleeps** — so under transient failures a slot is held across
+        retries. That is deliberate: ``max_concurrent_requests`` bounds in-flight
+        requests *inclusive of retries* to cap edge API spend (spec §5). Both live
+        requests and each offline replay go through this same gate, so they honor
+        ``min_interval_s``/``max_concurrent_requests`` identically.
+        """
+        await self._space()
+        if self._semaphore is None:
+            return await call()
+        async with self._semaphore:
+            return await call()
+
+
+class _OfflineQueue:
+    """Bounded queue of envelopes that failed while the API was unreachable.
+
+    Extracted from InferenceService (code-hygiene-modularity T-4.1). A failure
+    (transport/HTTP error surviving retries) enqueues the envelope (drop-and-count
+    on overflow, mirroring ``FlightLogger``); the next success drains/replays it.
+    ``maxlen=0`` disables queueing entirely, preserving prior service behavior.
+    """
+
+    def __init__(self, maxlen: int) -> None:
+        self._queue: deque[Envelope] | None = deque(maxlen=maxlen) if maxlen > 0 else None
+        self._dropped = 0
+        self.drain_lock = asyncio.Lock()
+
+    def __bool__(self) -> bool:
+        """True when the queue currently holds items (mirrors the prior ``self._offline``
+        truthiness check — distinct from :attr:`enabled`, which is true even when empty)."""
+        return bool(self._queue)
+
+    @property
+    def enabled(self) -> bool:
+        """True when queueing is configured at all (``maxlen > 0``), even if currently
+        empty — the check a fresh failure needs before its first enqueue."""
+        return self._queue is not None
+
+    @property
+    def dropped(self) -> int:
+        return self._dropped
+
+    @property
+    def depth(self) -> int:
+        return len(self._queue) if self._queue is not None else 0
+
+    def put(self, envelope: Envelope, *, front: bool) -> None:
+        """Add ``envelope`` to either end, counting any overflow.
+
+        Callers only reach here after an :attr:`enabled`/truthiness check, so
+        ``self._queue`` is always a real deque (never called while disabled).
+
+        ``front=True`` (a re-queued replay) preserves FIFO — the item returns to where
+        it was popped. A full deque silently drops the item at the opposite end on
+        insert, so we count it (drop-and-count) rather than lose it silently — this
+        also covers the case where a concurrent producer refilled the queue during a
+        drain ``await``.
+        """
+        assert self._queue is not None
+        if len(self._queue) == self._queue.maxlen:
+            self._dropped += 1
+            _log.warning("inference_offline_dropped", dropped_total=self._dropped)
+        if front:
+            self._queue.appendleft(envelope)
+        else:
+            self._queue.append(envelope)
+
+    def pop(self) -> Envelope:
+        assert self._queue is not None  # callers only pop after a truthiness check
+        return self._queue.popleft()
+
+    def record_drop(self) -> None:
+        """Count a drop that happens outside :meth:`put` (a permanently-failed replay)."""
+        self._dropped += 1
+
+
 class InferenceService:
     """Subscribes to mesh traffic, runs inference, and broadcasts insights."""
 
@@ -377,23 +498,16 @@ class InferenceService:
         self._bg_tasks: set[asyncio.Task[None]] = set()
         self._running = False
         self._subscribed = False
-        # ── Rate limiting (spec §5). A BoundedSemaphore caps *concurrency*; the
-        #    min-interval gate caps *rate* — a semaphore alone cannot. Both are no-ops
-        #    at their defaults (0), preserving prior behavior. ──
-        self._semaphore: asyncio.BoundedSemaphore | None = (
-            asyncio.BoundedSemaphore(config.max_concurrent_requests)
-            if config.max_concurrent_requests > 0
-            else None
+        # ── Rate limiting (spec §5): _RateGate bounds concurrency + min-interval rate. ──
+        self._rate_gate = _RateGate(
+            max_concurrent_requests=config.max_concurrent_requests,
+            min_interval_s=config.min_interval_s,
+            clock=clock,
+            sleep=sleep,
         )
-        self._interval_lock = asyncio.Lock()
-        self._last_request_at: float | None = None
-        # ── Offline fallback (spec §5): a bounded queue of envelopes that failed while
-        #    the API was unreachable, replayed on the next success. None = disabled. ──
-        self._offline: deque[Envelope] | None = (
-            deque(maxlen=config.offline_queue_max) if config.offline_queue_max > 0 else None
-        )
-        self._offline_dropped = 0
-        self._drain_lock = asyncio.Lock()
+        # ── Offline fallback (spec §5): _OfflineQueue holds envelopes that failed while
+        #    the API was unreachable, replayed on the next success. ──
+        self._offline_queue = _OfflineQueue(config.offline_queue_max)
         self._intake_dropped = 0
 
     def start(self) -> None:
@@ -453,8 +567,8 @@ class InferenceService:
             # A connectivity/transient failure is queued for later replay (when a queue is
             # configured); a permanent one (bad key, malformed body) surfaces as before so it
             # fails fast and loud instead of cycling in the queue forever.
-            if self._offline is not None and _is_offline_retryable(exc):
-                self._offline_put(self._offline, envelope, front=False)
+            if self._offline_queue.enabled and _is_offline_retryable(exc):
+                self._offline_queue.put(envelope, front=False)
                 _log.warning(
                     "inference_offline_enqueue", original_id=envelope.msg_id, error=str(exc)
                 )
@@ -464,33 +578,12 @@ class InferenceService:
             _log.warning("inference_task_failed", exc_info=True)
 
     async def _gated_analyze(self, envelope: Envelope) -> InferenceResult:
-        """Run one analysis through the rate-limit gate: space, then a per-call permit.
+        """Run one analysis through the rate-limit gate (see :class:`_RateGate`).
 
-        Spacing happens *before* acquiring a permit (so a permit is never spent merely
-        waiting). The permit then wraps the whole ``analyze()`` call — **including its internal
-        retry/backoff sleeps** — so under transient failures a slot is held across retries. That
-        is deliberate: ``max_concurrent_requests`` bounds in-flight requests *inclusive of
-        retries* to cap edge API spend (spec §5). Both live requests and each offline replay go
-        through this same gate, so they honor ``min_interval_s``/``max_concurrent_requests``
-        identically.
+        Both live requests and each offline replay call this same method, so they
+        honor ``min_interval_s``/``max_concurrent_requests`` identically.
         """
-        await self._space()
-        if self._semaphore is None:
-            return await self.client.analyze(envelope)
-        async with self._semaphore:
-            return await self.client.analyze(envelope)
-
-    async def _space(self) -> None:
-        """Enforce ``min_interval_s`` spacing between requests via the injected clock."""
-        if self.config.min_interval_s <= 0:
-            return
-        async with self._interval_lock:
-            now = self.clock.now()
-            if self._last_request_at is not None:
-                wait = self.config.min_interval_s - (now - self._last_request_at)
-                if wait > 0:
-                    await self._sleep(wait)
-            self._last_request_at = self.clock.now()
+        return await self._rate_gate.run(lambda: self.client.analyze(envelope))
 
     async def _publish(self, envelope: Envelope, result: InferenceResult) -> None:
         reply = Envelope(
@@ -507,23 +600,6 @@ class InferenceService:
         await self.router.publish(reply)
         _log.info("inference_published", original_id=envelope.msg_id, reply_id=reply.msg_id)
 
-    def _offline_put(self, queue: deque[Envelope], envelope: Envelope, *, front: bool) -> None:
-        """Add an envelope to the offline queue at either end, counting any overflow.
-
-        ``front=True`` (a re-queued replay) preserves FIFO — the item returns to where it was
-        popped. A full deque silently drops the item at the opposite end on insert, so we
-        count it (drop-and-count, mirroring ``FlightLogger``) rather than lose it silently —
-        this also covers the case where a concurrent producer refilled the queue during a
-        drain ``await``.
-        """
-        if len(queue) == queue.maxlen:
-            self._offline_dropped += 1
-            _log.warning("inference_offline_dropped", dropped_total=self._offline_dropped)
-        if front:
-            queue.appendleft(envelope)
-        else:
-            queue.append(envelope)
-
     async def _drain_offline(self) -> None:
         """Replay queued envelopes after a success.
 
@@ -531,22 +607,22 @@ class InferenceService:
         connectivity is likely down again. A *permanent* replay failure drops the item (counted)
         and continues, so one poison envelope can never block replay of the rest.
         """
-        if not self._offline:
+        if not self._offline_queue:
             return
-        async with self._drain_lock:
-            while self._offline:
-                pending = self._offline.popleft()
+        async with self._offline_queue.drain_lock:
+            while self._offline_queue:
+                pending = self._offline_queue.pop()
                 try:
                     result = await self._gated_analyze(pending)
                 except InferenceError as exc:
                     if _is_offline_retryable(exc):
-                        self._offline_put(self._offline, pending, front=True)
+                        self._offline_queue.put(pending, front=True)
                         _log.warning("inference_offline_replay_failed", error=str(exc))
                         return
-                    self._offline_dropped += 1
+                    self._offline_queue.record_drop()
                     _log.warning(
                         "inference_offline_replay_dropped",
-                        dropped_total=self._offline_dropped,
+                        dropped_total=self._offline_queue.dropped,
                         error=str(exc),
                     )
                     continue
@@ -571,8 +647,8 @@ class InferenceService:
         ``pending_tasks`` are instantaneous gauges.
         """
         return {
-            "offline_dropped": self._offline_dropped,
-            "offline_queue_depth": len(self._offline) if self._offline is not None else 0,
+            "offline_dropped": self._offline_queue.dropped,
+            "offline_queue_depth": self._offline_queue.depth,
             "intake_dropped": self._intake_dropped,
             "pending_tasks": len(self._bg_tasks),
         }

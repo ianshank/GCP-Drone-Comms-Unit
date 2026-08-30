@@ -5,6 +5,12 @@ The HTTP boundary is exercised through an injected ``FakeHttpTransport`` (the
 are independent of any ``aiohttp`` version. The retry/backoff/parse logic under
 test lives entirely in :class:`NemotronClient`; the real socket transport
 (:class:`AiohttpTransport`) is the only ``# pragma: no cover`` glue.
+
+Private-attribute assertions below (``svc._rate_gate._semaphore``,
+``svc._offline_queue._queue``/``._dropped``) reach into the ``_RateGate``/
+``_OfflineQueue`` collaborators extracted from ``InferenceService`` in
+code-hygiene-modularity T-4.1 — white-box by design, updated mechanically
+alongside that split.
 """
 
 import asyncio
@@ -845,13 +851,13 @@ async def test_service_min_interval_no_wait_when_elapsed_exceeds(
 def test_service_bounded_semaphore_created_when_configured(mock_router, make_transport):
     cfg = NemotronConfig(enabled=True, api_key="k", max_concurrent_requests=2)
     svc = _service(cfg, mock_router, make_transport([]))
-    assert isinstance(svc._semaphore, asyncio.BoundedSemaphore)
+    assert isinstance(svc._rate_gate._semaphore, asyncio.BoundedSemaphore)
 
 
 def test_service_no_semaphore_by_default(mock_router, make_transport):
     cfg = NemotronConfig(enabled=True, api_key="k")
     svc = _service(cfg, mock_router, make_transport([]))
-    assert svc._semaphore is None
+    assert svc._rate_gate._semaphore is None
 
 
 async def test_service_publishes_under_concurrency_limit(make_transport, mock_router, env):
@@ -879,14 +885,14 @@ async def test_service_offline_queue_replays_on_recovery(make_transport, mock_ro
 
     await mock_router.handlers[0](env)  # message 1 -> fails -> queued
     await _await_idle(svc)
-    assert svc._offline is not None and len(svc._offline) == 1
+    assert svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 1
 
     await mock_router.handlers[0](env)  # message 2 -> success -> publish + drain replay
     await _await_published(mock_router, 2)
     await svc.stop()
 
     assert len(mock_router.published) == 2
-    assert not svc._offline  # queue drained
+    assert not svc._offline_queue  # queue drained
 
 
 async def test_service_offline_queue_drops_oldest_when_full(make_transport, mock_router, env):
@@ -902,8 +908,8 @@ async def test_service_offline_queue_drops_oldest_when_full(make_transport, mock
     await _await_idle(svc)
     await svc.stop()
 
-    assert svc._offline is not None and len(svc._offline) == 1
-    assert svc._offline_dropped == 1
+    assert svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 1
+    assert svc._offline_queue._dropped == 1
 
 
 async def test_service_offline_replay_requeues_on_repeat_failure(make_transport, mock_router, env):
@@ -923,7 +929,9 @@ async def test_service_offline_replay_requeues_on_repeat_failure(make_transport,
     await svc.stop()
 
     assert len(mock_router.published) == 1  # only s2
-    assert svc._offline is not None and len(svc._offline) == 1  # msg1 back in the queue
+    assert (
+        svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 1
+    )  # msg1 back
 
 
 async def test_service_offline_replay_skips_empty_summary(make_transport, mock_router, env):
@@ -942,7 +950,7 @@ async def test_service_offline_replay_skips_empty_summary(make_transport, mock_r
     await svc.stop()
 
     assert len(mock_router.published) == 1  # only s2; the empty replay is dropped
-    assert not svc._offline
+    assert not svc._offline_queue
 
 
 def _pli(msg_id: str, source_uid: str) -> Envelope:
@@ -982,9 +990,9 @@ async def test_service_offline_replay_failure_preserves_fifo_order(make_transpor
     await svc.stop()
 
     assert len(mock_router.published) == 1  # only c
-    assert svc._offline is not None
+    assert svc._offline_queue._queue is not None
     # 'a' stayed at the front (appendleft), 'b' still behind it — arrival order preserved.
-    assert [e.msg_id for e in svc._offline] == ["a", "b"]
+    assert [e.msg_id for e in svc._offline_queue._queue] == ["a", "b"]
 
 
 # ── Track-B hardening: offline error classification + gated drain ───────
@@ -999,7 +1007,9 @@ async def test_service_permanent_http_error_not_queued(make_transport, mock_rout
     await _await_idle(svc)
     await svc.stop()
     assert mock_router.published == []
-    assert svc._offline is not None and len(svc._offline) == 0  # not queued — fails fast
+    assert (
+        svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 0
+    )  # fails fast
 
 
 async def test_service_malformed_payload_not_queued(make_transport, mock_router, env):
@@ -1011,7 +1021,7 @@ async def test_service_malformed_payload_not_queued(make_transport, mock_router,
     await _await_idle(svc)
     await svc.stop()
     assert mock_router.published == []
-    assert svc._offline is not None and len(svc._offline) == 0
+    assert svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 0
 
 
 async def test_service_5xx_exhausted_is_queued(make_transport, mock_router, env):
@@ -1022,11 +1032,11 @@ async def test_service_5xx_exhausted_is_queued(make_transport, mock_router, env)
     await mock_router.handlers[0](env)
     await _await_idle(svc)
     await svc.stop()
-    assert svc._offline is not None and len(svc._offline) == 1
+    assert svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 1
 
 
 async def test_service_drain_honors_min_interval(make_transport, mock_router, env):
-    """Offline replay goes through the same _space() gate as live requests (no burst)."""
+    """Offline replay goes through the same rate gate as live requests (no burst)."""
     sleeps: list[float] = []
 
     async def rec_sleep(delay: float) -> None:
@@ -1075,8 +1085,8 @@ async def test_service_drain_drops_permanent_and_continues(make_transport, mock_
     await svc.stop()
 
     assert len(mock_router.published) == 2  # c-ok + b-replay; 'a' was dropped as permanent
-    assert svc._offline is not None and len(svc._offline) == 0
-    assert svc._offline_dropped == 1
+    assert svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 0
+    assert svc._offline_queue._dropped == 1
 
 
 async def test_service_non_inference_exception_logged_not_queued(make_transport, mock_router, env):
@@ -1090,7 +1100,9 @@ async def test_service_non_inference_exception_logged_not_queued(make_transport,
     await _await_idle(svc)
     await svc.stop()
     assert mock_router.published == []
-    assert svc._offline is not None and len(svc._offline) == 0  # generic errors aren't queued
+    assert (
+        svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 0
+    )  # not queued
 
 
 # ── Backpressure: bound handle_message task intake (max_pending_tasks) ──────
@@ -1176,10 +1188,10 @@ async def test_handle_message_unbounded_when_cap_zero(make_transport, mock_route
 def test_as_dict_reports_counters(mock_router, make_transport):
     cfg = NemotronConfig(enabled=True, api_key="k", offline_queue_max=4, max_pending_tasks=2)
     svc = _service(cfg, mock_router, make_transport([]))
-    svc._offline_dropped = 3
+    svc._offline_queue._dropped = 3
     svc._intake_dropped = 5
-    assert svc._offline is not None
-    svc._offline.append(_chat_envelope("q", source_uid="x"))  # depth 1
+    assert svc._offline_queue._queue is not None
+    svc._offline_queue._queue.append(_chat_envelope("q", source_uid="x"))  # depth 1
     d = svc.as_dict()
     assert d == {
         "offline_dropped": 3,

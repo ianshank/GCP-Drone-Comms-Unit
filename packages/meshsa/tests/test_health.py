@@ -175,7 +175,7 @@ def test_render_metrics_prometheus_includes_inference(node_with_inference):
 def test_render_metrics_propagates_exact_inference_counter_values(node_with_inference):
     # Known, non-zero counters on the real service must propagate end-to-end through
     # /metrics with exact values — not just the key names asserted elsewhere in this file.
-    node_with_inference.inference_service._offline_dropped = 3
+    node_with_inference.inference_service._offline_queue._dropped = 3
     node_with_inference.inference_service._intake_dropped = 5
     # offline_queue_depth and pending_tasks stay 0: no offline items queued, no bg tasks.
 
