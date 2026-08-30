@@ -39,10 +39,12 @@ bind_guard:
   required_symbol: "validate_bind"
   canonical_module: "meshsa.netauth"
   exceptions:
-    - path: "packages/meshsa/src/meshsa/transports/tak.py"
+    - path: "packages/meshsa/src/meshsa/transports/tak_multicast.py"
       rationale: >-
         Multicast CoT binds all interfaces — inherent to the protocol; tracked
-        as a live gap in docs/AUDIT_M2_AUTH.md (surface #2), not waived.
+        as a live gap in docs/AUDIT_M2_AUTH.md (surface #2), not waived. (Moved
+        from transports/tak.py in code-hygiene-modularity T-4.2a, which split
+        TakMulticastTransport into its own module.)
     - path: "packages/meshsa/src/meshsa/scout/cli.py"
       rationale: >-
         The station serve loop calls web.run_app, but the fail-closed guard runs

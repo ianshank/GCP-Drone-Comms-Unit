@@ -47,7 +47,7 @@ until one lands.
 | # | Surface / module | Direction | Default bind + port | Auth (default?) | Encryption (default) | Fail-closed? |
 |---|---|---|---|---|---|---|
 | 1 | `TakTcpTransport` — `transports/tak.py::TakTcpTransport` | Outbound client | `127.0.0.1` (`defaults.DEFAULT_LOCAL_TARGET_HOST`); port `None`→**8087 plaintext** / 8089 TLS (`defaults.PORT_FTS_TCP`/`PORT_TAK_TLS`) | Mutual TLS optional (`tls_client_cert/key`); **off** by default | **Plaintext by default**; TLS opt-in, `tls_verify=True` when on | Fails open (plaintext default) |
-| 2 | `TakMulticastTransport` — `transports/tak.py::TakMulticastTransport` | Bidirectional (UDP multicast) | group `239.2.3.1`, port `6969` (`defaults.DEFAULT_TAK_MULTICAST_GROUP`/`PORT_TAK_MULTICAST`); socket binds `("", 6969)` = **all interfaces** (`tak.py::_default_multicast_io`) | **None** | **None / plaintext** | Fails open (inherent to multicast CoT) |
+| 2 | `TakMulticastTransport` — `transports/tak_multicast.py::TakMulticastTransport` | Bidirectional (UDP multicast) | group `239.2.3.1`, port `6969` (`defaults.DEFAULT_TAK_MULTICAST_GROUP`/`PORT_TAK_MULTICAST`); socket binds `("", 6969)` = **all interfaces** (`tak_multicast.py::_default_multicast_io`) | **None** | **None / plaintext** | Fails open (inherent to multicast CoT) |
 | 3 | `Pacer` — `transports/pacing.py::Pacer` | **Not network-facing** (token-bucket timing helper) | n/a | n/a | n/a | n/a |
 | 4 | `MeshtasticTransport` — `transports/meshtastic_radio.py::MeshtasticTransport` | Bidirectional (LoRa serial/TCP/BLE) | `connection="serial"`; no IP bind | **Link PSK claimed but NOT applied in code** — `_default_provisioner` sets only `region`, logs channel/psk/freq as device-provisioned (`meshtastic_radio.py::_default_provisioner`) | LoRa PHY only; PSK not enforced here | Fails open |
 | 5 | `meshsa-llm` server — `llm/server.py` | Inbound listener | `127.0.0.1:8090` | Bearer `MESHSA_LLM_TOKEN` on `/chat`; default off, loopback; `/`+`/healthz` open | Plaintext HTTP | **Fails closed** (`validate_bind`) |
@@ -86,7 +86,7 @@ until one lands.
   token — validated *before* `node.start()` in `cli.py` so a misconfig fails fast without leaking a
   started node), and a bearer gate on `/metrics`. Default (loopback, `token=None`) is unchanged.
 - **TAK UDP multicast** binds `("", 6969)` on all interfaces with no auth/encryption
-  (`tak.py::_default_multicast_io`, `tak.py::TakMulticastTransport`). Inherent to multicast CoT,
+  (`tak_multicast.py::_default_multicast_io`, `tak_multicast.py::TakMulticastTransport`). Inherent to multicast CoT,
   but it is an unauthenticated inbound datagram surface reachable on every interface by default.
 - **Plaintext by default everywhere.** All HTTP surfaces run `web.run_app`/`TCPSite` with no TLS;
   TAK TCP defaults to plaintext `:8087`; MAVLink, detection UDP, and RTP video are cleartext.

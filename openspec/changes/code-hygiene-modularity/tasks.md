@@ -158,10 +158,18 @@
 ## Phase 4 — Class splits (facades preserve public constructors)
 - [ ] T-4.1 `InferenceService` → `_RateGate` + `_OfflineQueue`; mechanical split of
       `tests/test_inference.py`.
-- [ ] T-4.2 `transports/tak.py` → `TlsSettings` + `build_context()`;
-      `TakMulticastTransport` moves to `transports/tak_multicast.py` with a matching
-      `.claude/governance.yaml` bind-guard exception entry and `docs/AUDIT_M2_AUTH.md` path
-      update in the same commit.
+- [x] T-4.2a `TakMulticastTransport` (+ `DatagramIO`, `_default_multicast_io`, its
+      registry factory) moves to `transports/tak_multicast.py`, with a matching
+      `.claude/governance.yaml` bind-guard exception entry and `docs/AUDIT_M2_AUTH.md`
+      path update (both citation sites: the surface-#2 table row and the gap-summary
+      prose) landed in the same commit; `transports/__init__.py` imports it directly
+      from the new module rather than transitively through `tak.py`'s re-export shim.
+      `tests/test_tak.py`'s multicast cases (and the multicast halves of its three
+      combined registry/string-port tests) split into `tests/test_tak_multicast.py`.
+- [ ] T-4.2b Residual of T-4.2: `transports/tak.py`'s TLS-context helpers
+      (`_require_file`, `_build_ssl_context`) refactored into a `TlsSettings`
+      dataclass + `build_context()` function — T-4.2's other literal requirement,
+      not delivered by T-4.2a.
 - [ ] T-4.3 `fpv/flight_logger.py` → `_SessionPaths`, `_ParquetSink`, `GitHeadProvider`
       protocol (moves the `subprocess` call out of the logger class); stale "Phase 1/2 stub"
       comments removed.
