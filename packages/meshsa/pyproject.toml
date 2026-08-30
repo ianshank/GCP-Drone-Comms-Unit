@@ -83,7 +83,7 @@ dev = [
     # Pinned exactly (code-hygiene-modularity T-2.7): CI, pre-commit, and local runs must
     # agree on lint/type verdicts; tools/check_tool_pins.py enforces the pre-commit match
     # and dependabot proposes updates. Captured from a fresh green install (2026-08-14).
-    "ruff==0.16.3",
+    "ruff==0.16.5",
     "mypy==2.3.0",
     "pre-commit>=3.7",
     "build>=1.2",
