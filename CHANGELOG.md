@@ -52,6 +52,22 @@ Versions follow [Semantic Versioning](https://semver.org/).
   enforced by pinned-literal tests and the new `literal_guard` CI check. Slow soak tests
   moved to the nightly workflow per `docs/specs/m2-soak-fuzz.md` §7 (CI-internal only; a
   250-cycle smoke slice of the same fuzz stays per-PR).
+- God-file decomposition (T-4.1a/T-4.1b/T-4.2a): `inference.py` (578 lines, the
+  package's largest source file) split into a package — `errors.py`, `transport.py`,
+  `client.py`, `service.py`, `config.py` (`NemotronConfig`, relocated out of the
+  top-level `config.py`) — with `InferenceService`'s rate-limiting and offline-queue
+  logic further extracted into `_RateGate`/`_OfflineQueue` collaborators.
+  `transports/tak.py`, which bundled two independent transports (TCP+TLS, UDP
+  multicast) in one file, had `TakMulticastTransport` split into a new
+  `transports/tak_multicast.py`. `HealthConfig` relocated out of `config.py` into
+  `health.py`, finishing the pattern `UIConfig`/`ui/config.py` already established.
+  Every moved public symbol keeps its old import path via an explicit re-export
+  shim; no external behavior change (full suite green, 99.30% coverage, mypy
+  --strict clean). `.claude/governance.yaml`'s `bind_guard` exception and both
+  `docs/AUDIT_M2_AUTH.md` citations for the moved multicast bind were updated in
+  the same commit. `transports/tak.py`'s `TlsSettings`/`build_context()` refactor
+  (T-4.2b) and the `FlightLogger`/`CotCodec`/jetson class splits (T-4.3–T-4.5)
+  remain.
 
 ### Added
 

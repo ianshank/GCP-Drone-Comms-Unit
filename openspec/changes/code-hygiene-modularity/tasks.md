@@ -156,12 +156,43 @@
       `pipeline._to_envelope`.
 
 ## Phase 4 — Class splits (facades preserve public constructors)
-- [ ] T-4.1 `InferenceService` → `_RateGate` + `_OfflineQueue`; mechanical split of
-      `tests/test_inference.py`.
-- [ ] T-4.2 `transports/tak.py` → `TlsSettings` + `build_context()`;
-      `TakMulticastTransport` moves to `transports/tak_multicast.py` with a matching
-      `.claude/governance.yaml` bind-guard exception entry and `docs/AUDIT_M2_AUTH.md` path
-      update in the same commit.
+- [x] T-4.1a `InferenceService`'s rate-limiting logic (semaphore + min-interval
+      spacing) extracted into a `_RateGate` collaborator, its offline-queue logic
+      (enqueue/drain/drop-counting) into an `_OfflineQueue` collaborator — both
+      still composed inside `InferenceService`, still in `inference.py` (the file
+      split into a package is T-4.1b). Public surface (constructor, `start`/
+      `handle_message`/`stop`/`as_dict`) unchanged, no re-export shim needed.
+      `tests/test_inference.py`'s white-box assertions on the moved private state
+      (`svc._semaphore` → `svc._rate_gate._semaphore`, `svc._offline`/
+      `_offline_dropped` → `svc._offline_queue._queue`/`._dropped`) updated
+      mechanically; same fix mirrored in `tests/test_health.py`.
+- [x] T-4.1b Residual of T-4.1: `inference.py` → package (`errors.py`,
+      `transport.py`, `client.py`, `service.py`, `config.py` + `__init__.py`
+      facade mirroring `command/__init__.py`'s plain-imports-plus-`__all__`
+      convention), plus the `NemotronConfig` relocation out of `config.py`
+      (`config.py`'s shim import placed after `RouterConfig`'s definition,
+      not at the top, to avoid a circular import through
+      `inference → router → config`). `.agents/skills/meshsa-inference/SKILL.md`
+      and `meshsa-observability/SKILL.md` path citations updated in the same
+      commit (`tools/validate_skills.py` path-existence check). `tests/test_inference.py`
+      split into `test_inference_client.py`, `test_inference_service.py`,
+      `test_inference_transport.py` (the `aiohttp` monkeypatch target moved to
+      `meshsa.inference.transport`); no dedicated `test_inference_errors.py` —
+      the error-classification helpers have no direct unit tests to move, only
+      indirect coverage via the client/service suites (unchanged from before
+      the split).
+- [x] T-4.2a `TakMulticastTransport` (+ `DatagramIO`, `_default_multicast_io`, its
+      registry factory) moves to `transports/tak_multicast.py`, with a matching
+      `.claude/governance.yaml` bind-guard exception entry and `docs/AUDIT_M2_AUTH.md`
+      path update (both citation sites: the surface-#2 table row and the gap-summary
+      prose) landed in the same commit; `transports/__init__.py` imports it directly
+      from the new module rather than transitively through `tak.py`'s re-export shim.
+      `tests/test_tak.py`'s multicast cases (and the multicast halves of its three
+      combined registry/string-port tests) split into `tests/test_tak_multicast.py`.
+- [ ] T-4.2b Residual of T-4.2: `transports/tak.py`'s TLS-context helpers
+      (`_require_file`, `_build_ssl_context`) refactored into a `TlsSettings`
+      dataclass + `build_context()` function — T-4.2's other literal requirement,
+      not delivered by T-4.2a.
 - [ ] T-4.3 `fpv/flight_logger.py` → `_SessionPaths`, `_ParquetSink`, `GitHeadProvider`
       protocol (moves the `subprocess` call out of the logger class); stale "Phase 1/2 stub"
       comments removed.

@@ -7,7 +7,8 @@ from .loopback import LoopbackBus, LoopbackTransport, NullTransport
 from .mavlink_source import MavlinkSourceTransport
 from .meshtastic_radio import MeshtasticTransport
 from .msp_source import MspSourceTransport
-from .tak import TakMulticastTransport, TakTcpTransport
+from .tak import TakTcpTransport
+from .tak_multicast import TakMulticastTransport
 
 __all__ = [
     "AbstractTransport",

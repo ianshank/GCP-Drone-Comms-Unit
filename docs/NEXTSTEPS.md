@@ -96,6 +96,14 @@
       before migration).
 - [ ] **T-4 — Class splits** behind unchanged public facades (`InferenceService`, `tak.py`,
       `FlightLogger`, `CotCodec`, jetson `Bridge`/`Pipeline`).
+  - [x] **T-4.1/T-4.2 landed** (god-file decomposition pass): `inference.py` split into a
+        package (`errors.py`/`transport.py`/`client.py`/`service.py`/`config.py`, with
+        `_RateGate`/`_OfflineQueue` extracted from `InferenceService`); `TakMulticastTransport`
+        split into `transports/tak_multicast.py`. `NemotronConfig`/`HealthConfig` also
+        relocated out of the `config.py` god file into `inference/config.py`/`health.py`
+        respectively, finishing the pattern `UIConfig` already established.
+        `transports/tak.py`'s `TlsSettings`/`build_context()` refactor (T-4.2b) and the
+        `FlightLogger`/`CotCodec`/jetson splits (T-4.3–T-4.5) remain.
 - [ ] **T-5 — fpv prune + decouple:** safe dead-code deletions only; ratified CHARTER §3 carve-out
       code (`ArmGuard`, `crsf/rc.py`, `RCLink`, `FlightLogger.record_rc`) is **kept and marked**,
       not deleted; unify the four arm-freshness predicates on one `is_fresh` window.

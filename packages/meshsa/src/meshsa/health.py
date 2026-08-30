@@ -12,13 +12,33 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
+from pydantic import BaseModel
+
+from .defaults import DEFAULT_LOOPBACK_HOST, PORT_HEALTH
 from .metrics import render_prometheus
 from .netauth import authorize
 from .netauth import validate_bind as _validate_bind
 
 if TYPE_CHECKING:
-    from .config import HealthConfig
     from .node import Node
+
+
+class HealthConfig(BaseModel):
+    """Opt-in /healthz listener (served by ``meshsa.health``).
+
+    ``/metrics`` discloses router/transport/inference counters, so a non-loopback ``host`` must
+    carry a ``token`` (bearer): the server refuses to start otherwise (fail-closed, mirroring
+    ``meshsa.llm.server`` and the scout station). ``token=None`` keeps the loopback-default,
+    no-auth behaviour unchanged.
+    """
+
+    enabled: bool = False
+    host: str = DEFAULT_LOOPBACK_HOST
+    port: int = PORT_HEALTH
+    token: str | None = None
+    metrics_enabled: bool = False
+    metrics_path: str = "/metrics"
+    metrics_format: Literal["prometheus", "json"] = "prometheus"
 
 
 def validate_healthz_bind(host: str, token: str | None) -> None:

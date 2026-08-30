@@ -35,7 +35,8 @@ meshsa/
   protocols.py    Transport/Codec/Clock/IdFactory + default impls
   registry.py     open/closed component registry
   codec.py        JsonCodec (CoT/XML codec can be added later)
-  inference.py    AI tactical inference service via Nemotron
+  inference/      AI tactical inference service via Nemotron (errors/transport/
+                  client/service/config submodules; __init__.py re-exports)
   router.py       publish / pump / dedupe / bridge / subscribe
   node.py         build_node(config) -> Node
   transports/     loopback, null, meshtastic_radio (real API),
