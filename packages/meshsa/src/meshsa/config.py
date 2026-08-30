@@ -18,9 +18,9 @@ from .defaults import (
     DEFAULT_LOOPBACK_HOST,
     DEFAULT_PLI_INTERVAL_S,
     DEFAULT_QUEUE_MAXSIZE,
-    PORT_HEALTH,
     PORT_SCOUT_STATION,
 )
+from .health import HealthConfig as HealthConfig
 from .models import NodeTier
 from .ui.config import UIConfig
 
@@ -135,24 +135,6 @@ class NemotronConfig(BaseModel):
         """
         self._reject_model_not_allowed(model)
         return self.model_copy(update={"model": model})
-
-
-class HealthConfig(BaseModel):
-    """Opt-in /healthz listener (served by ``meshsa.health``).
-
-    ``/metrics`` discloses router/transport/inference counters, so a non-loopback ``host`` must
-    carry a ``token`` (bearer): the server refuses to start otherwise (fail-closed, mirroring
-    ``meshsa.llm.server`` and the scout station). ``token=None`` keeps the loopback-default,
-    no-auth behaviour unchanged.
-    """
-
-    enabled: bool = False
-    host: str = DEFAULT_LOOPBACK_HOST
-    port: int = PORT_HEALTH
-    token: str | None = None
-    metrics_enabled: bool = False
-    metrics_path: str = "/metrics"
-    metrics_format: Literal["prometheus", "json"] = "prometheus"
 
 
 def _apply_scout_env(scout: dict[str, Any], env: Mapping[str, str], prefix: str) -> dict[str, Any]:

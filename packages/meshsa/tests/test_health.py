@@ -3,7 +3,13 @@
 import pytest
 
 from meshsa import NodeConfig, build_node, health_snapshot
-from meshsa.health import _resolve_metrics_options, render_metrics, validate_healthz_bind
+from meshsa.config import HealthConfig as HealthConfigShim
+from meshsa.health import (
+    HealthConfig,
+    _resolve_metrics_options,
+    render_metrics,
+    validate_healthz_bind,
+)
 
 
 def _node(health: dict | None = None):
@@ -45,6 +51,13 @@ def test_health_config_defaults():
     assert cfg.health.metrics_enabled is False
     assert cfg.health.metrics_path == "/metrics"
     assert cfg.health.metrics_format == "prometheus"
+
+
+def test_health_config_canonical_home_matches_config_shim():
+    # meshsa.health.HealthConfig is the canonical definition (code-hygiene-modularity
+    # config.py decomposition); meshsa.config.HealthConfig must be the exact same
+    # object via re-export, not a copy, so both import paths stay interchangeable.
+    assert HealthConfig is HealthConfigShim
 
 
 def test_validate_healthz_bind_allows_loopback_without_token():
