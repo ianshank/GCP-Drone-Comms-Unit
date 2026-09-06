@@ -90,5 +90,5 @@ repos:
           # Without pydantic/structlog the hook sees import-not-found cascades ("cannot
           # subclass BaseModel (has type Any)") that CI, with real deps installed, never
           # reports — the two environments must reach the same verdict.
-          - pydantic>=2
+          - pydantic>=2.13.4
           - structlog
