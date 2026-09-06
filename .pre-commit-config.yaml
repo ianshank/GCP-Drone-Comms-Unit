@@ -77,7 +77,7 @@ repos:
         exclude: "^archive/"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.0
+    rev: v2.3.1
     hooks:
       - id: mypy
         name: mypy (Python type check)
