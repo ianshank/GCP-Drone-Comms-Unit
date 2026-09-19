@@ -1,144 +1,165 @@
-# Design — Per-Directory `AGENTS.md` Guides
+# Design — Per-Directory `AGENTS.md` Guides (rev.2)
 
-## D-0. Standards baseline (researched 2026-09-19)
+rev.1 is superseded. `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` records the ten findings
+that produced this revision; three of them inverted a rev.1 decision and are marked
+**[inverted]** below.
 
-The request was to meet today's standards, so the standards were checked
-rather than assumed. Findings, and what each one forces in this design:
+## D-0. Evidence baseline
 
-| Finding | Source | Consequence here |
-| ------- | ------ | ---------------- |
-| `AGENTS.md` (plural) is the open format: formalized August 2025, donated to the Linux Foundation's Agentic AI Foundation in December 2025, used by 60k+ repositories, read by Codex, Cursor, Copilot coding agent, Aider, Jules, Gemini CLI, Devin, Windsurf, Amp, Zed, Warp, Factory | [agents.md project](https://github.com/agentsmd/agents.md), [Tembo](https://www.tembo.io/blog/agents-md), [ASDLC](https://asdlc.io/practices/agents-md-spec/) | **D-1**: the filename is `AGENTS.md`, not `Agent.md` |
-| The format has **no required fields** — plain Markdown, any headings; agents just read the text | [agents.md project](https://github.com/agentsmd/agents.md) | The section contract in **D-3** is a *house* convention we enforce ourselves; nothing external validates it, so `validate_agents_docs.py` must |
-| Nested files resolve nearest-first, like `.gitignore`/`.eslintrc`; root states what is true everywhere, leaves state only what differs. OpenAI's own Codex repo ships 88 of them | [dev.to](https://dev.to/promptmaster/agentsmd-in-a-monorepo-nested-files-and-precedence-1b7d), [Codex KB](https://codex.danielvaughan.com/2026/03/26/agents-md-advanced-patterns/) | **D-2**'s tiering, and **D-3**'s no-duplication rule |
-| Deploy-risk and ownership rules should be *additive*, not overridable by a leaf file | [dev.to](https://dev.to/promptmaster/agentsmd-in-a-monorepo-nested-files-and-precedence-1b7d) | **D-3**: a scoped guide may add a hazard, never relax a root rule. The checker rejects a scoped file that negates a root rule |
-| Machine-generated `AGENTS.md` files **reduced** task success in 5 of 8 tested settings and added 2.45–3.92 steps per task; every token loads on every request | [SitePoint](https://www.sitepoint.com/agents-md-optimization-cut-token-waste-linting/), [daily.dev](https://daily.dev/posts/agents-md-optimization-context-linting-for-coding-agents-mb705ug5n) | **D-2** (tiering, not blanket coverage) and **D-4** (per-tier line budgets, enforced) |
-| Practical size guidance: 30–50 lines to start, 200–500 lines as the outer bound, ≤5% of context | [betterclaw](https://www.betterclaw.io/blog/agents-md-best-practices), [BuildBetter](https://blog.buildbetter.ai/agents-md-complete-guide-for-engineering-teams-in-2026/) | **D-4** budgets: 12/60/80/150 lines by tier — tighter than the public guidance, matching the repo's own 25–67-line scoped files |
-| Anthropic's own guidance: target **under 200 lines**; write instructions concrete enough to verify ("Use 2-space indentation", not "Format code properly") | [Claude Code memory docs](https://code.claude.com/docs/en/memory) | **D-3**'s `## Rules` must be imperative and verifiable; **D-7** check 10 rejects unverifiable filler |
-| Linting `AGENTS.md` for stale paths, dead scripts and context rot is an established practice (`agents-lint` checks path existence, script existence, TODO markers, file length) | [agents-lint](https://github.com/giacomo/agents-lint) | **D-7**: the checker's highest-value rules are cited-path existence and command existence |
-| Mermaid renders natively in GitHub Markdown files, issues, PRs and wikis | [GitHub Docs](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams) | **D-5**: fenced ```mermaid, consistent with `docs/C4.md` |
-| Mermaid conveys **nothing** about node relationships to screen readers; every chart needs an accessible name plus a text description, and complex diagrams should be split | [Mermaid accessibility](http://mermaid.js.org/config/accessibility.html), [PUL](https://pulibrary.github.io/2023-03-29-accessible-mermaid) | **D-5**: `accTitle:` + `accDescr:` + a prose summary are mandatory and checked; ≤15 nodes |
-| Claude Code subagents: `.claude/agents/*.md`, `name` + `description` required, `tools`/`model` optional; descriptions drive automatic delegation and must stay short | [Claude Code sub-agents docs](https://code.claude.com/docs/en/sub-agents) | **D-8**: `docs-cartographer` matches the existing roster shape, which `validate_workforce.py` already enforces |
-| Claude Code reads `AGENTS.md` only when no `CLAUDE.md` exists at or above the working directory; a `CLAUDE.md` that imports `AGENTS.md` gets both | [Claude Code memory docs](https://code.claude.com/docs/en/memory) | **D-6** — the finding that changes the most about this plan |
+All external claims cite `docs/AGENTS_MD_EVIDENCE.md` (E-1 … E-7), which holds seven
+primary papers read in full, each claim tagged with its significance. rev.1 cited four
+secondary blog summaries, **none of which were retrievable**, and reported a
+non-significant result as measured harm. Per the standing rule in
+`docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1, no URL outside the register is citable in
+this bundle.
 
-Two published claims were checked and **rejected** for this repo:
+Three findings inverted rev.1:
 
-- *"Put an `AGENTS.md` in every directory."* Contradicted by the measured
-  task-success regression above. Coverage is not the goal; distinct content
-  is. See **D-2**.
-- *"Claude Code reads `AGENTS.md` as a fallback, so a pointer is enough."*
-  False here: a root `CLAUDE.md` suppresses the fallback entirely. See **D-6**.
+| Finding | rev.1 believed | Evidence says |
+| ------- | -------------- | ------------- |
+| **[inverted]** Overviews, maps, file inventories | The core content; Mermaid required at Tier 0/1 | *"Context files do not provide effective overviews"* (E-1 §4.3). Helpful only where no other documentation exists (E-1 App. B) — the inverse of this repo |
+| **[inverted]** An agent authors the guides | `docs-cartographer` writes and refreshes all of them | LLM-generated files are the **only** significantly worse condition measured (E-1, p = 0.038); also the Init Fossilization smell (E-7, 24%) |
+| **[inverted]** The change is security-neutral | "Low risk — documentation only" | Instruction files are the highest-privilege injection surface, loaded as trusted system context unchecked, threat model = PR contributor (E-5) |
+
+And one finding that rev.1 missed entirely, which now shapes the contract: the surviving
+effect in the literature is **cost/ordering/trap warnings** — the one repository whose
+file warned about test cost cut blind full-suite runs 3.67 → 1.67 per task and wall-clock
+~24% (E-2). That is what a guide is *for*.
 
 ## D-1. The filename is `AGENTS.md`
 
-The request said `Agent.md`. Nothing reads that name — not Claude Code, not
-Codex, not Cursor, not Copilot. `AGENTS.md` is the format with tool support
-and an ecosystem, it is what this repo's four existing scoped guides already
-use, and it is what the root `AGENTS.md` and `docs/specs/README.md` tell
-agents to look for. Using any other spelling would create a documentation tree
-that only humans can find.
+Unchanged from rev.1 and confirmed by every paper in the register. The request said
+`Agent.md`; nothing reads that name. `AGENTS.md` is what the four existing scoped guides
+use and what the root guide tells agents to look for.
 
-**Decision**: `AGENTS.md`, plural, uppercase, in every tier.
+## D-2. Tiered coverage — a risk-managed bet, not an evidence-backed design
 
-## D-2. Tiered coverage, not one file per directory
+**No controlled study has evaluated nested per-directory context files.** E-1, E-2 and
+E-4 all restrict to single-root configurations *by design*; E-2 filters on "exactly one
+root AGENTS.md with no competing instruction stack"; E-4 says the restriction
+"minimizes confounding effects from overlapping or conflicting instruction files."
+rev.1's §D-0 cited blog posts about adoption ("Codex ships 88 of them") in an evidence
+column. Adoption is not efficacy.
 
-114 directories carry tracked files. Blanket coverage is rejected on the
-measured evidence in D-0. A directory earns a guide only when it has a
-**distinct contract** — at least one of:
+So the tiering is justified by *risk control*, not by measured benefit: 117 directories
+carry tracked files; each guide is an always-trusted file in an injection surface (D-9)
+and a contribution to the growth ratchet (D-4). A directory earns one only when it holds
+a **trap** — something an agent gets wrong by default, that the parent guide cannot
+state. Not "has interesting code". Not "would be nice to describe".
 
-- its own build/test/run command that differs from its parent's, **or**
-- an invariant or hazard an agent can violate that the parent file does not
-  state, **or**
-- a boundary (generated code, frozen path, deployment manifest, read-only
-  archive) that is invisible from the file contents alone.
-
-A directory that satisfies none of these is covered by the nearest ancestor
-and gets nothing. This yields four tiers:
-
-| Tier | What | Count | Budget | Mermaid |
+| Tier | What | Count | Budget | Diagram |
 | ---- | ---- | ----- | ------ | ------- |
-| 0 | Repository root | 1 | ≤150 lines | Required (repo map) |
-| 1 | Domain roots — a build target, a language boundary, or a deployment unit | 13 | ≤80 lines | Required (folder boundary) |
-| 2 | Subsystems with their own contract inside a domain | 16 | ≤60 lines | Only where a flow is non-obvious |
-| 3 | Guard files — generated, vendored, or read-only directories | 6 | ≤12 lines | Forbidden |
+| 0 | Repository root | 1 | ≤170 lines | One, required |
+| 1 | Domain roots with their own commands and traps | 13 | ≤80 lines | One, optional |
+| 2 | Subsystems whose trap the parent cannot state | 15 | ≤60 lines | One, optional |
+| 3 | Guard files — generated, vendored, read-only | 6 | ≤12 lines | Forbidden |
 
-Tier is depth of contract, not depth in the tree: `scripts/` is top-level but
-Tier 2, because its contract is narrow even though its position is not.
-
-The exhaustive per-directory list, with the reason each one qualifies, is
-`tasks.md`. Directories deliberately left uncovered are listed there too, so
-"missing" is distinguishable from "decided against".
-
-**Open call (proposal §1)**: `src/meshsa/cv/` and `src/meshsa/llm/` sit at the
-margin — each has a real invariant (`cv/` must stay dependency-free because a
-heavy detector process imports it; `llm/`'s entire tool surface must stay
-read-only), but each is small enough that `packages/meshsa/AGENTS.md` could
-carry it. They are included in Tier 2 as proposed; dropping them is a one-line
-manifest edit. `src/meshsa/examples/` was considered and cut — it is a
-one-file re-export shim with no contract of its own.
+35 guides. `tasks.md` names the trap that earns each, and lists what was deliberately
+left uncovered. Tier is depth of contract, not depth in the tree: `scripts/` is top-level
+but Tier 2.
 
 ## D-3. The authoring contract
-
-Fixed H2 order, so a reader and a checker both know where to look:
 
 ```markdown
 # <Name> Agent Guide
 > Scope: `<repo-relative path>` · Parent: [<../AGENTS.md>](../AGENTS.md)
 
-## Purpose        2–3 sentences. What this folder is FOR, in domain terms.
-## Map            Mermaid. Tier 0/1 required, Tier 2 optional, Tier 3 forbidden.
-## Key files      Table: file → one-clause role. Only the files that matter.
-## Rules          Imperative, verifiable, and true ONLY here.
-## Commands       Literal shell commands that work from this folder.
-## Subagents      Which roster agent / skill / custom mode owns work here.
-## Verification   What must be green before a PR touching this folder.
+## Purpose       1–2 sentences. Tier 0/1 only; Tier 2 omits it.
+## Traps         REQUIRED, and first among the substantive sections.
+## Rules         Imperative, verifiable, true ONLY here. Each carries a rationale.
+## Commands      Only commands that differ from the parent's. Often absent.
+## Subagents     Tier 0–2. Which roster agent / skill / mode owns work here.
+## Map           Optional, ≤1 diagram, only where it encodes a constraint (D-5).
 ```
 
-Tier 3 guard files carry `# <Name>`, the breadcrumb, `## Purpose`, and
-`## Rules` only.
+Tier 3 guard files carry `# <Name>`, the breadcrumb, `## Purpose`, `## Rules` only.
+Per-tier required sets are tabulated in the spec delta, not left to prose — rev.1 omitted
+them and made the section check unimplementable.
 
-Four rules govern content, and each maps to a check in D-7:
+**`## Traps` is the headline section** and the reason the tier exists. A trap is a fact
+that costs an agent a wasted turn or a wrong result: a gate that fires on a partial run,
+an ordering dependency, a file that regenerates, a predicate that looks equivalent and is
+not. E-2 measured this as the only content type with a surviving effect.
 
-1. **No repeats.** A rule true repo-wide lives in the root file and nowhere
-   else. The checker flags a scoped line that is a near-duplicate of a root
-   line. This is the single biggest defence against the token-waste regression
-   in D-0.
-2. **Additive, never subtractive.** A scoped guide may add a constraint. It
-   may never relax one the root sets — no "the root says X, but here you can
-   skip it". Security and ownership rules in particular are additive by
-   design.
-3. **Verifiable or cut.** "Keep operational defaults in Pydantic config
-   models, not in transport logic" is verifiable. "Follow best practices" is
-   the exact filler the D-0 research measured as harmful.
-4. **Cite, don't inline.** Workflows live in `.agents/skills/`, architecture
-   in `docs/C4.md`, specs in `docs/specs/`. A guide links; it never copies.
+Five content rules, each mapping to a check in D-7:
 
-The contract ships as `.agents/skills/agents-md-authoring/SKILL.md` — the
-repo's established home for a repeatable workflow, and already linted by
-`tools/validate_skills.py` (frontmatter `name`/`description`/`argument-hint`,
-`Use when:` description prefix, cited-path existence).
+1. **Every rule carries its rationale**, as a trailing `— why: <reason>` clause.
+   Not decoration: deletion hazard *falls* with instruction age because the reason decays
+   faster than the rule, and 77.3% of instruction deaths are wholesale rewrites because
+   "removing one instruction needs a reason, removing all needs none" (E-3). Recording
+   the reason removed 99.3% of excess size. A rule without a `why` cannot be safely
+   deleted later, so it never gets deleted, so the file ratchets.
+2. **Every security-relevant rule names its enforcing control, or is marked advisory.**
+   `— control: scope_freeze` / `bind_guard` / `literal_guard` / `ci:governance`, or
+   `— advisory`. Only ~4.4% of security rules in public instruction files have a matching
+   control and nothing marks which (E-6): *"a write-only security channel."* This repo
+   has the controls; it can close the loop for the cost of one clause.
+3. **No repeats, and no contradictions.** A repo-wide rule lives in the root alone. The
+   greater risk in a 35-file tree is *contradiction*, not duplication (E-7: Conflicting
+   Instructions, 28%) — rev.1's check targeted the benign case.
+4. **Additive, never subtractive.** A scoped guide may add a constraint; it may never
+   relax one the root sets. This is invariant I-1 and now has both a scenario and a check.
+5. **Cite with a reason to read.** A bare path citation is the Blind Reference smell
+   (E-7, 16%): *"If you just mention the path, Claude will often ignore it. You have to
+   pitch the agent on why and when to read the file."* rev.1's "cite, don't inline" rule
+   produced this smell; rev.2 requires every citation to say why and when.
+
+**Rejected alternative** (rev.1 recorded none): a freeform contract with required keys
+only, no fixed order. Rejected because check 2 becomes unimplementable and because
+Skill Leakage (E-7, 35%) is a *placement* failure — a fixed slot for commands is what
+makes "this belongs in a skill" visible during review. **Also rejected:** keeping
+`## Verification` in every guide, as rev.1 had it. Testing and workflow procedure are the
+two most-leaked categories (E-7); they belong in
+`.agents/skills/pre-pr-validator/` and `.agents/skills/meshsa-test-conventions/`, which
+already exist.
 
 ## D-4. Line budgets
 
-Public guidance runs 30–50 lines minimum to 200–500 lines maximum; Anthropic's
-own is "under 200". The repo's existing scoped guides run 25–67 lines and the
-root runs 135. The budgets in D-2's table are set from the repo's own practice
-rather than the looser public ceiling, because the failure mode being
-defended against is accretion — "multiple contributors append instructions
-without reviewing what already exists".
+rev.1 justified budgets by "the measured regression." That justification is void: E-1
+Appendix B is an explicit null — *"The length of context files does not influence our
+findings."* The budgets survive on a better mechanism.
 
-Budgets are enforced (D-7 check 3), exactly as `validate_workforce.py` already
-enforces `MAX_LINES = 60` on roster entries. A guide that needs more room is a
-guide that should be citing a spec instead.
+E-3, over 247,694 instruction lifetimes: files grow **+226%** over their lifetime at
+**+4.9 net instructions per commit**; the median already carries **39 instructions**,
+"well past the threshold at which instruction-following degrades"; deletion hazard falls
+with age (log-hazard −0.032/commit, CI excludes zero) and falls further with maintainer
+count (β = −0.021, z = −11.7). A majority-agent-authored repository with many committers
+is the maximally exposed case. A budget is a forcing function: a file that cannot grow
+must be *edited*, which is the review that otherwise never happens.
 
-## D-5. Mermaid policy
+Numbers come from this repo's own practice (existing guides 25/34/50/67, root 135), with
+two corrections the red-team surfaced:
 
-Diagrams earn their place by showing the folder's **boundary** — what enters,
-what leaves, and where the seam is — not by re-drawing the system. `docs/C4.md`
-owns Context/Container/Component; a guide that needs that level links to it.
+- **Root raised 150 → 170.** At 135 today, minus ~39 lines of folded roster/skills
+  sections, plus a delegation table (~28) and one diagram (~20), the root lands ~144
+  before `## Purpose` and the defensive directive. 150 was not reachable.
+- **`packages/jetson_yolo_gcs/AGENTS.md` must shed content, not be squeezed.** Its
+  existing substance (Layout 7 + Conventions 20 + failure policy 16 = 43 lines) plus Tier 1
+  scaffolding exceeds 80. T-1.5 schedules moving the pipeline failure policy to
+  `docs/specs/initiative-d-perception.md`, which already owns it, and citing it with a
+  reason to read.
 
-Mandatory for every block:
+## D-5. Mermaid — decision diagrams, not structure diagrams **[inverted]**
 
-```mermaid
+rev.1 made a diagram **required** at Tier 0/1 and framed it as "the folder's boundary."
+E-1 §4.3 measured overviews as ineffective and recommends content *"not already present
+in the README"*; this repo already has `docs/C4.md` (six diagrams),
+`docs/architecture/C4.md`, and `packages/jetson_yolo_gcs/docs/architecture/c4_diagrams.md`.
+A boundary diagram in a guide is the redundant case.
+
+rev.2 keeps Mermaid — the request asked for it and it has real value — but splits it:
+
+- **Structure diagrams belong in `docs/`.** Where a folder wants one, it is authored
+  under `docs/architecture/` and the guide links to it *with a reason to read*.
+- **A guide may carry at most one diagram, and only when it encodes a constraint the code
+  cannot show**: bring-up ordering (`flightctl` — mavp2p `udpc` consumers must bind
+  first), codegen direction (`lib` — `openapi.yaml` → orval → two generated trees, and
+  `clean: true` wipes them), a governance gate (`tools` — `governance.yaml` → hooks →
+  CI). Decision diagrams stay; structure diagrams move.
+
+Mechanics, all checked:
+
+```
 flowchart LR
     accTitle: meshsa transport registration path
     accDescr: A transport factory registers into transport_registry at import time; build_node resolves config entries through the registry and skips unknown types.
@@ -147,181 +168,248 @@ flowchart LR
     build --> tr["Transport instances"]
 ```
 
-- `accTitle:` — the accessible name. Without it a screen reader gets an
-  unlabelled graphic.
-- `accDescr:` — the relationships, in prose. Mermaid exposes none of the edge
-  semantics to assistive technology on its own.
-- A one-sentence prose summary **immediately after** the fence, for readers
-  with images off and for any agent that does not render the diagram. This
-  doubles as the answer to "what was this diagram supposed to say" when the
-  diagram drifts.
-- **≤15 nodes**, one concept per diagram. Split rather than grow; complex
-  diagrams render slowly and read badly on narrow screens.
-- `flowchart LR`/`TB` for data and control flow; `sequenceDiagram` only when
-  ordering is the point; no `C4Context` — that would fork `docs/C4.md`.
+- `accTitle:` and `accDescr:` are mandatory — Mermaid exposes no edge semantics to
+  assistive technology without them. Verified against a renderer: they emit `<title>` and
+  `<desc>` with `aria-labelledby`/`aria-describedby`. The block form `accDescr { … }` is
+  accepted.
+- A prose summary immediately after the closing fence, defined positively: the first
+  non-blank line must not begin with `#`, a fence, `|`, `-`, `*`, or `N.`.
+- **A fence-body cap of 22 lines replaces rev.1's "≤15 nodes."** Node count is not
+  mechanically determinable without a Mermaid parser — chained edges (`a --> b --> c`),
+  `subgraph`, labels containing `<br/>` and brackets, and `sequenceDiagram` participants
+  all defeat a regex, and rev.1's own canonical example is 4 nodes across 3 lines under a
+  rule that counts "node lines." "≤15 nodes, one concept per diagram" survives as prose
+  guidance in the authoring skill, where judgement belongs.
+- `flowchart LR|TB` and `sequenceDiagram` only; any other diagram type is refused rather
+  than guessed at. No `C4Context` — that would fork `docs/C4.md`.
 
-Cost check: a 12-node flowchart with accessibility lines runs ~150–250 tokens,
-which fits inside the Tier 1 budget with room for the rest of the file.
+## D-6. Making Claude Code load the tree
 
-## D-6. Making Claude Code actually load the tree
+Unchanged in substance from rev.1, and now better supported.
 
-This is the finding that changes the plan, and it is worth stating precisely
-because the common advice is wrong for this repo.
+**Current state.** Claude Code's default `claude-md-or-agents-md` mode reads `AGENTS.md`
+*only* when no `CLAUDE.md`, `.claude/CLAUDE.md`, or `CLAUDE.local.md` exists at or above
+the working directory. This repo has a root `CLAUDE.md`, so **no `AGENTS.md` here is
+loaded today** — the root pointer is a markdown link, not an `@` import.
 
-**Current state.** Claude Code's default instruction mode is
-`claude-md-or-agents-md`: it reads `AGENTS.md` files *only when no `CLAUDE.md`,
-`.claude/CLAUDE.md`, or `CLAUDE.local.md` exists in the working directory or
-above it*. This repo has a root `CLAUDE.md`. Therefore **no `AGENTS.md` in this
-repository is loaded by Claude Code today** — not the root one, not the four
-scoped ones. The root `CLAUDE.md`'s `Read [AGENTS.md](AGENTS.md) first` is a
-markdown link in prose, not an `@` import, so it is an instruction the model
-may act on, not a file the harness loads.
+**Fix.** The root `CLAUDE.md` imports `@AGENTS.md`; every directory carrying a guide gains
+a three-line `CLAUDE.md` importing its sibling. Nested stubs load *on demand* when Claude
+reads a file in that subtree, so session-start cost is zero — and E-2 found on-demand
+retrieval significantly better than always-on injection on cache footprint at equal
+correctness (p_Holm = 0.012), which is a positive argument for this shape rather than
+merely a neutral one.
 
-**Fix, in two parts.**
+**The root is exempt from the stub contract**, stated here because rev.1 contradicted
+itself: the spec required a stub to carry "only a title and the import", while the plan
+kept the root's six Claude-specific notes (PowerShell on Windows, prefer `rg`, no
+destructive git, check `.agents/skills` first, package-local mypy, delegate per roster).
+Those are rules. rev.2 exempts the root explicitly in both the design and the delta.
 
-1. **Root.** Change the root `CLAUDE.md`'s pointer to a real `@AGENTS.md`
-   import. Imports are expanded into context at launch, so the canonical guide
-   loads mechanically. The prose "then read the nearest scoped `AGENTS.md`"
-   line stays, because it still steers tools that are not Claude Code.
-2. **Nested.** Each directory that gains an `AGENTS.md` also gains a
-   three-line `CLAUDE.md`:
-
-   ```markdown
-   # Claude Code pointer
-   @AGENTS.md
-   ```
-
-   Nested `CLAUDE.md` files are *not* loaded at launch — they load on demand
-   when Claude reads a file in that subtree. Relative imports resolve against
-   the file containing the import, so `@AGENTS.md` means "the sibling". Net
-   session-start cost: zero. Net guarantee: the guide is in context whenever
-   an agent touches that folder, without depending on the model choosing to go
-   looking.
-
-**Alternatives considered and rejected.**
-
-- *Symlink `CLAUDE.md` → `AGENTS.md`.* Rejected. This repo explicitly supports
-  Windows contributors (`CLAUDE.md` mandates PowerShell syntax), and Git
-  symlinks on Windows require Developer Mode or elevation and degrade to plain
-  text files under `core.symlinks=false`. A three-line regular file works
-  everywhere.
-- *Set `pluginConfigs["agents-md@builtin"].options.instructionFiles` to
-  `claude-md-and-agents-md`.* Rejected as the primary mechanism: Claude Code
-  **ignores that key in project and local settings files**; it is honoured only
-  from user or managed settings. It therefore cannot be committed on behalf of
-  the team. It is worth documenting in `CONTRIBUTING.md` as an optional
-  per-developer setting, and it is the reason the stub files must not be
-  load-bearing for content — only for loading.
-- *Move the content into `.claude/rules/` with `paths:` frontmatter.*
-  Rejected. Claude-native and lazily loaded, but it would split the content
-  from the `AGENTS.md` tree that every other tool reads, recreating exactly the
-  drift these validators exist to prevent.
-
-**Note.** Claude Code never reads anything under a `.agents/` directory as
-project instructions. `.agents/skills/` therefore stays correctly scoped as
-skills, and the authoring contract in D-3 is reached by citation, not by
-ambient loading.
+**Rejected:** symlinking `CLAUDE.md` → `AGENTS.md` (Windows contributors are explicitly
+supported; Git symlinks need Developer Mode and degrade under `core.symlinks=false`);
+setting `instructionFiles: claude-md-and-agents-md` (Claude Code **ignores that key in
+project and local settings**, so it cannot be committed for the team — worth one line in
+`CONTRIBUTING.md` as a per-developer option); moving content into `.claude/rules/`
+(splits it from the tree every other tool reads, recreating the drift these validators
+exist to prevent). Note Claude Code never reads anything under `.agents/` as project
+instructions, which is why `.agents/skills/` correctly gets no guide (D-2).
 
 ## D-7. `tools/validate_agents_docs.py`
 
-The third sibling of `validate_workforce.py` and `validate_skills.py`, and
-deliberately identical in construction: standalone, stdlib-only, policy as
-module constants, one finding per line on stdout, exit 1 on any finding.
-Reuses the `_TOKEN_STRIP` / `CHECKABLE_PATH_PREFIXES` path-citation logic that
-`validate_skills.py` already proved out.
+Third sibling of `validate_workforce.py` and `validate_skills.py`: standalone,
+stdlib-only, policy as module constants, one finding per line, exit 1 on any finding.
+The red-team pass measured rev.1's check set against the real corpus and found three
+checks that cannot work as specified; all three are corrected here.
 
-| # | Check | Catches |
-| - | ----- | ------- |
-| 1 | Manifest ↔ filesystem agree in both directions | A guide added without a tier decision; a planned guide silently never written |
-| 2 | Required H2 sections present, in canonical order, for the file's tier | Drift back to freeform files |
-| 3 | Line count within the tier budget | Accretion — the measured failure mode |
-| 4 | Breadcrumb present; its parent link resolves | Orphaned guides after a folder move |
-| 5 | Every cited repo-relative path exists | Stale paths — the top-ranked staleness failure in the lint literature |
-| 6 | Every ```mermaid block has `accTitle:`, `accDescr:`, ≤15 node lines, and a prose line after the fence | Inaccessible and unexplained diagrams |
-| 7 | Every `## Subagents` entry names a real `.claude/agents/*.md`, `.agents/skills/*/SKILL.md`, or `.github/agents/*.agent.md` | Delegation pointing at agents that do not exist |
-| 8 | Every `make`/`pnpm run`/`npm run` command in `## Commands` names a real target or script | Dead commands — an agent running them wastes a full turn |
-| 9 | A paired `CLAUDE.md` exists and imports `@AGENTS.md` | The D-6 bridge silently missing for one folder |
-| 10 | No `## Rules` line is a near-duplicate of a root `AGENTS.md` rule | The repeats that D-3.1 forbids |
+| # | Check | Difficulty | Note |
+| - | ----- | ---------- | ---- |
+| 1 | Manifest ↔ tracked files agree both ways | trivial | Enumerate via `git ls-files '*AGENTS.md' '*CLAUDE.md'`, not `rglob` — exact, needs no exclusion list for `node_modules/`, and doubles as check 12 |
+| 2 | Required H2s present in canonical order for the tier | trivial | Must skip `##` inside fences; the per-tier sets are in the delta, not prose |
+| 3 | Line count within the tier budget | trivial | Blanks and fences count, or it is not a budget |
+| 4 | Breadcrumb parent is the **nearest manifest ancestor** | trivial | rev.1 only checked that the link resolved, which passes for any existing guide and misses the orphan case it claimed to catch |
+| 5 | Every cited path exists | **moderate — not a copy** | See below |
+| 6 | Diagram: `accTitle`, `accDescr`, prose line after fence, ≤22 fence-body lines, allowed diagram type | trivial | Node counting removed (D-5) |
+| 7 | Every `## Subagents` entry resolves | moderate | Fixed grammar: first backtick span of the bullet is the name. Index the 24 names from the three namespaces, leaning on the siblings' already-enforced name↔file invariants |
+| 8 | Commands resolve | moderate | See below |
+| 9 | Paired `CLAUDE.md` exists, imports `@AGENTS.md`, ≤2 non-blank lines | trivial | Root exempt (D-6) |
+| 10 | No `## Rules` line is a **normalised exact** duplicate of a root rule; no line **negates** one | trivial | Replaces rev.1's fuzzy heuristic — see below |
+| 11 | No imperative action directive outside `## Commands` | moderate | D-9; pattern set from E-5 |
+| 12 | Guide is tracked and survivable | trivial | Falls out of check 1; plus refuse a manifest entry inside a `clean: true` output directory (D-12) |
+| 13 | ASCII-dominant; no bidi or zero-width characters | trivial | D-9; the hidden-Unicode rules-file variant |
+| 14 | Reverse coverage: every roster agent, skill and mode is named by at least one guide | trivial | The drift `validate_skills.py`'s own docstring says this repo "spent a full audit pass fixing by hand" |
 
-Wired into `tools/Makefile`'s `checkers` target, `scripts/validate-pre-pr.sh`,
-CI's `governance` job, and `.pre-commit-config.yaml`. Tested in
-`tools/tests/test_validate_agents_docs.py`, matching how this repo already
-tests its checkers.
+**Check 10 was measured and rewritten.** rev.1 specified a near-duplicate heuristic. Run
+against this repo's corpus (9 root rules × 17 scoped rules, plus 6 synthetic true
+positives), `difflib.SequenceMatcher` gives true positives 0.28–0.80 and genuine
+non-duplicates 0.30–0.54 — **overlapping, with no separating threshold**. The clearest
+true positive, a scoped guide repeating `Never commit secrets.` verbatim, scores 0.28,
+*below every one of the 17 genuine non-duplicates*, because the measure is
+length-sensitive. Token containment separates on this corpus but degenerates on short
+lines — `Do not edit generated files.` scores 0.80 against the root, and that is verbatim
+the line every Tier 3 guard file will carry. rev.2 therefore checks **normalised exact
+match** (case, whitespace, punctuation, backticks, trailing period), which catches literal
+copy-paste at ~0% false positives in eight lines of code, **plus a negation detector**
+for invariant I-1 (a `## Rules` line that names a root rule's subject within a negating
+construction — "does not apply", "except here", "unlike the root"). Tier 3 is exempt from
+the duplicate half unconditionally: near-total redundancy there is the point.
 
-**Deliberate non-goal**: the checker validates *structure and references*, not
-prose quality. Whether a rule is worth stating is a review judgement, which is
-what D-8 puts an owner behind.
+**Check 5 is not a copy of `validate_skills.py`.** Run unchanged over the five existing
+guides it flags exactly one thing — `packages/meshsa[dev,meshtastic]` in the root's pip
+command, because `_PLACEHOLDER_CHARS` does not include brackets — so **the root guide goes
+red on day one**, while all four scoped guides return zero findings because their 17 real
+citations are markdown links and the sibling only reads backtick spans. rev.2's check 5:
+extract from backtick spans **and** markdown link targets; resolve **file-relative first,
+then repo-root-relative** (a token passing either way is fine — this clears all 53
+existing citations with no false positives); strip `[extras]`, `::symbol` and `#anchor`
+before testing; reject any path escaping the repo root; keep the sibling's
+`CHECKABLE_PATH_PREFIXES` allowlist for bare tokens and document the package-relative
+shorthand gap the same way the sibling does.
 
-## D-8. Subagents — two distinct things
+**Check 8 disambiguates by `-f`, and does not union.** The root `Makefile` and
+`tools/Makefile` share eight target names — `build clean dev format help install lint
+test` — with different meanings: root `make test` runs the TypeScript suite,
+`make -f tools/Makefile test` runs pytest. A union rule would pass a
+`packages/meshsa/AGENTS.md` that says `make test` and send an agent to the wrong suite,
+which is exactly the wasted turn the check exists to prevent. The parser must also consume
+`-f <path>` as a pair (the root guide's `make -f tools/Makefile test lint type build` names
+four targets and would otherwise yield `-f` as a target), skip `-C`/`-j` and `VAR=value`.
+`pnpm --filter <name> run <script>` resolves against the eight workspace `package.json`
+names; `pnpm -r`, `--if-present`, and path-glob filters are **explicitly skipped** with a
+module comment, since a recursive invocation cannot be proven dead. `npm run` is a finding
+in itself — the root `preinstall` script hard-fails any non-pnpm agent.
 
-The request named subagents, and there are two separate needs behind it.
+**Declared exceptions** live in `.claude/governance.yaml` under `agents_docs`, matching
+`bind_guard` and `literal_guard` precedent (`{path, rule, rationale}`). rev.1 had no
+escape hatch at all, which left "reword or suffer" as the only remedy.
 
-**(a) Delegation discoverable from the folder.** Every guide carries a
-`## Subagents` section naming the *existing* roster agents, skills, and custom
-modes that apply there. Example, for `packages/meshsa/src/meshsa/transports/`:
+**The manifest is a module constant, not `governance.yaml`.** The decisive reason is
+security coupling, not style: `governance.yaml` is loaded by `scope_freeze.py`, the
+PreToolUse hook that freezes the Initiative-C command path, and that loader is Pydantic
+`extra="forbid"` and **fails open**. A 35-entry documentation manifest in that file means
+a typo'd docs path can invalidate the config the command freeze depends on, and the freeze
+then silently stops denying. A documentation list must never be able to disable
+`c_gate_met`. The repo has already met this hazard once — `literal_guard` was made
+`Optional` in `GovernanceConfig` precisely to avoid a mid-edit window — and an
+`agents_docs` section would inherit the same shape, silently no-opping the checker on a
+misspelling. Module constants match `CHECKABLE_PATH_PREFIXES`, `BUNDLE_GLOBS` and
+`PRECOMMIT_REPOS`, which are the same kind of thing. If it outgrows a constant it becomes
+`tools/agents_docs_manifest.json`, parsed with stdlib `json` — never `governance.yaml`.
+The *tier* lives in the constant; the *qualifying trap* stays in `tasks.md`, where a human
+reviews it.
+
+**Deliberate non-goal:** the checker validates structure, references and injection
+hygiene — not whether a rule is worth stating. That is what D-8's owner and D-10's review
+stop points are for. Four of E-7's six smells needed an LLM to detect; only line count and
+commit count are mechanically decidable, and rev.2 does not pretend otherwise.
+
+## D-8. Subagents **[inverted]**
+
+**(a) Delegation discoverable from the folder.** Every Tier 0–2 guide carries a
+`## Subagents` section naming existing roster agents, skills and modes. Fixed grammar so
+check 7 can parse it: each entry is a bullet whose first backtick span is the name.
 
 ```markdown
 ## Subagents
-- `security-reviewer` (`.claude/agents/security-reviewer.md`) — mandatory before any PR touching this folder.
-- `bind-auditor` (`.claude/agents/bind-auditor.md`) — any diff adding, moving, or removing a socket bind.
-- Skill: [meshsa-add-transport](../../../../../.agents/skills/meshsa-add-transport/SKILL.md).
+- `security-reviewer` — mandatory before any PR touching this folder. — control: ci:governance
+- `bind-auditor` — any diff adding, moving, or removing a socket bind.
+- `meshsa-add-transport` — the skill for adding a medium; read it before editing the registry.
 ```
 
-This section invents nothing. Check 7 rejects a name that does not resolve,
-which is the same discipline `validate_workforce.py`'s `Relationship:` marker
-already imposes in the other direction. The root `AGENTS.md`'s binding rule —
-`security-reviewer` reviews every diff touching `packages/` or any transport
-before a PR — is restated at each folder it actually governs, which is
-additive per D-3.2, not a new rule.
+It invents nothing; check 7 rejects a name that does not resolve.
 
-**(b) One new roster agent: `docs-cartographer`.** A guide tree with no owner
-becomes stale documentation, which is worse than none — an agent that trusts a
-wrong path burns a turn. The roster gains exactly one entry:
+**(b) `docs-cartographer` is a detector, not an author.** rev.1 gave an LLM agent the job
+of authoring 35 guides. That is the one condition measured to make context files worse
+(E-1, developer-written beat LLM-generated at p = 0.038 — the only significant
+success-rate contrast in the study), and it is the Init Fossilization smell by
+construction (E-7, 24% of sampled repos). rev.2 scopes it to what agents are good at and
+evidence does not contradict:
 
 ```yaml
 ---
 name: docs-cartographer
-description: "Authors and refreshes the per-directory AGENTS.md guides and their Mermaid maps. Invoke on any diff that adds, removes, or relocates a module in a covered folder, and whenever validate_agents_docs reports a finding."
-tools: Read, Grep, Glob, Write, Edit, Bash(rg *), Bash(python tools/validate_agents_docs.py*)
+description: "Detects staleness in the AGENTS.md guide tree and proposes diffs for human ratification. Invoke when validate_agents_docs reports a finding, or on any diff that adds, removes, or relocates a module in a covered folder. Never lands guide prose unreviewed."
+tools: Read, Grep, Glob, Bash(rg *), Bash(git diff*), Bash(python tools/validate_agents_docs.py*)
 ---
 ```
 
-Body carries the `Relationship:` marker `validate_workforce.py` requires,
-pointing at `.agents/skills/agents-md-authoring/SKILL.md`, and stays within the
-60-line cap. Tools are write-scoped to documentation work; it holds no test,
-build, or git authority.
+Note the tool list: **no `Write`, no `Edit`.** It reports and proposes; a human writes.
+Body carries the `Relationship:` marker `validate_workforce.py` requires, citing
+`.agents/skills/agents-md-authoring/SKILL.md`, within the 60-line cap. It also inherits
+E-3's deletion protocol *and its safety caveat*: it may propose deleting a rule whose
+rationale is recoverable, but *"keep a person in the deletion path and hold safety-relevant
+instructions out of scope"* — so a rule carrying a `control:` tag is never proposed for
+deletion by the agent.
 
-**Exactly one new agent, deliberately.** The roster is small on purpose and
-every entry costs description tokens at every session start. The remaining
-need — "this folder's guide is now wrong because the folder changed" — is a
-trigger for the one new agent, not a reason for seven more.
+Exactly one new roster entry, deliberately: every description costs tokens at each
+session start.
 
-## D-9. Rollout order
+## D-9. The guide tree is a security surface **[inverted]**
 
-Sequenced so CI is never knowingly red between phases, and so the checker
-exists before the content it governs. Full task breakdown in `tasks.md`.
+rev.1 rated this change "Low risk — documentation and one stdlib-only checker." That is
+wrong in kind. E-5 measures instruction files as the **highest-ASR injection entry point**
+of the three tested: the harness *"treats AGENTS.md (and CLAUDE.md) as trusted
+system-level instructions and loads them into the session without checking what they
+contain,"* with reachability `R ≡ 1` by construction. The published threat model is a
+**pull-request contributor**, which is this repository's model. Pillar Security's
+rules-file backdoor — including **hidden-Unicode variants** — is the disclosed exploit.
 
-1. **Contract and enforcement first.** Skill, roster agent, checker, and tests
-   land with a manifest listing **only the five guides that already exist**.
-   Those five are retrofitted to the D-3 contract in the same phase. CI green.
-2. **Root and bridge.** Root `AGENTS.md` gains its repo-map diagram and
-   delegation table; root `CLAUDE.md` gains the `@AGENTS.md` import.
-3. **Tier 1**, one commit per domain, manifest extended per commit.
-4. **Tier 2**, same discipline.
-5. **Tier 3 guard files**, plus the nested `CLAUDE.md` stubs for everything
-   added in phases 3–5.
-6. **Gate wiring**: pre-commit, `validate-pre-pr.sh`, CI `governance` job,
-   `CONTRIBUTING.md`, `CHANGELOG.md`.
+rev.2 adds 69 files to that surface and therefore declares it, with four controls:
 
-Phase 1 is the stop point for review. If the contract is wrong, it is wrong on
-5 files, not 28.
+1. **Check 11 — no action directives outside `## Commands`.** E-5's recommended harness
+   control is to *"scan the file before loading and flag or strip content that reads as an
+   action directive ('run this', 'call bash with')."* The harness does not do this, so the
+   repo does it in CI. `## Commands` is the declared allowlist; an imperative shell
+   invocation anywhere else is a finding.
+2. **Check 13 — Unicode hygiene.** ASCII-dominant content; no bidirectional-override or
+   zero-width characters. This is the hidden-Unicode variant, and it is four lines of
+   code.
+3. **A defensive directive in the root guide.** E-5 measured a security-themed directive
+   cutting attack success from **25.7% to 10.2%** (~60% suppression, n = 1000/cell). It
+   costs three lines and is the cheapest control in this bundle. It is a soft layer that
+   does not survive an adaptive adversary — stated as such, not oversold.
+4. **`CODEOWNERS` coverage verified as a precondition**, not assumed. `.github/CODEOWNERS`
+   is `* @ianshank` today, which covers it; T-0.3 verifies this still holds and fails the
+   phase if it does not.
 
-## D-10. The frozen path cannot hold its own guide
+Two honest limits. First, per E-6, a prose rule is not a control: the repo's real
+enforcement remains `scope_freeze.py`, `bind_guard`, `literal_guard` and CI — which is
+precisely why D-3.2 requires each security rule to name the control that backs it or be
+marked advisory. Second, E-5 found ASR *falls* with codebase modularity and with nesting
+depth beyond 2; this repo is highly modular and config-driven, which is the lower-risk
+regime, but that is mitigation, not immunity.
 
-`.claude/governance.yaml` freezes `packages/meshsa/src/meshsa/command/**` while
-`c_gate_met` is `false`, and `governance.py::match_globs` uses
-`fnmatch.fnmatchcase`, whose `*` crosses `/`. Verified against the real
-matcher's semantics:
+## D-10. Rollout order
+
+Sequenced so the checker is written, wired, **and running under CI** before any new guide
+is authored. rev.1 wired the gates in its final phase, leaving ~31 guide-adding commits
+verified only by a human remembering to run a script by hand.
+
+1. **Phase 1 — contract, checker, gates, and a green tree of five.** Skill, roster agent,
+   checker, tests, **plus the `tools/Makefile` and CI `governance` wiring**, plus the root
+   `@AGENTS.md` import and four three-line stubs. `TIER_MANIFEST` lists only the five
+   guides that already exist, retrofitted to the D-3 contract. rev.1 ended this phase with
+   CI **red** — check 9 would have fired five times, because the root import and the four
+   stubs were scheduled for later phases. Landing them here costs ~13 lines. **Review stop
+   point.**
+2. **Phase 2 — root guide.** Delegation table, the defensive directive, one repo-map
+   diagram, budget raised to 170 (D-4).
+3. **Phase 3 — Tier 1**, one commit per domain, manifest and paired stub extended in the
+   same commit as each guide. **Review stop point.**
+4. **Phase 4 — Tier 2**, same discipline.
+5. **Phase 5 — Tier 3 guard files** (see D-12 for where they actually go).
+6. **Phase 6 — remaining wiring**: `scripts/validate-pre-pr.sh`, `.pre-commit-config.yaml`,
+   `CONTRIBUTING.md`, `docs/specs/README.md` registration, `CHANGELOG.md`.
+
+Every guide ships with its paired stub in the same commit, so the delta's "exit non-zero"
+scenarios are unconditional from Phase 1 — rev.1 needed a warn-then-error mode that no
+document defined, and a governance checker with a silent advisory mode is a checker nobody
+notices is off.
+
+## D-11. The frozen path cannot hold its own guide
+
+`.claude/governance.yaml` freezes `packages/meshsa/src/meshsa/command/**`, and
+`governance.py::match_globs` uses `fnmatch.fnmatchcase`, whose `*` crosses `/`. Verified
+against the real matcher's semantics:
 
 ```
 packages/meshsa/src/meshsa/command/AGENTS.md  -> packages/meshsa/src/meshsa/command/**
@@ -329,32 +417,44 @@ packages/meshsa/src/meshsa/command/CLAUDE.md  -> packages/meshsa/src/meshsa/comm
 packages/meshsa/src/meshsa/AGENTS.md          -> None
 ```
 
-So the scope-freeze `PreToolUse` hook denies a Write/Edit to a *documentation*
-file in the frozen directory, not just to code. This is correct behaviour, not
-a bug to work around: the freeze is path-shaped by design, and a carve-out for
-`*.md` would be a hole someone eventually drives a module through.
+The scope-freeze hook denies a write to a *documentation* file in the frozen directory
+exactly as it denies one to `lifecycle.py`. That is correct: the freeze is path-shaped by
+design, and an `*.md` carve-out is a hole someone eventually drives a module through.
 
-**Resolution**: the frozen path's guidance lives in its parent,
-`packages/meshsa/src/meshsa/AGENTS.md`, under a `### command/ (frozen)`
-subsection — which is also where an agent about to touch `command/` is most
-likely to be reading. `MESHSA_GOVERNANCE_OVERRIDE` is **not** used to place a
-documentation file inside a frozen path; every override is logged, and spending
-one on a Markdown file would train exactly the wrong reflex. The same applies
-to `scope_widening_globs` (`federation/**`, `storeforward/**`), which do not
-exist yet and therefore need no guide at all.
+**Resolution.** The frozen path's guidance lives in its parent,
+`packages/meshsa/src/meshsa/AGENTS.md`, under `### command/ (frozen)` — which is where an
+agent about to touch `command/` is reading anyway. `MESHSA_GOVERNANCE_OVERRIDE` is not
+spent on a Markdown file; every override is logged, and spending one here trains the wrong
+reflex. `scope_widening_globs` (`federation/**`, `storeforward/**`) name directories that
+do not exist, so they need no guide at all.
 
-## D-11. Keeping it true
+## D-12. Guard files go in the parent of a generated directory
 
-Three mechanisms, in increasing order of strength:
+Three of rev.1's six Tier 3 guard files would have been **deleted by the tooling they
+warn about**. `lib/api-spec/orval.config.ts` sets `clean: true` on both outputs, so
+`pnpm --filter @workspace/api-spec run codegen` wipes
+`lib/api-zod/src/generated/` and `lib/api-client-react/src/generated/` entirely —
+guide, stub and all. `artifacts/mockup-sandbox/src/.generated/` is rewritten by
+`mockupPreviewPlugin.ts` on every dev and build. Check 1 would then go red for everyone
+who regenerated, with no obvious cause.
 
-- **Checker** (D-7) — catches structural and reference rot on every PR. Strong,
-  but blind to prose that is merely out of date.
-- **Owner** (D-8b) — `docs-cartographer` is triggered by module-level changes
-  in a covered folder.
-- **Budget** (D-4) — a file that cannot grow must be edited rather than
-  appended to, which forces the review that the D-0 accretion research says
-  never happens on its own.
+This is the same shape as D-11 and takes the same resolution: **the guide lives in the
+parent** — `lib/api-zod/src/`, `lib/api-client-react/src/`,
+`artifacts/mockup-sandbox/src/` — and names the generated child in its `## Traps`. Check 12
+refuses any manifest entry inside a known `clean: true` output directory, so the mistake
+cannot be reintroduced. `packages/meshsa/tests/snapshots/` and `archive/` are not
+regenerated in place and keep their in-directory guard files.
 
-`CONTRIBUTING.md` gains one line in its PR checklist: *if a PR adds, removes,
-or moves a module in a folder with an `AGENTS.md`, refresh that file's
-`## Key files` table in the same PR.*
+## D-13. Keeping it true
+
+Four mechanisms, increasing in strength:
+
+- **Rationale** (D-3.1) — the only thing that makes a rule *deletable*, and therefore the
+  only thing that stops the ratchet at its root cause (E-3).
+- **Budget** (D-4) — a file that cannot grow must be edited, forcing the review that
+  otherwise never happens.
+- **Checker** (D-7) — structural and reference rot, plus injection hygiene, on every PR.
+- **Owner** (D-8b) — `docs-cartographer` detects staleness and proposes; a human ratifies.
+
+`CONTRIBUTING.md` gains one checklist line: *if a PR adds, removes, or moves a module in a
+folder with an `AGENTS.md`, refresh that file's `## Traps` in the same PR.*
