@@ -5,316 +5,160 @@
 ### Requirement: Agents Collaborate by Default
 Amends the requirement of the same name ratified in
 `openspec/changes/gcp-drone-m2-agent-hardening`. The binding `security-reviewer` rule and
-the `Relationship:` marker are unchanged. What changes: the root `AGENTS.md` SHALL state
-each repository-wide rule **once**, and a scoped guide SHOULD NOT restate it. Delegation is
-made discoverable at the folder instead by a `## Subagents` section naming the agents,
-skills and modes that apply there. Where a rule is security-relevant, it SHALL name the
-control that enforces it — `scope_freeze`, `bind_guard`, `literal_guard`, or a CI job — or
-be marked advisory, so a reader can tell enforcement from intention.
+the `Relationship:` marker are unchanged. What changes: the root `AGENTS.md` SHALL be
+loaded mechanically rather than by prose reference, and every rule in an agent instruction
+file SHALL carry its rationale. Where a rule is security-relevant it SHALL name the control
+that enforces it — `scope_freeze`, `bind_guard`, `literal_guard`, or a CI job — or be
+marked advisory, so a reader can tell enforcement from intention.
 
-Non-duplication is a **review** obligation, not a mechanical one. Both candidate detectors
-were measured and both fail: fuzzy matching scores a verbatim duplicate below every
-genuine non-duplicate, and exact matching is defeated by line-wrapping and by partial
-copying. The line budget is what actually bounds accretion.
+#### Scenario: Root guide not loaded
+- **WHEN** the root `CLAUDE.md` references `AGENTS.md` by Markdown link rather than by
+  `@AGENTS.md` import, and a `CLAUDE.md` exists at or above the working directory
+- **THEN** no `AGENTS.md` in the repository is loaded, and the requirement is unmet
+  regardless of what those files contain
 
 #### Scenario: Security rule with no stated enforcement
-- **WHEN** a guide states a rule about binds, tokens, credentials, or the frozen command
-  path without a `control:` or `advisory` marker
+- **WHEN** a guide or rule states a constraint about binds, tokens, credentials, or the
+  frozen command path without a `control:` or `advisory` marker
 - **THEN** `validate_agents_docs` exits non-zero, naming the file and the rule
 
 ## ADDED Requirements
 
-### Requirement: Tiered Guide Manifest
-`AGENTS.md` guides SHALL exist only at directories listed in a committed tier manifest,
-and every manifest entry SHALL have a guide. A directory qualifies only if it holds a
-trap: a fact an agent gets wrong by default that its nearest ancestor guide does not
-state. The manifest SHALL live as a module constant in `tools/validate_agents_docs.py`,
-not in `.claude/governance.yaml`, because that file is loaded by the fail-open
-`scope_freeze` hook and a documentation entry must never be able to invalidate the config
-the Initiative-C freeze depends on. Enumeration SHALL use `git ls-files` so an untracked
-or ignored guide is a finding rather than an invisible file.
+### Requirement: Traps Are the Documented Content
+Each of the five `AGENTS.md` guides SHALL carry a `## Traps` section. A trap is a fact that
+costs an agent a wasted turn or a wrong result — a gate that fires on a partial run, an
+ordering dependency, a file that regenerates, a predicate that looks equivalent and is not.
+Repository overviews, structure maps and file inventories SHALL NOT be added as new
+content: they are measurably ineffective where other documentation exists
+(`docs/AGENTS_MD_EVIDENCE.md` E-1 §4.3), and this repository has `docs/C4.md`,
+`docs/ARCHITECTURE.md` and `docs/specs/`.
 
-#### Scenario: Guide added without a tier decision
-- **WHEN** an `AGENTS.md` is committed in a directory absent from `TIER_MANIFEST`
-- **THEN** `validate_agents_docs` exits non-zero, naming the path
+Procedure — how to run a thing, regenerate a thing, or follow a workflow — SHALL live in
+`.agents/skills/`, not in an always-loaded guide. This restates the standing policy in
+`.github/copilot-instructions.md` rather than introducing one.
 
-#### Scenario: Manifest entry never written
-- **WHEN** `TIER_MANIFEST` lists a directory that has no tracked `AGENTS.md`
-- **THEN** `validate_agents_docs` exits non-zero, naming the missing file
+#### Scenario: Guide without traps
+- **WHEN** one of the five guides has no `## Traps` section
+- **THEN** `validate_agents_docs` exits non-zero, naming the file
 
-#### Scenario: Guide placed where tooling will delete it
-- **WHEN** a manifest entry names a directory that is an orval `clean: true` output or is
-  rewritten by a generator on build
-- **THEN** `validate_agents_docs` exits non-zero, directing the guide to the parent
-
-### Requirement: Guide Structure and Line Budget
-Every guide SHALL carry an H1 title, a breadcrumb naming its scope and linking its parent
-guide, and exactly the H2 sections required for its tier, in this order:
-
-| Tier | Required sections | Budget |
-| ---- | ----------------- | ------ |
-| 0 | `Purpose`, `Traps`, `Rules`, `Commands`, `Subagents` | ≤170 lines |
-| 1 | `Traps`, `Rules`, `Subagents` | ≤90 lines |
-| 2 | `Traps`, `Rules`, `Subagents` | ≤60 lines |
-| 3 | `Purpose`, `Rules` | ≤12 lines |
-
-`Purpose`, `Commands` and `Map` are optional at tiers 1 and 2 and forbidden at tier 3
-(except `Purpose`, which tier 3 requires). Sections SHALL appear in the canonical order
-`Purpose`, `Traps`, `Rules`, `Commands`, `Subagents`, `Map`, with optional sections
-interleaved at their canonical position. Line count includes blank lines and fenced
-blocks. Budgets are set from measurement: a guide authored to this contract for a
-mid-density Tier 1 folder consumed exactly 80 lines, which is why the Tier 1 budget is 90.
-
-#### Scenario: Required section missing
-- **WHEN** a Tier 1 guide has no `## Traps` section
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the missing section
-
-#### Scenario: Overview section where it is not required
-- **WHEN** a Tier 1 or Tier 2 guide omits `## Purpose`
-- **THEN** the guide is conformant — repository-overview content is optional below the
-  root, because it is measurably inert where other documentation exists
-
-#### Scenario: Sections out of canonical order
-- **WHEN** a guide places `## Rules` before `## Traps`
-- **THEN** `validate_agents_docs` exits non-zero, naming the expected order
-
-#### Scenario: Guide exceeds its tier budget
-- **WHEN** a subsystem guide reaches 61 lines
-- **THEN** `validate_agents_docs` exits non-zero, naming the file, its count and its budget
+#### Scenario: Procedure added to a guide
+- **WHEN** a reviewer finds regenerate-with or run-this-command content in a guide rather
+  than in the skill that owns that workflow
+- **THEN** the review returns it to the skill, per `.github/copilot-instructions.md`
 
 ### Requirement: Every Rule Carries Its Rationale
-Each line in a guide's `## Rules` SHALL carry a trailing `— why: <reason>` clause.
-Agentic context files grow +226% over their lifetime and deletion hazard falls with
-instruction age because an instruction's rationale decays faster than the instruction; a
-rule whose reason is lost cannot be safely deleted, so it is never deleted
+Each line in a `## Rules` section SHALL carry a trailing `— why: <reason>` clause. Agentic
+instruction files grow +226% over their lifetime, and deletion hazard *falls* with
+instruction age because the rationale decays faster than the instruction; 77.3% of
+instruction deaths arrive as wholesale rewrites. Recording the reason removed 99.3% of
+excess size, and is the only remedy in the literature that is independent of file count
 (`docs/AGENTS_MD_EVIDENCE.md` E-3).
 
 #### Scenario: Rule without a rationale
 - **WHEN** a `## Rules` line has no `why:` clause
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the line
+- **THEN** the review returns it; a rule whose reason is unrecorded cannot later be safely
+  deleted, so it is never deleted
 
-### Requirement: Scoped Guides Are Additive
-A scoped guide MAY add a constraint. It SHALL NOT relax, negate, or carve an exception out
-of a rule the root `AGENTS.md` sets. This is invariant I-1 and carries the M2 security
-posture into every subtree.
+### Requirement: Path-Scoped Rules for Fire-On-Open Cases
+Traps that must reach an agent at the moment it opens a specific file — generated output,
+vendored trees, read-only archives — SHALL be expressed as `.claude/rules/*.md` with
+`paths:` frontmatter, not as an instruction file inside the directory concerned. A file
+placed inside an orval `clean: true` output is deleted by the next codegen; a file placed
+in the parent does not fire when the generated file is opened. A path-scoped rule does
+both: it fires on the match and lives outside the deleted tree.
 
-#### Scenario: Scoped guide negates a root rule
-- **WHEN** a scoped guide's `## Rules` names the subject of a root rule inside a negating
-  construction — "does not apply here", "except in this folder", "unlike the root"
-- **THEN** `validate_agents_docs` exits non-zero, naming both files and the line
+#### Scenario: Guard placed inside a generated directory
+- **WHEN** an instruction file is committed under `lib/*/src/generated/` or
+  `artifacts/mockup-sandbox/src/.generated/`
+- **THEN** `validate_agents_docs` exits non-zero, directing the content to a `paths:` rule
+
+#### Scenario: Agent opens a generated file
+- **WHEN** an agent reads `lib/api-zod/src/generated/api.ts`
+- **THEN** `.claude/rules/generated-code.md` loads, stating that the tree is orval output
+  and that the source of truth is `lib/api-spec/openapi.yaml`
 
 ### Requirement: Citations State Why and When
-Every repository-relative path a guide cites SHALL exist, and SHALL be accompanied by the
-reason to read it. A bare path reference is the Blind Reference smell: a mentioned path
-that carries no purpose is commonly ignored (`docs/AGENTS_MD_EVIDENCE.md` E-7). Path
-extraction SHALL cover both backtick spans and Markdown link targets, and SHALL resolve
-file-relative before repository-root-relative.
+Every repository-relative path an instruction file cites SHALL exist and SHALL carry the
+reason to read it — a mentioned path with no stated purpose is commonly ignored
+(`docs/AGENTS_MD_EVIDENCE.md` E-7). Path extraction SHALL cover backtick spans and Markdown
+link targets, SHALL strip a trailing `[extras]`, `::symbol` and `#anchor`, SHALL reject
+bare file-extension tokens and absolute paths, and SHALL resolve file-relative, then the
+nearest `src/<pkg>/`, then repository-root-relative. Deliberate counter-example citations
+SHALL be declarable with a rationale.
 
 #### Scenario: Guide cites a path that does not exist
 - **WHEN** a guide references `packages/meshsa/src/meshsa/federation/` and that directory
   is absent
 - **THEN** `validate_agents_docs` exits non-zero, naming the file and the dead path
 
-#### Scenario: Deliberate counter-example citation
-- **WHEN** a guide cites a path precisely to explain that it cannot or must not exist —
-  as the core guide does for `command/AGENTS.md` — and the citation is recorded in the
-  `agents_docs` exception block with a rationale
-- **THEN** `validate_agents_docs` accepts it, and rejects it if the rationale is absent
+#### Scenario: Legitimate package-relative citation
+- **WHEN** `packages/jetson_yolo_gcs/AGENTS.md` cites `detection/factory.py`, which
+  resolves under that package's `src/jetson_yolo_gcs/`
+- **THEN** the citation is accepted. Without the third resolution base this check emits
+  nine false positives across the five existing guides, and a checker that cries wolf is
+  not a gate
 
-#### Scenario: Citation carries no reason to read
-- **WHEN** a guide's only reference to a document is its path, with no clause saying when
-  or why to open it
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the citation
-
-### Requirement: Commands Resolve to Real Targets
-Every `make`, `pnpm run`, or `npm run` command a guide lists SHALL name a real target or
-script. `make` resolution SHALL disambiguate the root `Makefile` from `tools/Makefile` by
-the presence of `-f`, because the two share eight target names with different meanings and
-a union rule would pass a guide that sends an agent to the wrong test suite. Recursive
-pnpm invocations and path-glob filters SHALL be skipped rather than guessed at. A guide
-that lists an `npm run` command SHALL be a finding, since the repository's `preinstall`
-script rejects non-pnpm agents.
-
-#### Scenario: Guide lists a target that does not exist
-- **WHEN** a guide's `## Commands` names `make coverage-all` and no such target exists
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the command
-
-#### Scenario: Guide names an ambiguous target without disambiguating
-- **WHEN** a guide lists a bare `make <target>` whose name exists in **both** the root
-  `Makefile` and `tools/Makefile` — the two share eight such names, including `test`
-- **THEN** `validate_agents_docs` exits non-zero, requiring the `-f` form. The check
-  decides ambiguity, not intent: it cannot know which suite a guide meant, only that the
-  reader cannot either
-
-### Requirement: Accessible, Constraint-Bearing Diagrams
-A guide MAY carry at most one diagram, and only where it encodes a constraint that cannot
-be read from the code — an ordering dependency, a generation direction, a governance gate.
-Structure and architecture diagrams belong in `docs/`; repository overviews in a context
-file are not measurably useful where other documentation exists
-(`docs/AGENTS_MD_EVIDENCE.md` E-1). Every diagram SHALL declare `accTitle` and `accDescr`,
-SHALL be followed immediately by a prose summary, SHALL use `flowchart` or
-`sequenceDiagram`, and SHALL keep its fence body within 22 lines. Tier 3 guides SHALL
-carry none.
-
-#### Scenario: Diagram without an accessible description
-- **WHEN** a guide contains a fenced `mermaid` block with no `accDescr` line
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the block
-
-#### Scenario: Diagram with no prose summary
-- **WHEN** the first non-blank line after a diagram's closing fence begins with `#`, a
-  fence, a table pipe, or a list marker
-- **THEN** `validate_agents_docs` exits non-zero, naming the file
-
-#### Scenario: Diagram exceeds its fence budget
-- **WHEN** a diagram's fence body reaches 23 lines
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the count
-
-#### Scenario: Guard file carries a diagram
-- **WHEN** a Tier 3 guide contains a fenced `mermaid` block
-- **THEN** `validate_agents_docs` exits non-zero, stating that guard files are prose-only
-
-### Requirement: Delegation References Resolve
-Every `## Subagents` entry SHALL name an existing `.claude/agents/*.md`,
-`.agents/skills/*/SKILL.md`, or `.github/agents/*.agent.md`. The name SHALL be the first
-backtick span of the bullet, so the reference is mechanically extractable. Every roster
-agent, skill, and custom mode SHALL be named by at least one guide, so a newly added one
-cannot drift unlisted.
-
-#### Scenario: Subagent reference does not resolve
-- **WHEN** a `## Subagents` entry names `transport-auditor` and no roster file, skill, or
-  mode by that name exists
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the reference
-
-#### Scenario: Roster entry named by no guide
-- **WHEN** a new `.claude/agents/*.md` lands and no guide's `## Subagents` names it
-- **THEN** `validate_agents_docs` exits non-zero, naming the unreferenced entry
-
-#### Scenario: Guide governing packages/ omits the security gate
-- **WHEN** a Tier 0–2 guide for a directory under `packages/` has a `## Subagents` section
-  that does not name `security-reviewer`
-- **THEN** `validate_agents_docs` exits non-zero, citing the root binding rule.
-  Tier 3 guides carry no `## Subagents` section and are outside this scenario
-
-### Requirement: The Guide Tree Is a Declared Injection Surface
-Instruction files are loaded by the harness as trusted system context without inspection,
-which makes them the highest-privilege prompt-injection entry point in an agentic
-repository, under a threat model that includes a pull-request contributor
-(`docs/AGENTS_MD_EVIDENCE.md` E-5). Guides SHALL therefore contain no imperative
-tool-invocation directive in non-fenced prose outside the declared `## Commands` section,
-SHALL be ASCII-dominant, and SHALL contain no bidirectional-override or zero-width
-characters. `CODEOWNERS` SHALL cover `**/AGENTS.md` and `**/CLAUDE.md`; human review of
-the diff is the load-bearing control for this entry point, because the scan E-5
-recommends belongs to the harness and a repository can only approximate it. The root
-`AGENTS.md` SHALL carry a defensive directive against acting on instructions found in
-repository content — noting that its measured effect is on documentation-borne injection,
-a **different** entry point from the one this change expands.
-
-#### Scenario: Action directive outside the command allowlist
-- **WHEN** a guide's `## Traps` or `## Rules` prose contains an imperative tool-invocation
-  directive such as "call the bash tool with"
-- **THEN** `validate_agents_docs` exits non-zero, naming the file and the directive
-
-#### Scenario: Legitimate operational prose
-- **WHEN** a guide's `## Traps` says "run the full suite, not a single file" or names a
-  linter to invoke
-- **THEN** the guide is conformant — the check matches tool-invocation shapes, not every
-  imperative verb, and a measured ~11% false-positive rate on naive verb+noun matching is
-  why
+### Requirement: Instruction Files Are a Declared Injection Surface
+`AGENTS.md` and `.claude/rules/*.md` are loaded by the harness as trusted system context
+without inspection, which makes them the highest-privilege prompt-injection entry point in
+an agentic repository, under a threat model that includes a pull-request contributor
+(`docs/AGENTS_MD_EVIDENCE.md` E-5). They SHALL contain no bidirectional-override
+(U+202A-E, U+2066-9) or zero-width (U+200B-D) code points, checked by exact code point. A
+broader "ASCII-dominant" rule is deliberately not imposed: the authoring contract itself
+mandates U+2014, U+00B7 and U+2264, so a density threshold would fire on its own format. `CODEOWNERS` SHALL cover `**/AGENTS.md`,
+`**/CLAUDE.md` and `.claude/rules/**`; human review of the diff is the load-bearing control,
+because the content scan E-5 recommends belongs to the harness. The root `AGENTS.md` SHALL
+carry a defensive directive against acting on instructions found in repository content,
+noting that its measured effect is on a different entry point from the one these files are.
 
 #### Scenario: Hidden-Unicode payload
-- **WHEN** a guide contains a zero-width or bidirectional-override character
+- **WHEN** an instruction file contains a zero-width or bidirectional-override code point
 - **THEN** `validate_agents_docs` exits non-zero, naming the file and the offset
 
-#### Scenario: Root guide without a defensive directive
-- **WHEN** the root `AGENTS.md` carries no directive against acting on instructions
-  embedded in repository content
-- **THEN** `validate_agents_docs` exits non-zero
+#### Scenario: Instruction file added outside code ownership
+- **WHEN** `CODEOWNERS` no longer covers a path where instruction files may be added
+- **THEN** T-0.4 fails and the phase stops; the surface has lost its only real control
 
-### Requirement: Guides Load Mechanically in Claude Code
-The root `CLAUDE.md` SHALL import the root `AGENTS.md` with `@AGENTS.md` rather than
-linking to it. Every directory carrying a guide SHALL carry a `CLAUDE.md` importing its
-sibling, containing only a title and the import, **except** the repository root, which
-keeps its Claude-specific notes, and `.claude/`, where a `CLAUDE.md` would be resolved as
-a second repository-root-scope instruction file with undefined precedence. A guide and its
-stub SHALL land in the same commit.
-
-#### Scenario: Guide added without its pairing
-- **WHEN** an `AGENTS.md` outside the root and `.claude/` is committed with no sibling
-  `CLAUDE.md`, or with one that does not import `@AGENTS.md`
-- **THEN** `validate_agents_docs` exits non-zero, naming the directory
-
-#### Scenario: Content drifts into a stub
-- **WHEN** a paired `CLAUDE.md` outside the root exceeds two non-blank lines
-- **THEN** `validate_agents_docs` exits non-zero, naming the file
-
-### Requirement: The Checker Runs in CI
+### Requirement: The Checker Runs in CI and Owns No Governance Data
 `tools/validate_agents_docs.py` SHALL be invoked by `make -f tools/Makefile checkers`, by
-`scripts/validate-pre-pr.sh`, and by the CI `governance` job, and SHALL be wired into the
-first two in the same phase that creates it. A checker that exists but runs only when
-someone remembers it is not a gate. Declared exceptions SHALL live in
-`.claude/governance.yaml` under an optional `agents_docs` key with a rationale per entry,
-matching `bind_guard` and `literal_guard` precedent, so that a false positive has a
-reviewable escape rather than forcing a reword.
+`scripts/validate-pre-pr.sh`, and by the CI `governance` job, and SHALL be wired into them
+in the same phase that creates it. Its policy — the instruction-file list and any declared
+exceptions — SHALL live in module constants and SHALL NOT be added to
+`.claude/governance.yaml`, whose loader is Pydantic `extra="forbid"` and whose consumer
+`scope_freeze.py` fails open on a config it cannot validate. A documentation entry must
+never be able to stop the Initiative-C freeze from denying.
+
+#### Scenario: Documentation data proposed for the governance config
+- **WHEN** a change adds a documentation-shaped key to `.claude/governance.yaml`
+- **THEN** it is rejected: a present-but-malformed block raises, the loader fails open, and
+  the command freeze silently stops denying
 
 #### Scenario: Guide tree regresses on a branch with no local run
 - **WHEN** a PR lands a guide citing a path deleted in the same PR
 - **THEN** the CI `governance` job fails, naming the file and the dead path
 
-#### Scenario: Exception without a rationale
-- **WHEN** an `agents_docs` exception entry omits its rationale
-- **THEN** the governance loader rejects the config
-
-### Requirement: The Guide Tree Has an Owner
-`.claude/agents/` SHALL carry a `docs-cartographer` entry that detects staleness in the
-guide tree and proposes diffs, declares its `Relationship:` to
-`.agents/skills/agents-md-authoring/SKILL.md`, and holds read-and-report tools only — no
-`Write`, no `Edit`. LLM-generated context files are the one condition measured to perform
-significantly worse than developer-written ones (`docs/AGENTS_MD_EVIDENCE.md` E-1,
-p = 0.038), so the agent SHALL NOT land guide prose unreviewed, and SHALL NOT propose
-deleting a rule carrying a `control:` marker.
-
-#### Scenario: Owner entry with write authority
-- **WHEN** `docs-cartographer`'s frontmatter lists `Write` or `Edit`
-- **THEN** `validate_workforce` exits non-zero, naming the file and the tool
-
-#### Scenario: Module added without a guide refresh
-- **WHEN** a PR adds a module to a folder with an `AGENTS.md` and leaves its `## Traps`
-  unchanged
-- **THEN** the `CONTRIBUTING.md` PR checklist flags it as incomplete
-
 ## Implementation notes (declared interpretations)
 
-1. The scope-freeze requirement ratified in `gcp-drone-m2-agent-hardening` is **cited, not
-   re-legislated**. Its hook denies a write to a Markdown file inside
-   `command_emission_globs` exactly as it denies one to a module, which is correct and
-   unchanged. This bundle's obligation is narrower: document the frozen path from its
-   parent, and do not spend `MESHSA_GOVERNANCE_OVERRIDE` on documentation. The hook cannot
-   detect a file's intent, so that half is a review rule, not a mechanism.
-2. `validate_agents_docs` validates structure, references and injection hygiene — **not**
-   whether a rule is true or worth stating. Adversarial review of this bundle's own
-   manifest found two plausible-and-wrong invariants that no checker would catch. The
-   review stop points exist for that class, and `security-reviewer` remains binding before
-   any PR.
-3. Check 10 is **only** a negation detector. Duplicate detection was specified twice and
-   measured twice: `SequenceMatcher` scores a verbatim duplicate at 0.28, below every one
-   of 17 genuine non-duplicates, so no threshold separates the classes; normalised exact
-   match then failed to catch a deliberate verbatim copy, because root rules are
-   multi-line bullets and partial copying is the normal case. Rather than tune it a third
-   time, this delta drops it. The budget bounds accretion; review catches duplication.
-4. Claude Code's `AGENTS.md` support is version- and session-dependent, and the
-   `instructionFiles` setting is ignored in project and local settings files. The
-   `@AGENTS.md` import is specified because it is the mechanism that works in every
-   session that can read a `CLAUDE.md` at all. The precise minimum version is not asserted
-   here; the import does not depend on it.
-5. The line budgets are set from this repository's own practice (existing guides 25–67
-   lines, root 135), from the growth ratchet in `docs/AGENTS_MD_EVIDENCE.md` E-3, and from
-   authoring a real guide to this contract and counting — **not** from a measured
-   relationship between length and outcome, which E-1's Appendix B explicitly rules out. A
-   budget is a forcing function for review, not a performance tuning knob.
-6. Tier 3 guard files are the one case where near-total redundancy is intentional: their
-   value is firing at the moment an agent opens a generated file, which is exactly when
-   the parent guide is least likely to be in context.
-7. No controlled study has evaluated nested per-directory context files; the three that
-   exist restrict to single-root configurations by design. Every requirement here is
-   risk management for a design the evidence neither supports nor refutes, and is written
-   to be reversible one manifest entry at a time.
+1. **Non-duplication is a review obligation, not a mechanical one.** Two detectors were
+   specified and both measured: fuzzy matching scores a verbatim duplicate *below* every
+   genuine non-duplicate, and normalised exact matching is defeated by line-wrapping and by
+   partial copying. Neither is deployable. The obligation stands; the check does not.
+2. **Line budgets are authoring guidance, not a gate.** The root `AGENTS.md` grows +16
+   lines/month, measured in-repo and monotone. A gated budget would block every PR within
+   60 days over prose unrelated to the change. E-1 Appendix B is an explicit null on
+   length, so the budget never had a performance justification, and E-3 shows incremental
+   deletion does not happen — a budget schedules the wholesale rewrite that accelerates the
+   ratchet rather than preventing it.
+3. **The checker validates structure, references and injection hygiene — not truth.** Four
+   review rounds found two defects that mattered: a wrong `LANDING_TARGET` failure policy
+   on the safety write path, present in two live documents, and an unaudited all-interfaces
+   unauthenticated listener. Both were found by reading code. No check proposed in any
+   revision would have caught either.
+4. **No controlled study has evaluated nested per-directory context files**; the three that
+   exist restrict to single-root configurations by design. Earlier revisions of this bundle
+   proposed 35 such files anyway. This delta covers five guides that already exist plus six
+   path-scoped rules, which is the smallest shape that still reaches an agent opening a
+   generated file.
+5. **Scope-freeze is cited, not re-legislated.** Its hook denies a write to a Markdown file
+   inside `command_emission_globs` exactly as it denies one to a module — correct and
+   unchanged. The frozen path's traps live in a `paths:` rule outside the frozen tree.

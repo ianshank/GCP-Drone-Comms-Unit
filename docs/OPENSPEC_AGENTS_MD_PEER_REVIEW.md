@@ -1,8 +1,8 @@
-# Peer Review — `agents-md-directory-guides` bundle (rev.1 → rev.2)
+# Peer Review — `agents-md-directory-guides` bundle (rev.1 → rev.4)
 
 Date: 2026-09-19. Reviewer: agent-driven, every claim verified against the tree or
-against a primary source. **Four verification passes**: external-research claims (seven
-papers read in full, replacing four secondary blog summaries that rev.1 cited without
+against a primary source. **Six verification passes across four rounds**: external-research claims (eight sources: seven
+papers read in full, plus the vendor documentation registered as E-8, replacing four secondary blog summaries that rev.1 cited without
 reading — registered in `docs/AGENTS_MD_EVIDENCE.md`); adversarial repo-state
 verification (`security-reviewer`); house-format compliance against the two existing
 bundles (`openspec-author`); and a red-team pass on the proposed checker, which ran the
@@ -35,11 +35,18 @@ genuine non-duplicate. Its Phase 1 ended with CI red. And its manifest — the a
 whole plan compiles into — carried a wrong safety-path invariant that would have told an
 agent to delete a tolerance window on the `LANDING_TARGET` publish path.
 
-Twenty-two findings, sixteen rated [Certain]. Six change the deliverable. One (F-12) is
-not about this bundle at all: verifying a manifest cell surfaced a pre-existing
-all-interfaces unauthenticated HTTP listener that is absent from `docs/AUDIT_M2_AUTH.md`
-and outside `bind_guard`'s Python-only scan globs. One (F-22) is a reviewer claim that
-verification rejected.
+Rounds 3 and 4 went further. Round 3 stopped arguing and built the thing. Round 4 attacked
+the premise rather than the details, measured the plan against this repository's own git
+history, and **won**: the change is now 6 new files instead of 64. Round 5 reviewed rev.2
+and rev.3 adversarially and found, among other things, that rev.3's own headline
+measurement did not add up.
+
+**Findings: F-1 … F-22 (rounds 1–2), R-1 … R-7 (round 3, empirical), P-1 … P-6 (round 4,
+premise), X-1 … X-8 (round 5, rev.2/rev.3).** Three are not about this bundle at all: two
+live documents stating a wrong `LANDING_TARGET` failure policy on the safety write path
+(fixed on this branch), and a scope gap in `docs/AUDIT_M2_AUTH.md` hiding at least three
+unaudited non-loopback unauthenticated surfaces. Two reviewer claims were checked and
+**rejected** (F-22, X-8).
 
 ## Findings (severity-ordered)
 
@@ -94,7 +101,7 @@ verification rejected.
   already ratified a standing rule against exactly this, in
   `docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1: *"external research is adopted only with
   a verifiable citation checked into `docs/` first."* rev.1 violated a rule the repo had
-  already written down. rev.2 cites six primary papers, all read in full, with the
+  already written down. rev.2 cites seven primary papers, all read in full, with the
   significance of each claim stated.
 
 - **F-4 [Certain] — the evidence contradicts the plan's core content types: overviews,
@@ -371,18 +378,22 @@ Every finding below is a measurement, not an opinion.
   at all. Two review rounds argued about the threshold; the measurement says the check
   should not exist.
 
-- **R-3 [Certain] — check 5 as specified emits 9 false positives on the existing corpus;
-  five fixes reduce it to 1 true positive.** Running the rev.2 specification over the five
-  existing guides yields 9 unresolved citations, **all false**: a pip extras spec
-  (`packages/meshsa[dev,meshtastic]`), four bare file extensions (`.pt`, `.onnx`, `.hef`,
-  `.engine`), a route path (`/metrics`), and seven package-relative shorthand citations on
-  the jetson guide (`detection/factory.py`, `geometry/ned.py`, …). With five corrections —
-  strip trailing `[extras]`, reject bare-extension tokens, reject absolute paths, add the
-  nearest `src/<pkg>/` as a third resolution base, and provide a declared exception for
-  deliberate counter-example citations — the count drops to **1**, and that one is a
-  genuine finding (`claude_hooks/` should read `tools/claude_hooks/`) which the retrofit
-  fixes. The counter-example class is real and was found by the Tier 2 probe, which
-  legitimately cites `command/AGENTS.md` to explain why that file cannot exist.
+- **R-3 [Certain] — check 5 as specified is noisy, and the first published count of that
+  noise was itself wrong.** Two instruments were confused. `validate_skills.py`'s logic
+  run unchanged over the five existing guides flags exactly **one** token — the pip extras
+  spec `packages/meshsa[dev,meshtastic]` on the root guide — and misses every other class,
+  because it reads only backtick spans while the four scoped guides cite by Markdown link.
+  The round-3 spike (backtick spans **plus** link targets, with the extras strip already
+  applied) emits **13**: four bare file extensions (`.pt`, `.onnx`, `.hef`, `.engine`), one
+  route path (`/metrics`), seven package-relative citations on the jetson guide
+  (`detection/factory.py`, `geometry/ned.py`, …) and one bare directory reference
+  (`claude_hooks/`). rev.3 reported "9, all false", which matched neither instrument and
+  did not sum to its own itemisation — a round-5 finding, and exactly the arithmetic
+  sloppiness rounds 1 and 2 were about. Corrected: with the remaining four fixes — reject
+  bare-extension tokens, reject absolute paths, add the nearest `src/<pkg>/` as a
+  resolution base, and allow declared counter-examples — the spike goes 13 → **1**, and
+  that one is a true positive (`claude_hooks/` should read `tools/claude_hooks/`) which the
+  retrofit fixes.
 
 - **R-4 [Certain] — the colliding-target scenario is not implementable as rev.2 states
   it.** rev.2's scenario requires a guide saying `make test` to fail because it resolves
@@ -415,6 +426,122 @@ Every finding below is a measurement, not an opinion.
   **zero** canonical sections. Every rule in `ops/` (5) and `hardware/` (5) lacks a
   rationale and needs one written. rev.2's claim that T-1.6 is "genuinely rewritten, not
   reorganised" is confirmed, with numbers rather than assertion.
+
+## Findings — round 4, the premise (P-1 … P-6)
+
+Round 4 was asked to attack the premise rather than the details, using this repository's
+own history. It succeeded, and rev.4 adopts its counter-proposal substantially.
+
+- **P-1 [Certain] — payload density was ~7%.** rev.3's 64 new files carried ~116 lines of
+  actual trap content inside ~1,630 lines of file. The content was right; the container
+  was 93% of it.
+
+- **P-2 [Certain] — the cost driver is nesting, not content.** Over 283 commits and 1,541
+  structural path events, the `CONTRIBUTING.md` refresh obligation rev.3 created fires on
+  **3.91 guides per structural commit** — moving one file under
+  `src/meshsa/transports/` obligates a review in four guides. 387 obligations over the
+  sampled history; ~1,300/year projected.
+
+- **P-3 [Certain] — observed compliance with that obligation is already 24%.** The five
+  currently-guided directories accrued 170 refresh obligations in 109 days; the six guide
+  files took 41 commits. Three-quarters of obligations go unmet at *six* files. Nothing
+  suggests 35 does better.
+
+- **P-4 [Certain] — E-3's ratchet reproduces in-repo, and budgets schedule a crisis rather
+  than preventing one.** Root `AGENTS.md`: 96 → 135 lines (+41%) in 73 days, monotone,
+  **+16 lines/month**. Step 1 lands it at ~170. A *gated* budget therefore goes red in
+  month 1–2, and a red `governance` job blocks every PR until someone deletes prose
+  unrelated to their change. E-1 Appendix B is an explicit null on length, so the budget
+  never had a performance justification; E-3 shows incremental deletion does not happen.
+  rev.4 makes budgets advisory.
+
+- **P-5 [Certain] — rev.3 violated its own Skill Leakage rule ~60 times, and inverted a
+  written repo policy.** By E-7's definition, ~55–60 of the 89 traps are procedure —
+  regenerate-with, run-this-command, coverage floors. rev.3's own Scope section forbade
+  exactly that in an always-loaded file. Worse,
+  `.github/copilot-instructions.md` already says: *"When adding repeatable workflow
+  knowledge, create or update a skill under `.agents/skills` instead of expanding this
+  file."* rev.3 inverted a standing policy without citing it. rev.4's Step 3 returns
+  procedure to the skills that own it.
+
+- **P-6 [Certain] — `.claude/rules/` with `paths:` solves the one case rev.3 could not, and
+  rev.2's two-sentence rejection of it was inadequate.** A guard file must fire *when an
+  agent opens the generated file*. rev.3 conceded `clean: true` would delete a guide placed
+  there, and relocated it to the parent — sacrificing the firing property its own spec
+  called the guard file's entire purpose. A `paths:` rule fires on the match and lives
+  outside the deleted tree. The rejection ("splits it from the tree every other tool
+  reads") was self-contradictory: rev.3 had already accepted a Claude-only channel in the
+  form of 33 stubs and an import.
+
+## Findings — round 5, rev.2 and rev.3 (X-1 … X-8)
+
+- **X-1 [Certain] — rev.3 re-created the exact fail-open hazard it spent a paragraph
+  refusing.** §D-7 argued the manifest must not live in `.claude/governance.yaml` because
+  its Pydantic `extra="forbid"` loader makes `scope_freeze.py` fail open — so a
+  documentation typo could silently stop the Initiative-C freeze denying. Six tasks later,
+  T-6.3 added an `agents_docs` exception block to that file, and a spec scenario made
+  rejecting a malformed entry *mandatory*. "Optional-with-default" covers only the absent
+  case. rev.4 puts nothing documentation-shaped in that file (invariant I-2).
+
+- **X-2 [Certain] — `artifacts/api-server` is not the only unaudited non-loopback
+  surface, and the audit's *scope* is the real finding.** `flightctl/scripts/start_all.sh`
+  starts mavp2p on `udps:0.0.0.0:$MAVP2P_IN_PORT` — all-interfaces unauthenticated MAVLink
+  ingest — two lines below its own comment warning that a `0.0.0.0` bind for mavlink2rest
+  *"would be a command-injection vector"*. Line 130 exports `FTS_UI_EXPOSED_IP=0.0.0.0`.
+  Neither has an audit row. And `docs/AUDIT_M2_AUTH.md` line 9 declares its scope as
+  *"every socket-bound or link-bound surface in `packages/meshsa` and
+  `packages/jetson_yolo_gcs`"* — so these are a **scope gap**, not an omission, while the
+  ROADMAP M2 invariant is repo-wide. rev.3 framed a singular discovery; rev.4's T-0.3
+  widens the scope line first.
+
+- **X-3 [Certain] — the `LANDING_TARGET` correction was itself off by one, and a third and
+  fourth instance existed.** The predicate is `>` (strictly greater), so at the default
+  tolerance of 3, failure 3 is tolerated and failure 4 escalates. rev.3's manifest said
+  "until they reach", which is `>=`. On a safety write path those are different controls —
+  F-11's failure class reproduced inside F-11's own correction. Verification also found
+  `pipeline.py::step`'s own docstring saying "reach" while its sibling `_publish_target`
+  says "exceeds", and `docs/specs/initiative-d-perception.md` implying the publish path
+  fails loud. **All corrected on this branch.**
+
+- **X-4 [Certain] — rev.3's headline measurement did not add up.** R-3 claimed check 5
+  emits "9 unresolved citations, all false" and then itemised 1 + 4 + 1 + 7 = 13. Re-run:
+  the spike emits **13**, the pip-extras case is *not* among them because that correction
+  was already in the instrument, and the residual-of-1 is `claude_hooks/`, which R-3 never
+  named. Two instruments were conflated. R-3 is rewritten above with the corrected figures,
+  and `probes/README.md`'s unqualified "zero findings" claim — true only when the probe is
+  copied to its real path — is qualified.
+
+- **X-5 [Certain] — accumulated precision errors in rev.3.** `bind_guard`'s `SCAN_GLOBS` is
+  three inclusive globs with **no** exclusions; the exclusion lives in `iter_scan_files`,
+  and an agent told otherwise is one step from "fixing" it. The root Repository Map omits
+  **eight** paths, not seven — `packages/jetson_yolo_gcs`, a whole second distribution, was
+  missed. `archive/` is five `.zip` files, so the `types: [text]` pre-commit hooks do not
+  process it. `docs/specs/README.md` has no openspec-bundle table and no precedent for one.
+  §D-4 cited the wrong task number, the superseded budget, and asserted that
+  `docs/specs/initiative-d-perception.md` "already owns" a failure policy it does not
+  mention.
+
+- **X-6 [Likely] — "ASCII-dominant" was undefined and self-defeating.** The authoring
+  contract mandates U+2014 in every `— why:` clause, U+00B7 in every breadcrumb and U+2264
+  in the budgets. Measured non-ASCII density across the bundle's own files spans
+  0.04–0.48%, so any threshold is a coin flip on whether the checker fires on its own
+  required format. rev.4 checks exact code points for bidi and zero-width only.
+
+- **X-7 [Guessing → resolved] — two load-bearing product claims were uncitable.** The
+  `instructionFiles`-ignored-in-project-settings claim and the `.claude/CLAUDE.md`
+  root-scope claim drive the entire loading design, and neither was in the evidence
+  register, which invariant I-5 requires. Both are now registered as **E-8**, marked
+  explicitly as vendor documentation rather than a study.
+
+- **X-8 — a second reviewer claim that verification rejected.** Round 5 reported that the
+  severity of the `artifacts/api-server` finding was overstated: the surface exposes one
+  unauthenticated static `GET /api/healthz` route with no data path, and its
+  `.replit-artifact/artifact.toml` deploys it behind a platform proxy where an
+  all-interfaces bind inside the container is *required*. That reframing is **accepted** and
+  rev.4 states it. But the reviewer's accompanying refusal is also recorded: *"Recording a
+  surface is not authenticating it."* Two non-loopback unauthenticated binds remain,
+  remediation is deferred, and this bundle does not restore the M2 invariant — it documents
+  where the invariant is not held.
 
 ## What survived review unchanged
 

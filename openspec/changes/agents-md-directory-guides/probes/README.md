@@ -7,9 +7,9 @@ current or future checker enumerates them as part of the tree.
 
 | File | What it establishes |
 | ---- | ------------------- |
-| `probe-flightctl-guide.md` | A real Tier 1 guide authored to the D-3 contract. Passes every check with zero findings at **exactly 80 lines** — which is why the Tier 1 budget moved to 90 (R-1) |
+| `probe-flightctl-guide.md` | A real Tier 1 guide authored to the D-3 contract. **Exactly 80 lines** — which is why rev.3 moved the Tier 1 budget to 90 (R-1), before rev.4 dropped tiers altogether. It passes every check with zero findings **when copied to `flightctl/AGENTS.md`**; run from `probes/` it reports four path findings, because `check()` resolves citations relative to the file's own directory. Those four are location artefacts, not defects, and rev.3's unqualified "zero findings" claim omitted the qualifier |
 | `probe-meshsa-core-guide.md` | A Tier 2 guide for the densest realistic case, carrying the `command/ (frozen)` subsection. **53 lines against a 60 budget** — Tier 2 verified adequate |
-| `spike_validate_agents_docs.py` | A throwaway implementation of the rev.2 check set, run against the five existing guides. Produced R-2 (both duplicate detectors fail), R-3 (9 false positives → 1), R-4 (the colliding-target scenario is unimplementable as specified) and R-6 (~11% false positives on injection hygiene) |
+| `spike_validate_agents_docs.py` | A throwaway implementation of the rev.2 check set, run against the five existing guides. Produced R-2 (both duplicate detectors fail), R-3 (13 findings → 1; rev.3 mis-stated this as 9), R-4 (the colliding-target scenario is unimplementable as specified) and R-6 (~11% false positives on injection hygiene) |
 
 Run it:
 

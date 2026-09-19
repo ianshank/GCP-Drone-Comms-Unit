@@ -139,6 +139,27 @@ rather than accepting them silently."*
 detect; only Context Bloat (line count) and Init Fossilization (commit count) are
 mechanically decidable — relevant to what a stdlib-only checker can honestly enforce.
 
+## E-8 — Claude Code product documentation (vendor, not peer-reviewed)
+
+Read 2026-09-19 from `code.claude.com/docs/en/memory` and `.../sub-agents`. Vendor
+documentation, not a study: it describes product behaviour, which can change by version,
+and it is recorded here because invariant I-5 forbids citing anything outside this
+register. Claims used by the bundle:
+
+| Claim | Status |
+| ----- | ------ |
+| Default `claude-md-or-agents-md` mode reads `AGENTS.md` **only** when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists at or above the working directory | Documented; verifiable in-session via `--debug` or the `InstructionsLoaded` hook |
+| A `CLAUDE.md` that imports `@AGENTS.md` loads both; `@path` imports expand at launch, max depth four | Documented |
+| Nested `CLAUDE.md` and `.claude/rules/` files load **on demand** when Claude reads a file in that subtree | Documented |
+| `.claude/rules/*.md` support `paths:` frontmatter, scoping a rule to matching files | Documented |
+| `instructionFiles` is settable in user or managed settings and **ignored** in project and local settings files | Documented. Load-bearing: it is why the committed fix is an import, not a setting |
+| `.claude/CLAUDE.md` counts as a working-directory-or-above instruction file | Documented. Load-bearing: it is why `.claude/` took no paired stub in rev.3 |
+| Reading `AGENTS.md` directly requires a recent Claude Code version, and some sessions cannot | Documented; the exact minimum is **not** asserted by this bundle, and the `@AGENTS.md` import does not depend on it |
+
+**Not licensed:** any claim about how Codex, Cursor or Copilot resolve these files. Those
+tools read `AGENTS.md`; nothing here establishes their precedence rules, and the bundle
+does not assert any.
+
 ## What this register licenses, and what it does not
 
 **Licensed:**
