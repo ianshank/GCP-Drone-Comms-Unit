@@ -1,8 +1,9 @@
-# Design — Per-Directory `AGENTS.md` Guides (rev.2)
+# Design — Per-Directory `AGENTS.md` Guides (rev.3)
 
-rev.1 is superseded. `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` records the ten findings
-that produced this revision; three of them inverted a rev.1 decision and are marked
-**[inverted]** below.
+rev.1 and rev.2 are superseded. `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` records 29
+findings across four rounds. Three inverted a rev.1 decision and are marked
+**[inverted]**; round 3 was empirical — a checker spike plus two guides authored to this
+contract — and its corrections are marked **[measured]**.
 
 ## D-0. Evidence baseline
 
@@ -50,9 +51,15 @@ state. Not "has interesting code". Not "would be nice to describe".
 | Tier | What | Count | Budget | Diagram |
 | ---- | ---- | ----- | ------ | ------- |
 | 0 | Repository root | 1 | ≤170 lines | One, required |
-| 1 | Domain roots with their own commands and traps | 13 | ≤80 lines | One, optional |
+| 1 | Domain roots with their own commands and traps | 13 | ≤90 lines | One, optional |
 | 2 | Subsystems whose trap the parent cannot state | 15 | ≤60 lines | One, optional |
 | 3 | Guard files — generated, vendored, read-only | 6 | ≤12 lines | Forbidden |
+
+Budgets are **measured, not guessed** (R-1): a real `flightctl/AGENTS.md` authored to this
+contract passes every check at exactly 80 lines, which is why Tier 1 moved from 80 to 90 —
+a mid-density folder consumed the old budget entirely. A Tier 2 probe for
+`packages/meshsa/src/meshsa`, carrying the `command/ (frozen)` subsection, came in at 53
+against 60.
 
 35 guides. `tasks.md` names the trap that earns each, and lists what was deliberately
 left uncovered. Tier is depth of contract, not depth in the tree: `scripts/` is top-level
@@ -64,7 +71,7 @@ but Tier 2.
 # <Name> Agent Guide
 > Scope: `<repo-relative path>` · Parent: [<../AGENTS.md>](../AGENTS.md)
 
-## Purpose       1–2 sentences. Tier 0/1 only; Tier 2 omits it.
+## Purpose       1–2 sentences. Tier 0 and Tier 3 only (see below).
 ## Traps         REQUIRED, and first among the substantive sections.
 ## Rules         Imperative, verifiable, true ONLY here. Each carries a rationale.
 ## Commands      Only commands that differ from the parent's. Often absent.
@@ -75,6 +82,13 @@ but Tier 2.
 Tier 3 guard files carry `# <Name>`, the breadcrumb, `## Purpose`, `## Rules` only.
 Per-tier required sets are tabulated in the spec delta, not left to prose — rev.1 omitted
 them and made the section check unimplementable.
+
+**`## Purpose` is not required at Tier 1 or Tier 2** (changed in rev.3). It is
+repository-overview content, which E-1 measures as inert where other documentation
+exists, and the measurement in D-2 showed it consuming budget a trap-dense folder needs.
+A Tier 1 guide may still carry it, at its canonical position, when the folder's purpose is
+genuinely non-obvious; it is optional, not forbidden. Tier 3 keeps it because a guard file
+is otherwise two lines of prohibition with no context.
 
 **`## Traps` is the headline section** and the reason the tier exists. A trap is a fact
 that costs an agent a wasted turn or a wrong result: a gate that fires on a partial run,
@@ -232,26 +246,31 @@ checks that cannot work as specified; all three are corrected here.
 | 7 | Every `## Subagents` entry resolves | moderate | Fixed grammar: first backtick span of the bullet is the name. Index the 24 names from the three namespaces, leaning on the siblings' already-enforced name↔file invariants |
 | 8 | Commands resolve | moderate | See below |
 | 9 | Paired `CLAUDE.md` exists, imports `@AGENTS.md`, ≤2 non-blank lines | trivial | Root exempt (D-6) |
-| 10 | No `## Rules` line is a **normalised exact** duplicate of a root rule; no line **negates** one | trivial | Replaces rev.1's fuzzy heuristic — see below |
-| 11 | No imperative action directive outside `## Commands` | moderate | D-9; pattern set from E-5 |
+| 10 | No `## Rules` line **negates** a root rule (invariant I-1) | trivial | rev.3 **drops** duplicate detection entirely — see below |
+| 11 | No imperative action directive in non-fenced prose outside `## Commands` | moderate | D-9; scoped in rev.3 after measuring an ~11% false-positive rate |
 | 12 | Guide is tracked and survivable | trivial | Falls out of check 1; plus refuse a manifest entry inside a `clean: true` output directory (D-12) |
 | 13 | ASCII-dominant; no bidi or zero-width characters | trivial | D-9; the hidden-Unicode rules-file variant |
 | 14 | Reverse coverage: every roster agent, skill and mode is named by at least one guide | trivial | The drift `validate_skills.py`'s own docstring says this repo "spent a full audit pass fixing by hand" |
 
-**Check 10 was measured and rewritten.** rev.1 specified a near-duplicate heuristic. Run
-against this repo's corpus (9 root rules × 17 scoped rules, plus 6 synthetic true
-positives), `difflib.SequenceMatcher` gives true positives 0.28–0.80 and genuine
-non-duplicates 0.30–0.54 — **overlapping, with no separating threshold**. The clearest
+**Check 10's duplicate half was measured twice and is dropped.** rev.1 specified a
+near-duplicate heuristic. Run against this repo's corpus (9 root rules × 17 scoped rules
+plus synthetic true positives), `difflib.SequenceMatcher` gives true positives 0.28–0.80
+and genuine non-duplicates 0.30–0.54 — overlapping, no separating threshold. The clearest
 true positive, a scoped guide repeating `Never commit secrets.` verbatim, scores 0.28,
-*below every one of the 17 genuine non-duplicates*, because the measure is
-length-sensitive. Token containment separates on this corpus but degenerates on short
-lines — `Do not edit generated files.` scores 0.80 against the root, and that is verbatim
-the line every Tier 3 guard file will carry. rev.2 therefore checks **normalised exact
-match** (case, whitespace, punctuation, backticks, trailing period), which catches literal
-copy-paste at ~0% false positives in eight lines of code, **plus a negation detector**
-for invariant I-1 (a `## Rules` line that names a root rule's subject within a negating
-construction — "does not apply", "except here", "unlike the root"). Tier 3 is exempt from
-the duplicate half unconditionally: near-total redundancy there is the point.
+*below every one of the 17 genuine non-duplicates*. rev.2 therefore switched to normalised
+exact match. Measured in turn (R-2): exact match **also failed to catch a deliberate
+verbatim copy**, because root rules are multi-line bullets that normalise differently from
+a re-wrapped copy, and copying only a rule's first sentence — the normal case — defeats
+exact match by construction.
+
+Both candidate mechanisms fail, for opposite reasons: one is too loose to be sound, the
+other too tight to be useful. rev.3 therefore **deletes duplicate detection** rather than
+tuning it a third time. The anti-accretion work is already done by the budget (check 3),
+which §D-13 names as the mechanism — a file that cannot grow must be edited. What survives
+as check 10 is only the **negation detector** serving invariant I-1: a `## Rules` line
+naming a root rule's subject inside a negating construction ("does not apply here",
+"except in this folder", "unlike the root"). That is the security-relevant half, it does
+not depend on similarity, and it is the half no other check covers.
 
 **Check 5 is not a copy of `validate_skills.py`.** Run unchanged over the five existing
 guides it flags exactly one thing — `packages/meshsa[dev,meshtastic]` in the root's pip
@@ -262,15 +281,34 @@ extract from backtick spans **and** markdown link targets; resolve **file-relati
 then repo-root-relative** (a token passing either way is fine — this clears all 53
 existing citations with no false positives); strip `[extras]`, `::symbol` and `#anchor`
 before testing; reject any path escaping the repo root; keep the sibling's
-`CHECKABLE_PATH_PREFIXES` allowlist for bare tokens and document the package-relative
-shorthand gap the same way the sibling does.
+`CHECKABLE_PATH_PREFIXES` allowlist for bare tokens.
 
-**Check 8 disambiguates by `-f`, and does not union.** The root `Makefile` and
+Measured (R-3): the rev.2 specification run over the five existing guides emits **9
+unresolved citations, all false** — the pip extras spec above, four bare file extensions
+(`.pt`, `.onnx`, `.hef`, `.engine`), one route path (`/metrics`), and seven
+package-relative shorthand citations on the jetson guide. Five corrections take that to
+**1**, which is a genuine finding the retrofit fixes:
+
+1. strip a trailing `[extras]` before testing;
+2. reject bare-extension tokens matching `^\.[A-Za-z0-9]{1,6}$`;
+3. reject absolute paths — a leading `/` means a route, not a repository path;
+4. add **the nearest `src/<pkg>/` under the guide's directory as a third resolution
+   base**, which resolves all seven package-relative citations rather than documenting
+   them as an unchecked gap;
+5. allow a declared exception for deliberate **counter-example** citations. This class is
+   real: the Tier 2 probe legitimately cites `command/AGENTS.md` while explaining why that
+   file cannot exist, and the spec delta cites `federation/` as a dead path on purpose.
+
+**Check 8 treats an ambiguous target as a finding.** The root `Makefile` and
 `tools/Makefile` share eight target names — `build clean dev format help install lint
 test` — with different meanings: root `make test` runs the TypeScript suite,
-`make -f tools/Makefile test` runs pytest. A union rule would pass a
-`packages/meshsa/AGENTS.md` that says `make test` and send an agent to the wrong suite,
-which is exactly the wasted turn the check exists to prevent. The parser must also consume
+`make -f tools/Makefile test` runs pytest. rev.2 specified this as "a guide that says
+`make test` must fail", which is **not implementable by existence-checking** (R-4): `test`
+is a valid root target, so the check passes and the agent still runs the wrong suite. The
+implementable rule is about ambiguity rather than intent: **a bare `make <target>` whose
+name exists in both Makefiles is a finding, and must be written with the `-f` form.**
+That catches the real case without the checker having to know which suite a guide meant.
+The parser must also consume
 `-f <path>` as a pair (the root guide's `make -f tools/Makefile test lint type build` names
 four targets and would otherwise yield `-f` as a target), skip `-C`/`-j` and `VAR=value`.
 `pnpm --filter <name> run <script>` resolves against the eight workspace `package.json`
@@ -355,28 +393,41 @@ rules-file backdoor — including **hidden-Unicode variants** — is the disclos
 
 rev.2 adds 69 files to that surface and therefore declares it, with four controls:
 
-1. **Check 11 — no action directives outside `## Commands`.** E-5's recommended harness
-   control is to *"scan the file before loading and flag or strip content that reads as an
-   action directive ('run this', 'call bash with')."* The harness does not do this, so the
-   repo does it in CI. `## Commands` is the declared allowlist; an imperative shell
-   invocation anywhere else is a finding.
+1. **Check 11 — no action directives in prose outside `## Commands`.** E-5's recommended
+   EP1 control is to *"scan the file before loading and flag or strip content that reads
+   as an action directive ('run this', 'call bash with')."* E-5 puts that fix on the
+   **harness**; the harness does not do it, so the repo approximates it in CI. Measured
+   (R-6): against nine realistic trap lines and three injection payloads, the naive
+   verb+noun pattern gives **0 misses and 1 false positive** (~11%). rev.3 therefore
+   scopes it — scan only **non-fenced prose outside `## Commands`**, and match
+   tool-invocation shapes rather than verb+noun pairs. It is a speed bump against naive
+   and copy-paste payloads, not a control against an adaptive adversary.
 2. **Check 13 — Unicode hygiene.** ASCII-dominant content; no bidirectional-override or
-   zero-width characters. This is the hidden-Unicode variant, and it is four lines of
-   code.
-3. **A defensive directive in the root guide.** E-5 measured a security-themed directive
-   cutting attack success from **25.7% to 10.2%** (~60% suppression, n = 1000/cell). It
-   costs three lines and is the cheapest control in this bundle. It is a soft layer that
-   does not survive an adaptive adversary — stated as such, not oversold.
+   zero-width characters. This is the disclosed hidden-Unicode variant, and it is four
+   lines of code.
+3. **A defensive directive in the root guide — for a different entry point.** rev.2
+   claimed this as "~60% suppression of indirect-prompt-injection success", which
+   **mis-scopes the source** (R-5). E-5 attributes the 25.7% → 10.2% reduction
+   specifically to **EP2**: documentation-borne injection, with the payload planted in an
+   unrelated `README.md`. The surface this bundle expands is **EP1**, the instruction
+   files themselves. The directive stays — it is three lines, it is free, and this
+   repository has plenty of EP2 and EP3 surface for it to help with — but it does **not**
+   mitigate the surface this plan creates, and is not to be presented as if it does.
 4. **`CODEOWNERS` coverage verified as a precondition**, not assumed. `.github/CODEOWNERS`
    is `* @ianshank` today, which covers it; T-0.3 verifies this still holds and fails the
-   phase if it does not.
+   phase if it does not. For EP1 this is the load-bearing control, not checks 11/13: human
+   review of the diff is what actually stops a hostile guide landing.
 
-Two honest limits. First, per E-6, a prose rule is not a control: the repo's real
+Three honest limits. First, per E-6, a prose rule is not a control: the repo's real
 enforcement remains `scope_freeze.py`, `bind_guard`, `literal_guard` and CI — which is
 precisely why D-3.2 requires each security rule to name the control that backs it or be
-marked advisory. Second, E-5 found ASR *falls* with codebase modularity and with nesting
-depth beyond 2; this repo is highly modular and config-driven, which is the lower-risk
-regime, but that is mitigation, not immunity.
+marked advisory. Second, the in-repo controls available for EP1 are approximations of a
+fix E-5 assigns to the harness; the honest ordering is CODEOWNERS review first, checks
+11/13 second. Third, E-5 found ASR falls with codebase **modularity** (High bucket 26.5%
+vs Low 44.0%, with the config-driven sub-dimension the strongest single predictor), and
+this repo is highly modular and config-driven — the lower-risk regime, but mitigation, not
+immunity. rev.2 also cited E-5's nesting-depth result here; that comes from the EP3
+source-file ablation and does not transfer to instruction files, so rev.3 drops it.
 
 ## D-10. Rollout order
 

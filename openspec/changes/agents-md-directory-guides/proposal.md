@@ -2,7 +2,7 @@
 
 - **change_id**: `agents-md-directory-guides`
 - **project**: GCP-Drone-Comms-Unit (repository `ianshank/GCP-Drone-Comms-Unit`)
-- **status**: proposed (rev.2) — plan only; no guide files land in the PR that carries
+- **status**: proposed (rev.3) — plan only; no guide files land in the PR that carries
   this bundle
 - **milestone**: M2 (Hardening & productization) — documentation/governance work; does
   **not** open M3/M4 and does **not** touch the Initiative-C gate
@@ -10,9 +10,9 @@
   `docs/ROADMAP.md`, `CONTRIBUTING.md`, `docs/C4.md`
 - **evidence register**: `docs/AGENTS_MD_EVIDENCE.md` (seven primary papers, each read
   in full; every claim carries its significance)
-- **peer review**: `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` — rev.1 was corrected against
-  the tree and against the primary literature before implementation. Ten findings, five
-  `[Certain]`; three inverted a rev.1 design decision
+- **peer review**: `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` — four review rounds across
+  two revisions. 29 findings, 21 `[Certain]`. Round 3 is empirical: a checker spike and
+  two guides authored to the contract, run against the real corpus
 - **related bundles**: `openspec/changes/gcp-drone-m2-agent-hardening` (established the
   roster + `validate_workforce`; this bundle **amends** its "Agents Collaborate by
   Default" requirement), `openspec/changes/code-hygiene-modularity` (established
@@ -56,7 +56,7 @@ why rev.1 was wrong about what to build.
    with reachability 1 by construction, and the published threat model is a pull-request
    contributor (E-5). This repository ships `bind_guard`, `literal_guard` and a
    scope-freeze hook precisely because it does not trust prose. rev.1 rated this change
-   "Low risk — documentation only". It is not, and rev.2 treats the tree as a declared
+   "Low risk — documentation only". It is not, and rev.3 treats the tree as a declared
    surface with its own controls.
 
 **No controlled study has evaluated nested per-directory context files.** E-1, E-2 and
@@ -84,8 +84,10 @@ instrumented accordingly. 35 files, not the 117 directories that carry tracked f
   in public `CLAUDE.md` files have any matching control, and nothing tells the reader
   which (E-6). This repository has the controls; it can close that loop instead of
   reproducing the gap.
-- **A defensive directive in the root guide**, which is a measured ~60% suppression of
-  indirect-prompt-injection success (E-5) and costs three lines.
+- **A defensive directive in the root guide.** Three lines, and measured to cut
+  documentation-borne injection success by ~60% (E-5). It helps a **different** entry
+  point from the one this change expands — for the guide tree itself, `CODEOWNERS` review
+  is the load-bearing control, because the scan E-5 recommends belongs to the harness.
 - **Mermaid where it encodes a constraint, not a structure.** Structure diagrams stay in
   `docs/C4.md` and `docs/architecture/`. A guide may carry **one** diagram, and only when
   it shows something the code cannot: bring-up ordering, codegen direction, a governance
@@ -134,7 +136,7 @@ instrumented accordingly. 35 files, not the 117 directories that carry tracked f
 | Modified files | root `AGENTS.md`, root `CLAUDE.md`, 4 existing scoped guides, `.claude/governance.yaml` (new `agents_docs` exceptions block), `tools/Makefile`, `scripts/validate-pre-pr.sh`, `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `CONTRIBUTING.md`, `docs/specs/README.md`, `CHANGELOG.md` |
 | Session-start context cost | +0 tokens. Only the root guide loads at launch, via the import; scoped guides load on demand |
 | CI | One added step in the existing `governance` job; no new job, no new matrix |
-| Security | **Non-trivial and declared.** +63 auto-loaded trusted-context files. Mitigated by checks 11–13 (action-directive rejection, Unicode hygiene, control tagging), a defensive root directive (~60% ASR suppression, E-5), and verified `CODEOWNERS` coverage. Separately, T-0.4 surfaces a **pre-existing** unaudited all-interfaces unauthenticated listener in `artifacts/api-server` and blocks that folder's guide until it is recorded in `docs/AUDIT_M2_AUTH.md` |
+| Security | **Non-trivial and declared.** +63 auto-loaded trusted-context files. Mitigated by checks 11–13 (action-directive rejection, Unicode hygiene, control tagging), and verified `CODEOWNERS` coverage, which is the load-bearing control here. Separately, T-0.4 surfaces a **pre-existing** unaudited all-interfaces unauthenticated listener in `artifacts/api-server` and blocks that folder's guide until it is recorded in `docs/AUDIT_M2_AUTH.md` |
 | Risk | Moderate, and front-loaded: the contract and checker land on 5 files before any new guide is written |
 
 ## Open calls for the maintainer (T-0.2)

@@ -1,4 +1,4 @@
-# Tasks — agents-md-directory-guides (rev.2)
+# Tasks — agents-md-directory-guides (rev.3)
 
 > Order binding. Per-task gate: write → `python tools/validate_agents_docs.py` clean →
 > `make -f tools/Makefile checkers` clean → commit. **Tasks that add or change Python
@@ -13,9 +13,10 @@
 > Split `T-x.ya/b` records honest partial execution after the fact. Review stop points
 > after T-1 and T-3.
 
-rev.1 is superseded; see `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md`. Every manifest cell
-below was re-verified against the tree after three adversarial review passes; the
-corrections are marked **[corrected]**.
+rev.1 and rev.2 are superseded; see `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md`. Every
+manifest cell was re-verified against the tree across four review rounds, the last of
+which authored two guides to this contract and ran a checker spike over the real corpus.
+Corrections carried from a review are marked **[corrected]**.
 
 ## Tier manifest
 
@@ -29,7 +30,7 @@ does not qualify.
 | ---- | - | ---- |
 | `.` | ✎ | Repo-wide truth, the delegation table, and the defensive injection directive (D-9). Its Repository Map omits `flightctl`, `lib`, `artifacts`, `deliverables`, `openspec`, `scripts`, `.claude` — verified |
 
-### Tier 1 — domain roots (13 files, ≤80 lines)
+### Tier 1 — domain roots (13 files, ≤90 lines)
 
 | Path | | Trap |
 | ---- | - | ---- |
@@ -140,8 +141,8 @@ directory carrying tracked files and holding no guide is below.
 - [ ] T-1.3 `tools/validate_agents_docs.py` — checks 1–14 per design §D-7. Stdlib-only,
       standalone, `TIER_MANIFEST` as a module constant (never `governance.yaml` — D-7).
       Enumerate via `git ls-files`, not `rglob`. Check 5 is **new logic**, not a copy of
-      `validate_skills.py`; check 10 is normalised exact-match plus a negation detector,
-      not a fuzzy ratio; check 8 disambiguates the two Makefiles by `-f`.
+      `validate_skills.py`; check 10 is a negation detector only —
+      duplicate detection was measured twice and dropped; check 8 disambiguates the two Makefiles by `-f`.
 - [ ] T-1.3b Extend `validate_skills.py::CHECKABLE_PATH_PREFIXES` with `lib/`,
       `artifacts/`, `scripts/`. Without this, check 5 is blind on exactly the guides whose
       whole content is "this path is generated, edit that one instead", and the existing
@@ -173,8 +174,10 @@ directory carrying tracked files and holding no guide is below.
       into one `## Subagents` delegation table; add `## Traps`; add the repo-map diagram
       (D-5); extend the Repository Map to the seven directories it currently omits.
       Budget 170 (D-4).
-- [ ] T-2.2 Add the defensive injection directive to the root guide (D-9.3). Three lines;
-      ~60% measured ASR suppression (E-5). State in the file that it is a soft layer.
+- [ ] T-2.2 Add the defensive injection directive to the root guide (D-9.3). Three lines.
+      State in the file that it is a soft layer, and that its measured effect is on
+      documentation-borne injection (E-5's EP2) — a different entry point from the one
+      this bundle expands. Do not present it as mitigating the guide tree itself.
 - [ ] T-2.3 Root `CLAUDE.md` keeps its six Claude-specific notes below the import and is
       exempt from the stub contract (D-6), recorded in the delta rather than left to
       collide with check 9.

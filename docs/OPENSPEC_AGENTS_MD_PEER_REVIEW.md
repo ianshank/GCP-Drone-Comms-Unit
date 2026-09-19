@@ -342,6 +342,80 @@ verification rejected.
   source that skips both bases inherits the stricter behaviour. Recorded because the
   standing rule cuts both ways: a reviewer's claim is not evidence either.
 
+## Findings — round 3, empirical (rev.2 → rev.3)
+
+Rounds 1 and 2 were readings. Round 3 **built the thing**: a spike of
+`validate_agents_docs.py` implementing the rev.2 check set, a real `flightctl/AGENTS.md`
+authored to the rev.2 contract, and a Tier 2 probe for `packages/meshsa/src/meshsa`
+including the frozen-path subsection. All three were run against the five existing guides.
+Every finding below is a measurement, not an opinion.
+
+- **R-1 [Certain] — the Tier 1 budget is exactly consumed by a mid-density folder.** The
+  authored `flightctl/AGENTS.md` passes every check with **zero findings at exactly 80
+  lines** — the Tier 1 budget, with no slack. `flightctl` is not the densest Tier 1 folder
+  in this repo. The Tier 2 probe is comfortable by contrast (53 lines against 60, for the
+  densest realistic case: `src/meshsa` carrying the `command/ (frozen)` subsection). Fix:
+  drop `## Purpose` from the Tier 1 required set and raise Tier 1 to 90. Dropping
+  `Purpose` is not a concession — it is overview content, which E-1 measures as inert, so
+  the fix is evidence-consistent rather than a budget dodge.
+
+- **R-2 [Certain] — check 10's duplicate half should be deleted, not tuned.** Round 2
+  measured fuzzy matching as unsound (a verbatim duplicate scored below every genuine
+  non-duplicate). Round 3 measured the replacement rev.2 adopted: normalised exact-match
+  **failed to catch a deliberate verbatim copy of a root rule**. Root rules are multi-line
+  bullets, so they normalise differently from a re-wrapped copy, and partial copying — the
+  common case — defeats exact match by construction. Both candidate mechanisms fail, for
+  different reasons. The anti-accretion job is already done by the budget (check 3), which
+  design §D-13 already claims as the mechanism. rev.3 keeps only the **negation detector**
+  for invariant I-1, which is the security-relevant half and does not depend on similarity
+  at all. Two review rounds argued about the threshold; the measurement says the check
+  should not exist.
+
+- **R-3 [Certain] — check 5 as specified emits 9 false positives on the existing corpus;
+  five fixes reduce it to 1 true positive.** Running the rev.2 specification over the five
+  existing guides yields 9 unresolved citations, **all false**: a pip extras spec
+  (`packages/meshsa[dev,meshtastic]`), four bare file extensions (`.pt`, `.onnx`, `.hef`,
+  `.engine`), a route path (`/metrics`), and seven package-relative shorthand citations on
+  the jetson guide (`detection/factory.py`, `geometry/ned.py`, …). With five corrections —
+  strip trailing `[extras]`, reject bare-extension tokens, reject absolute paths, add the
+  nearest `src/<pkg>/` as a third resolution base, and provide a declared exception for
+  deliberate counter-example citations — the count drops to **1**, and that one is a
+  genuine finding (`claude_hooks/` should read `tools/claude_hooks/`) which the retrofit
+  fixes. The counter-example class is real and was found by the Tier 2 probe, which
+  legitimately cites `command/AGENTS.md` to explain why that file cannot exist.
+
+- **R-4 [Certain] — the colliding-target scenario is not implementable as rev.2 states
+  it.** rev.2's scenario requires a guide saying `make test` to fail because it resolves
+  to the TypeScript suite rather than pytest. Existence-checking cannot detect that: `test`
+  is a valid root target, so the check passes. Implementable reformulation, verified
+  against both Makefiles: **a bare `make <target>` whose name exists in *both* Makefiles is
+  ambiguous and must use the `-f` form.** The two share eight such names.
+
+- **R-5 [Certain] — rev.2 mis-scoped its own headline mitigation.** rev.2 describes the
+  defensive root directive as "a measured ~60% suppression of indirect-prompt-injection
+  success." E-5 attributes that reduction specifically to **EP2** — documentation-borne
+  injection, with the payload planted in an unrelated `README.md`: *"cuts EP2 ASR from
+  25.7% to 10.2%."* The surface this plan expands is **EP1**, the instruction files
+  themselves, and E-5 puts EP1's fix on the **harness** (*"scan the file before loading"*),
+  which a repository cannot do — only approximate, which is what checks 11 and 13 are. The
+  directive stays: it is free and it does help a different entry point. It must not be
+  sold as mitigating the surface this plan creates. The same error, milder, applies to
+  rev.2's nesting-depth claim, which comes from E-5's EP3 (source-file) ablation and does
+  not transfer to instruction files.
+
+- **R-6 [Likely] — check 11 has an ~11% false-positive rate on legitimate trap prose.**
+  Tested against nine realistic trap and rule lines plus three injection payloads: **0
+  misses** on the payloads, **1 false positive** on *"Invoke the shell linter over every
+  tracked `*.sh` before pushing."* rev.3 scopes it — scan only non-fenced prose outside
+  `## Commands`, and match tool-invocation shapes rather than verb+noun pairs — and states
+  honestly that it is a speed bump against naive and copy-paste payloads, not a control
+  against an adaptive adversary. E-5 says exactly that of its own soft layer.
+
+- **R-7 — the retrofit volume is now concrete.** Across the five existing guides there are
+  **zero** canonical sections. Every rule in `ops/` (5) and `hardware/` (5) lacks a
+  rationale and needs one written. rev.2's claim that T-1.6 is "genuinely rewritten, not
+  reorganised" is confirmed, with numbers rather than assertion.
+
 ## What survived review unchanged
 
 The filename decision (`AGENTS.md`, not `Agent.md`) — confirmed by every paper read, and
