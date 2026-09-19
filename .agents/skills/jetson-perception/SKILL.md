@@ -36,7 +36,9 @@ first; gates run from that directory.
 5. **Respect the per-path pipeline failure policy** (do not collapse into one catch):
    detection error → drop-and-count + continue; stream egress → best-effort drop-and-count;
    tracking → advisory drop-and-count (`dropped_tracks`, `exc_info` on the throttled log);
-   `LANDING_TARGET` publish → **fails loud**. Other errors (CUDA OOM, real bugs) propagate.
+   `LANDING_TARGET` publish → **tolerate-then-escalate**: counted and rate-limit-logged, then
+   re-raised once *consecutive* failures exceed `publish_failure_tolerance` (default `3`; `0`
+   fails loud on the first). Other errors (CUDA OOM, real bugs) propagate.
 
 ## Precision-landing safety (the write path — treat as critical)
 

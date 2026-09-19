@@ -47,8 +47,12 @@ GStreamer video to a GCS → opt-in MAVLink `LANDING_TARGET`). Read the repo-roo
   and the loop continues. The tracker feeds only the health snapshot (`tracks_active`/`tracks_total`)
   and **never** influences `LANDING_TARGET` target selection. Add a tracker backend via
   `@tracker_registry.register("name")` (like detector backends), never by editing the pipeline.
-- **`LANDING_TARGET` publish** — **fails loud**: exceptions propagate and stop the run. This is
-  the safety write path; silently never-publishing must never look healthy.
+- **`LANDING_TARGET` publish** — **tolerate-then-escalate**: a failed publish is counted and
+  rate-limit-logged, and re-raises once *consecutive* failures exceed
+  `publish_failure_tolerance` (default `3`; `0` fails loud on the first). A heartbeat-gate
+  suppression is counted separately and does **not** reset the streak. This is the safety write
+  path; silently never-publishing must never look healthy, but a single transient blip must not
+  kill the camera+stream loop. Do not collapse this into a bare propagate.
 
 `run()` tolerates transient empty reads (camera timeouts) and only stops after
 `max_consecutive_empty` consecutive empties (`None` = run until `request_stop()`/SIGTERM).
