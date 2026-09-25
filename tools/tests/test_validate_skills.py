@@ -233,7 +233,13 @@ def test_repo_root_falls_back_to_script_parent(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_real_skills_pass_via_cli() -> None:
-    """Integration: the committed .agents/skills roster must be clean."""
+    """Integration: the committed .agents/skills roster must be clean.
+
+    The count is derived from the tree, not written down. It used to be the literal
+    ``12``, which meant adding the thirteenth skill failed this test for a reason
+    unrelated to anything it checks — and the obvious fix, bumping the number, is the
+    edit that turns a count assertion into a rubber stamp.
+    """
     env = {**os.environ, "CLAUDE_PROJECT_DIR": str(REPO_ROOT)}
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "tools" / "validate_skills.py")],
@@ -243,4 +249,5 @@ def test_real_skills_pass_via_cli() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.startswith("OK: 12 skill file(s)")
+    expected = len(list((REPO_ROOT / ".agents" / "skills").glob("*/SKILL.md")))
+    assert result.stdout.startswith(f"OK: {expected} skill file(s)")
