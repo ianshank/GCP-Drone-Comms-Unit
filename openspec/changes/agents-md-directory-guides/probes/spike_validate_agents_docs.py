@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 import unicodedata
 from pathlib import Path
@@ -18,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve()
 while not (ROOT / ".git").exists():
     ROOT = ROOT.parent
-    if ROOT == ROOT.parent:
+    if ROOT.parent == ROOT:
         ROOT = Path("/home/user/GCP-Drone-Comms-Unit")
         break
 
@@ -35,17 +34,47 @@ BUDGET = {0: 170, 1: 80, 2: 60, 3: 12}
 FENCE_BODY_MAX = 22
 ALLOWED_DIAGRAMS = ("flowchart", "sequenceDiagram")
 
-PREFIXES = ("packages/", "docs/", "openspec/", "flightctl/", "tools/", "ops/", ".claude/",
-            ".agents/", ".github/", "hardware/", "deliverables/", "archive/",
-            "lib/", "artifacts/", "scripts/")
-ROOT_FILES = {"AGENTS.md", "CLAUDE.md", "README.md", "CHANGELOG.md", "CONTRIBUTING.md",
-              "NEXTSTEPS.md", "SECURITY.md", "Makefile", "mypy.ini", "ruff.toml",
-              "package.json", "pnpm-workspace.yaml", ".gitignore",
-              ".pre-commit-config.yaml", "eslint.config.js", "tsconfig.json"}
+PREFIXES = (
+    "packages/",
+    "docs/",
+    "openspec/",
+    "flightctl/",
+    "tools/",
+    "ops/",
+    ".claude/",
+    ".agents/",
+    ".github/",
+    "hardware/",
+    "deliverables/",
+    "archive/",
+    "lib/",
+    "artifacts/",
+    "scripts/",
+)
+ROOT_FILES = {
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "NEXTSTEPS.md",
+    "SECURITY.md",
+    "Makefile",
+    "mypy.ini",
+    "ruff.toml",
+    "package.json",
+    "pnpm-workspace.yaml",
+    ".gitignore",
+    ".pre-commit-config.yaml",
+    "eslint.config.js",
+    "tsconfig.json",
+}
 PLACEHOLDER = set("<>*{}")
 ACTION_DIRECTIVE = re.compile(
     r"\b(?:run|execute|call|invoke)\s+(?:the\s+)?(?:bash|sh|shell|command)\b"
-    r"|\bbash\s+\S+\.sh\b|\bcurl\s+http", re.I)
+    r"|\bbash\s+\S+\.sh\b|\bcurl\s+http",
+    re.I,
+)
 
 
 def sections_of(lines: list[str]) -> list[tuple[str, int]]:
@@ -72,8 +101,11 @@ def fences(lines: list[str]) -> list[tuple[int, int, str]]:
 
 def make_targets(path: Path) -> set[str]:
     pat = re.compile(r"^([A-Za-z0-9_.-]+)\s*:")
-    return {m.group(1) for ln in path.read_text().splitlines()
-            if (m := pat.match(ln)) and not ln.startswith("\t")}
+    return {
+        m.group(1)
+        for ln in path.read_text().splitlines()
+        if (m := pat.match(ln)) and not ln.startswith("\t")
+    }
 
 
 def pnpm_scripts() -> dict[str, set[str]]:
@@ -97,13 +129,17 @@ def cited_paths(text: str, base: Path) -> list[tuple[str, bool]]:
     for raw in toks:
         t = raw.strip().strip("\"'(),;:")
         t = t.split("::")[0].split("#")[0]
-        t = re.sub(r"\[[^\]]*\]$", "", t)          # strip pip extras
+        t = re.sub(r"\[[^\]]*\]$", "", t)  # strip pip extras
         if not t or " " in t or PLACEHOLDER & set(t):
             continue
         if t.startswith(("http://", "https://", "@")):
             continue
-        looks = t.startswith(PREFIXES) or t in ROOT_FILES or t.startswith((".", "../")) \
+        looks = (
+            t.startswith(PREFIXES)
+            or t in ROOT_FILES
+            or t.startswith((".", "../"))
             or ("/" in t and not t.startswith("-"))
+        )
         if not looks:
             continue
         ok = (base / t).exists() or (ROOT / t).exists()
@@ -126,7 +162,11 @@ def root_rules() -> set[str]:
     for name, i in secs:
         if "Rule" in name:
             end = next((j for n, j in secs if j > i), len(lines))
-            return {norm(l) for l in lines[i:end] if l.startswith("- ") and len(norm(l)) > 12}
+            return {
+                norm(line)
+                for line in lines[i:end]
+                if line.startswith("- ") and len(norm(line)) > 12
+            }
     return set()
 
 
@@ -135,7 +175,6 @@ def check(path: Path, tier: int, rootset: set[str]) -> list[str]:
     text = path.read_text()
     lines = text.splitlines()
     base = path.parent
-    rel = path.relative_to(ROOT) if str(path).startswith(str(ROOT)) else path
 
     # 3 budget
     if len(lines) > BUDGET[tier]:
@@ -159,15 +198,15 @@ def check(path: Path, tier: int, rootset: set[str]) -> list[str]:
     for name, i in secs:
         if name == "Rules":
             end = next((j for n, j in secs if j > i), len(lines))
-            body = lines[i + 1:end]
+            body = lines[i + 1 : end]
             bullets, cur = [], ""
-            for l in body:
-                if l.startswith("- "):
+            for line in body:
+                if line.startswith("- "):
                     if cur:
                         bullets.append(cur)
-                    cur = l
-                elif cur and l.strip():
-                    cur += " " + l.strip()
+                    cur = line
+                elif cur and line.strip():
+                    cur += " " + line.strip()
             if cur:
                 bullets.append(cur)
             for b in bullets:
@@ -190,16 +229,16 @@ def check(path: Path, tier: int, rootset: set[str]) -> list[str]:
     if len(fs) > 1:
         f.append(f"[6 diagram] {len(fs)} diagrams; at most 1 allowed")
     for s, e, _ in fs:
-        body = lines[s + 1:e]
-        if not any(l.strip().startswith("accTitle") for l in body):
+        body = lines[s + 1 : e]
+        if not any(line.strip().startswith("accTitle") for line in body):
             f.append("[6 diagram] missing accTitle")
-        if not any(l.strip().startswith("accDescr") for l in body):
+        if not any(line.strip().startswith("accDescr") for line in body):
             f.append("[6 diagram] missing accDescr")
         if len(body) > FENCE_BODY_MAX:
             f.append(f"[6 diagram] fence body {len(body)} > {FENCE_BODY_MAX}")
         if not any(body[0].strip().startswith(d) for d in ALLOWED_DIAGRAMS):
             f.append(f"[6 diagram] disallowed type: {body[0].strip()[:30]}")
-        nxt = next((l for l in lines[e + 1:] if l.strip()), "")
+        nxt = next((line for line in lines[e + 1 :] if line.strip()), "")
         if nxt[:3] in ("## ", "###") or nxt.startswith(("```", "|", "- ", "* ")):
             f.append("[6 diagram] no prose summary after fence")
 
@@ -219,7 +258,9 @@ def check(path: Path, tier: int, rootset: set[str]) -> list[str]:
                 i += 1
                 continue
             if toks[i] not in use:
-                f.append(f"[8 make] target not in {'tools/' if use is toolt else 'root '}Makefile: {toks[i]}")
+                f.append(
+                    f"[8 make] target not in {'tools/' if use is toolt else 'root '}Makefile: {toks[i]}"
+                )
             i += 1
     for m in re.finditer(r"pnpm --filter (\S+) run (\S+)", text):
         pkg, scr = m.group(1).strip("'\""), m.group(2)
@@ -231,15 +272,17 @@ def check(path: Path, tier: int, rootset: set[str]) -> list[str]:
     # 7 subagents
     names_idx = {p.stem for p in (ROOT / ".claude/agents").glob("*.md")}
     names_idx |= {p.parent.name for p in (ROOT / ".agents/skills").glob("*/SKILL.md")}
-    names_idx |= {p.name.replace(".agent.md", "") for p in (ROOT / ".github/agents").glob("*.agent.md")}
+    names_idx |= {
+        p.name.replace(".agent.md", "") for p in (ROOT / ".github/agents").glob("*.agent.md")
+    }
     for name, i in secs:
         if name == "Subagents":
             end = next((j for n, j in secs if j > i), len(lines))
-            for l in lines[i:end]:
-                if l.startswith("- "):
-                    m = re.search(r"`([^`]+)`", l)
+            for line in lines[i:end]:
+                if line.startswith("- "):
+                    m = re.search(r"`([^`]+)`", line)
                     if not m:
-                        f.append(f"[7 subagent] bullet has no backtick name: {l[:44]}...")
+                        f.append(f"[7 subagent] bullet has no backtick name: {line[:44]}...")
                     elif m.group(1) not in names_idx:
                         f.append(f"[7 subagent] unresolved: {m.group(1)}")
 
@@ -248,11 +291,13 @@ def check(path: Path, tier: int, rootset: set[str]) -> list[str]:
     for name, i in secs:
         if name == "Commands":
             cmd_range = (i, next((j for n, j in secs if j > i), len(lines)))
-    for i, l in enumerate(lines):
+    for i, line in enumerate(lines):
         if cmd_range and cmd_range[0] <= i < cmd_range[1]:
             continue
-        if ACTION_DIRECTIVE.search(l):
-            f.append(f"[11 directive] action directive outside Commands (L{i+1}): {l.strip()[:52]}")
+        if ACTION_DIRECTIVE.search(line):
+            f.append(
+                f"[11 directive] action directive outside Commands (L{i + 1}): {line.strip()[:52]}"
+            )
 
     # 13 unicode
     for i, ch in enumerate(text):
@@ -280,7 +325,9 @@ for p, tier in TARGETS:
     fs = check(p, tier, rs if p != ROOT / "AGENTS.md" else set())
     total += len(fs)
     label = p.name if p == probe else str(p.relative_to(ROOT))
-    print(f"\n{label}  (tier {tier}, {len(p.read_text().splitlines())} lines) -> {len(fs)} findings")
+    print(
+        f"\n{label}  (tier {tier}, {len(p.read_text().splitlines())} lines) -> {len(fs)} findings"
+    )
     for x in fs:
         print("   ", x)
 print("\n" + "=" * 68 + f"\nTOTAL: {total} findings")
