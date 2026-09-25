@@ -225,10 +225,10 @@ start.
       against the constant, never a hard-coded count.
 - [x] T-4.3 Extend `validate_skills.py::CHECKABLE_PATH_PREFIXES` with `lib/`, `artifacts/`,
       `scripts/` — the existing skills linter shares the gap.
-- [ ] T-4.4 Wire into `tools/Makefile`'s `checkers` (and its `help` text),
+- [x] T-4.4 Wire into `tools/Makefile`'s `checkers` (and its `help` text),
       `scripts/validate-pre-pr.sh` after `step_skills_lint`, the CI `governance` job after
       "Skills playbook lint", and `.pre-commit-config.yaml`.
-- [ ] T-4.5 `CONTRIBUTING.md` checklist line; the per-developer `instructionFiles` note;
+- [x] T-4.5 `CONTRIBUTING.md` checklist line; the per-developer `instructionFiles` note;
       `CHANGELOG.md`. **No `docs/specs/README.md` registration** — that file indexes
       initiative specs, neither existing openspec bundle appears in it, and adding a
       governance bundle would cut against this proposal's own "not authoritative over

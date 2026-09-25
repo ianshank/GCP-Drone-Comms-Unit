@@ -212,6 +212,12 @@ step_skills_lint() {
   python tools/validate_skills.py 2>&1
 }
 
+step_agents_docs() {
+  # Lints the AGENTS.md guides and .claude/rules/*.md the harness loads as trusted
+  # system context. Stdlib-only, so no _require_pyyaml guard is needed.
+  python tools/validate_agents_docs.py 2>&1
+}
+
 step_tool_pins() {
   _require_pyyaml || return 1
   python tools/check_tool_pins.py 2>&1
@@ -283,6 +289,7 @@ run_step "Bind guard"                step_bind_guard
 run_step "Literal guard"             step_literal_guard
 run_step "Workforce roster lint"     step_workforce
 run_step "Skills playbook lint"      step_skills_lint
+run_step "Instruction-file lint"     step_agents_docs
 run_step "Tool-pin sync"             step_tool_pins
 run_step "Task-checkbox sync (advisory)" step_task_sync
 run_step "Skills trackable (.gitignore)" step_skills_tracked
