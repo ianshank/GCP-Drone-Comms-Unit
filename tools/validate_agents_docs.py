@@ -188,7 +188,13 @@ GIT_TIMEOUT_S = 60
 
 _FENCE_PREFIX = "```"
 _HEADING_PREFIX = "## "
-_BULLET_PREFIXES = ("- ", "* ")
+#: A top-level list item: unordered (``- ``/``* ``) or ordered (``1. ``). Ordered items
+#: are included because a normative section is free to number its rules, and
+#: `packages/jetson_yolo_gcs/AGENTS.md` does — five rules that an unordered-only
+#: pattern left unchecked while the run stayed green. No leading whitespace is allowed,
+#: so an indented sub-item folds into its parent as a continuation rather than
+#: being read as a separate rule.
+_BULLET_RE = re.compile(r"^(?:[-*]|\d+\.)\s")
 
 
 # --- Filesystem / git -------------------------------------------------------
@@ -295,7 +301,7 @@ def iter_bullets(body: list[str]) -> Iterator[str]:
     """
     current: list[str] = []
     for line in body:
-        if line.startswith(_BULLET_PREFIXES):
+        if _BULLET_RE.match(line):
             if current:
                 yield " ".join(current)
             current = [line.strip()]

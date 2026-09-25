@@ -156,6 +156,22 @@ def test_iter_bullets_folds_continuation_lines() -> None:
     assert list(iter_bullets(body)) == ["- first rule continued here", "- second rule"]
 
 
+def test_iter_bullets_reads_ordered_list_items() -> None:
+    """Regression guard: a normative section may number its rules.
+
+    `packages/jetson_yolo_gcs/AGENTS.md` numbers its five conventions, and an
+    unordered-only pattern left all five unchecked while the run stayed green.
+    """
+    body = ["1. first rule", "2. second rule"]
+    assert list(iter_bullets(body)) == ["1. first rule", "2. second rule"]
+
+
+def test_iter_bullets_treats_indented_items_as_continuations() -> None:
+    """A nested sub-item belongs to its parent rule, not to a rule of its own."""
+    body = ["- parent rule", "  - nested detail", "- next rule"]
+    assert list(iter_bullets(body)) == ["- parent rule - nested detail", "- next rule"]
+
+
 @pytest.mark.parametrize(
     "heading",
     ["Rules", "Engineering Rules", "Framework Rules", "Conventions (keep these invariant)"],
@@ -459,12 +475,12 @@ def test_real_guide_rule_checks_are_not_vacuous(rel_path: str) -> None:
     assert list(iter_normative_bullets(lines)), f"{rel_path}: normative section has no bullets"
 
 
-def test_cli_runs_against_the_real_repo() -> None:
-    """Integration: the CLI executes end to end and reports only known finding kinds.
+def test_cli_runs_clean_against_the_real_repo() -> None:
+    """Integration: the committed instruction files must stay clean.
 
-    Not yet an exit-0 assertion. The committed guides have no ``## Traps`` section and
-    no ``why:``/``control:`` clauses — that content is what T-1.1/T-1.2 add, and this
-    assertion tightens to ``returncode == 0`` when they land.
+    The count is derived, not written down: a hard-coded number would force every
+    commit that adds a rules file to edit this literal, which is how a count-based
+    assertion decays into a rubber stamp.
     """
     env = {**os.environ, "CLAUDE_PROJECT_DIR": str(REPO_ROOT)}
     result = subprocess.run(
@@ -474,11 +490,6 @@ def test_cli_runs_against_the_real_repo() -> None:
         env=env,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
-    expected = ("missing required section", "rule has no", "names no enforcing control")
-    unexpected = [
-        line
-        for line in result.stdout.splitlines()
-        if not line.startswith("FAIL:") and not any(kind in line for kind in expected)
-    ]
-    assert unexpected == [], f"unexpected finding kinds: {unexpected}"
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_count = len(vad.GUIDE_MANIFEST) + len(vad.discovered_rules(REPO_ROOT))
+    assert result.stdout.startswith(f"OK: {expected_count} instruction file(s)")
