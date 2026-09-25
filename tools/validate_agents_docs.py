@@ -166,6 +166,31 @@ SECURITY_KEYWORDS: tuple[str, ...] = (
 #: breadcrumb, so any density threshold would fire on the format it requires.
 FORBIDDEN_CODE_POINTS: frozenset[str] = frozenset("‪‫‬‭‮⁦⁧⁨⁩​‌‍﻿")
 
+#: The one frontmatter key Claude Code reads from a file under :data:`RULES_DIR`. It
+#: scopes the rule to matching paths, so the rule loads when such a file is opened
+#: rather than at session start.
+#:
+#: Checking for it matters because the failure is silent *and inverted*: a rule whose
+#: frontmatter does not parse, or whose scoping key is misspelled, is not skipped — it
+#: loads **unconditionally, in every session**, which is the opposite of the intent and
+#: the outcome this change exists to avoid. Nothing reports that; the rule simply
+#: becomes ambient context.
+RULES_FRONTMATTER_KEY = "paths"
+
+#: Plausible misspellings of :data:`RULES_FRONTMATTER_KEY`, reported by name because
+#: the generic "no scoping key" message would otherwise send an author looking for a
+#: missing line that is sitting right in front of them.
+RULES_KEY_NEAR_MISSES: tuple[str, ...] = ("path", "globs", "glob", "appliesto", "applies_to")
+
+#: Frontmatter fence.
+FRONTMATTER_FENCE = "---"
+
+#: Glob patterns a rule may declare that match nothing today, keyed by the rule's
+#: repo-relative path, with the reason as the value. Forward-looking coverage is a
+#: legitimate choice; it just has to be a stated one, because a pattern matching nothing
+#: is otherwise indistinguishable from a typo — and both mean the rule never fires.
+DEAD_GLOB_EXCEPTIONS: dict[str, dict[str, str]] = {}
+
 #: Prefixes that make a token an explicit relative path, whatever it was written
 #: inside. No English word begins with either, so accepting them adds no
 #: false-positive surface.
@@ -235,6 +260,140 @@ def tracked_guides(root: Path) -> list[str]:
         check=True,
     )
     return sorted(line for line in result.stdout.splitlines() if Path(line).name == GUIDE_FILENAME)
+
+
+def tracked_files(root: Path) -> list[str]:
+    """Every repo-relative path git tracks.
+
+    Used to answer "does this rule's scope match anything", which needs the whole index
+    rather than one filename pattern.
+    """
+    result = subprocess.run(  # noqa: S603 (fixed argv)
+        ["git", "ls-files"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT_S,
+        check=True,
+    )
+    return result.stdout.splitlines()
+
+
+def _expand_braces(pattern: str) -> list[str]:
+    """Expand one level of ``{a,b}`` alternation, recursively.
+
+    Claude Code expands braces before matching, so ``src/**/*.{ts,tsx}`` is two
+    patterns. Translating the braces into a regex alternation instead would be wrong
+    for a nested case and would silently mis-report a live pattern as dead.
+    """
+    start = pattern.find("{")
+    if start == -1:
+        return [pattern]
+    depth = 0
+    for index in range(start, len(pattern)):
+        if pattern[index] == "{":
+            depth += 1
+        elif pattern[index] == "}":
+            depth -= 1
+            if depth == 0:
+                head, body, tail = pattern[:start], pattern[start + 1 : index], pattern[index + 1 :]
+                expanded: list[str] = []
+                for option in _split_top_level(body):
+                    expanded.extend(_expand_braces(f"{head}{option}{tail}"))
+                return expanded
+    return [pattern]  # unbalanced brace: leave it alone rather than guess
+
+
+def _split_top_level(body: str) -> list[str]:
+    """Split ``a,b`` on commas that are not inside a nested brace group."""
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for char in body:
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    parts.append("".join(current))
+    return parts
+
+
+def glob_to_regex(pattern: str) -> re.Pattern[str]:
+    """Compile one glob into a regex matched against a whole repo-relative path.
+
+    Hand-rolled rather than via :func:`glob.translate`, which needs Python 3.13 while
+    this repo supports 3.10–3.12. ``**`` crosses directory separators, a single ``*``
+    and ``?`` do not.
+    """
+    out: list[str] = []
+    index = 0
+    while index < len(pattern):
+        if pattern.startswith("**/", index):
+            out.append("(?:.*/)?")
+            index += 3
+        elif pattern.startswith("**", index):
+            out.append(".*")
+            index += 2
+        elif pattern[index] == "*":
+            out.append("[^/]*")
+            index += 1
+        elif pattern[index] == "?":
+            out.append("[^/]")
+            index += 1
+        else:
+            out.append(re.escape(pattern[index]))
+            index += 1
+    return re.compile(f"^{''.join(out)}$")
+
+
+def glob_matches(pattern: str, paths: Iterable[str]) -> bool:
+    """Whether *pattern* (after brace expansion) matches any of *paths*.
+
+    A trailing ``/**`` is also treated as matching the directory itself, matching the
+    common intent of "this directory and everything under it".
+    """
+    for expanded in _expand_braces(pattern):
+        candidates = [expanded]
+        if expanded.endswith("/**"):
+            candidates.append(expanded[: -len("/**")])
+        for candidate in candidates:
+            compiled = glob_to_regex(candidate)
+            if any(compiled.match(path) for path in paths):
+                return True
+    return False
+
+
+def rule_globs(lines: list[str]) -> list[str]:
+    """The glob patterns declared under a rule's ``paths:`` key.
+
+    Handles both documented spellings: a YAML list of strings, and a single
+    comma-separated string.
+    """
+    if not lines or lines[0].strip() != FRONTMATTER_FENCE:
+        return []
+    try:
+        close = lines.index(FRONTMATTER_FENCE, 1)
+    except ValueError:
+        return []
+
+    globs: list[str] = []
+    in_paths = False
+    for line in lines[1:close]:
+        stripped = line.strip()
+        if not line.startswith((" ", "\t", "-")) and ":" in line:
+            key, _, value = line.partition(":")
+            in_paths = key.strip().casefold() == RULES_FRONTMATTER_KEY
+            if in_paths and value.strip():
+                globs.extend(part.strip().strip("\"'") for part in value.split(",") if part.strip())
+                in_paths = False
+        elif in_paths and stripped.startswith("- "):
+            globs.append(stripped[2:].strip().strip("\"'"))
+    return [g for g in globs if g]
 
 
 def discovered_rules(root: Path) -> list[str]:
@@ -444,6 +603,77 @@ def check_normative_section_present(rel_path: str, lines: list[str]) -> list[str
     ]
 
 
+def check_rule_frontmatter(rel_path: str, lines: list[str]) -> list[str]:
+    """Check 8 — a path-scoped rule actually declares its scope.
+
+    Only the fences and the presence of the scoping key are checked, deliberately: the
+    goal is to catch the inverted-failure case described on
+    :data:`RULES_FRONTMATTER_KEY`, not to re-implement a YAML parser. A rule that meant
+    to be ambient can say so by carrying no frontmatter at all — that is a decision,
+    whereas a misspelled key looks like scoping and is not.
+    """
+    if not lines or lines[0].strip() != FRONTMATTER_FENCE:
+        return [
+            f"{rel_path}: no frontmatter block, so this rule loads in every session. "
+            f"Add '{RULES_FRONTMATTER_KEY}:' to scope it, or state in-file that it is "
+            "deliberately ambient"
+        ]
+    try:
+        close = lines.index(FRONTMATTER_FENCE, 1)
+    except ValueError:
+        return [
+            f"{rel_path}: frontmatter fence is never closed, so the block does not parse "
+            "and the rule loads unconditionally"
+        ]
+
+    keys = {
+        line.partition(":")[0].strip().casefold()
+        for line in lines[1:close]
+        if ":" in line and not line.startswith((" ", "\t", "-"))
+    }
+    if RULES_FRONTMATTER_KEY in keys:
+        return []
+    near = sorted(keys.intersection(RULES_KEY_NEAR_MISSES))
+    if near:
+        return [
+            f"{rel_path}: frontmatter has {', '.join(repr(k) for k in near)} but not "
+            f"'{RULES_FRONTMATTER_KEY}' — an unrecognised key is ignored silently, so "
+            "this rule loads in every session instead of only for matching files"
+        ]
+    return [
+        f"{rel_path}: frontmatter declares no '{RULES_FRONTMATTER_KEY}' key, so this "
+        "rule loads in every session rather than when a matching file is opened"
+    ]
+
+
+def check_rule_scope_matches(rel_path: str, lines: list[str], tracked: list[str]) -> list[str]:
+    """Check 9 — every declared glob matches at least one tracked file.
+
+    A pattern that matches nothing is a rule that never fires, which looks exactly like
+    a rule that is working. Found immediately on the first six rules written to this
+    contract: `lib/**/*.tsx` matched zero files, because the React components live under
+    `artifacts/`, not `lib/`.
+    """
+    allowed = DEAD_GLOB_EXCEPTIONS.get(rel_path, {})
+    findings: list[str] = []
+    for pattern in rule_globs(lines):
+        if glob_matches(pattern, tracked):
+            continue
+        if pattern in allowed:
+            if not allowed[pattern].strip():
+                findings.append(
+                    f"{rel_path}: dead-glob exception for {pattern!r} has an empty rationale"
+                )
+            else:
+                logger.debug("%s: allowed forward-looking glob %r", rel_path, pattern)
+            continue
+        findings.append(
+            f"{rel_path}: '{RULES_FRONTMATTER_KEY}' pattern matches no tracked file, so "
+            f"this rule never fires: {pattern}"
+        )
+    return findings
+
+
 def check_rule_rationale(rel_path: str, lines: list[str]) -> list[str]:
     """Check 6 — every rule records why it exists."""
     return [
@@ -479,9 +709,18 @@ def _excerpt(text: str, limit: int = 60) -> str:
 # --- Orchestration ----------------------------------------------------------
 
 
-def validate_file(rel_path: str, root: Path, *, require_sections: bool) -> list[str]:
+def validate_file(
+    rel_path: str,
+    root: Path,
+    *,
+    require_sections: bool,
+    is_rule: bool = False,
+    tracked: list[str] | None = None,
+) -> list[str]:
     """Run every per-file check against one instruction file."""
-    logger.debug("validating %s (require_sections=%s)", rel_path, require_sections)
+    logger.debug(
+        "validating %s (require_sections=%s, is_rule=%s)", rel_path, require_sections, is_rule
+    )
     path = root / rel_path
     if not path.is_file():
         return [f"{rel_path}: file does not exist"]
@@ -491,6 +730,13 @@ def validate_file(rel_path: str, root: Path, *, require_sections: bool) -> list[
     findings: list[str] = []
     if require_sections:
         findings.extend(check_required_sections(rel_path, lines))
+    if is_rule:
+        findings.extend(check_rule_frontmatter(rel_path, lines))
+        findings.extend(
+            check_rule_scope_matches(
+                rel_path, lines, tracked if tracked is not None else tracked_files(root)
+            )
+        )
     findings.extend(check_cited_paths(rel_path, text, root))
     findings.extend(check_control_characters(rel_path, text))
     # Runs for rules files too, not just guides: a rules file with no normative
@@ -507,8 +753,15 @@ def validate_instruction_files(root: Path) -> list[str]:
     findings = check_manifest(root)
     for rel_path in sorted(set(GUIDE_MANIFEST) & set(tracked_guides(root))):
         findings.extend(validate_file(rel_path, root, require_sections=True))
-    for rel_path in discovered_rules(root):
-        findings.extend(validate_file(rel_path, root, require_sections=False))
+    rules = discovered_rules(root)
+    if rules:
+        # Enumerated once and shared: the scope check needs the whole index, and
+        # shelling out to git per rule file would be the same answer N times.
+        tracked = tracked_files(root)
+        for rel_path in rules:
+            findings.extend(
+                validate_file(rel_path, root, require_sections=False, is_rule=True, tracked=tracked)
+            )
     return findings
 
 

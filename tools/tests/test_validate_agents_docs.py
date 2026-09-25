@@ -22,8 +22,11 @@ from tools.validate_agents_docs import (
     check_manifest,
     check_normative_section_present,
     check_required_sections,
+    check_rule_frontmatter,
     check_rule_rationale,
+    check_rule_scope_matches,
     check_security_control_tag,
+    glob_matches,
     is_checkable_guide_token,
     is_normative_heading,
     iter_bullets,
@@ -31,6 +34,7 @@ from tools.validate_agents_docs import (
     iter_sections,
     main,
     resolution_bases,
+    rule_globs,
     validate_file,
     validate_instruction_files,
 )
@@ -50,6 +54,20 @@ CLEAN_GUIDE = """\
 
 - Keep changes scoped — why: a wide diff hides the one line that mattered.
 - Never commit secrets — why: a leaked key cannot be rotated quietly — control: literal_guard.
+"""
+
+#: A path-scoped rule that satisfies every check, including the two rule-only ones.
+CLEAN_RULE = """\
+---
+paths:
+  - "src/**/*.py"
+---
+
+# Example rule
+
+## Rules
+
+- Do a thing — why: a reason.
 """
 
 
@@ -401,8 +419,9 @@ def test_clean_synthetic_repo_passes(repo: Path, one_guide_manifest: None) -> No
 def test_rules_files_are_validated_too(repo: Path, one_guide_manifest: None) -> None:
     """`.claude/rules/*.md` is discovered, not allowlisted, and shares the rule checks."""
     write(repo, "AGENTS.md", CLEAN_GUIDE)
-    git(repo, "add", "AGENTS.md")
-    write(repo, ".claude/rules/example.md", "## Rules\n\n- Do a thing.\n")
+    write(repo, "src/a.py", "x = 1\n")
+    git(repo, "add", "AGENTS.md", "src/a.py")
+    write(repo, ".claude/rules/example.md", CLEAN_RULE.replace(" — why: a reason.", "."))
     findings = validate_instruction_files(repo)
     assert any(".claude/rules/example.md: rule has no 'why:' clause" in f for f in findings)
 
@@ -410,9 +429,98 @@ def test_rules_files_are_validated_too(repo: Path, one_guide_manifest: None) -> 
 def test_rules_file_needs_no_traps_section(repo: Path, one_guide_manifest: None) -> None:
     """Required sections are a guide obligation; a rules file is scoped, not an overview."""
     write(repo, "AGENTS.md", CLEAN_GUIDE)
-    git(repo, "add", "AGENTS.md")
-    write(repo, ".claude/rules/example.md", "## Rules\n\n- Do a thing — why: reason.\n")
+    write(repo, "src/a.py", "x = 1\n")
+    git(repo, "add", "AGENTS.md", "src/a.py")
+    write(repo, ".claude/rules/example.md", CLEAN_RULE)
     assert validate_instruction_files(repo) == []
+
+
+# ---- check 8: rule frontmatter ----------------------------------------------
+
+
+def test_rule_without_frontmatter_is_flagged() -> None:
+    """The inverted failure: no frontmatter means the rule loads in every session."""
+    findings = check_rule_frontmatter("r.md", ["## Rules", "- a — why: b"])
+    assert len(findings) == 1
+    assert "loads in every session" in findings[0]
+
+
+def test_rule_with_unclosed_frontmatter_is_flagged() -> None:
+    findings = check_rule_frontmatter("r.md", ["---", "paths:", "  - 'x'"])
+    assert len(findings) == 1
+    assert "never closed" in findings[0]
+
+
+@pytest.mark.parametrize("bad_key", ["globs", "path", "appliesTo"])
+def test_rule_with_misspelled_scope_key_names_it(bad_key: str) -> None:
+    """A near-miss is reported by name: the generic message sends authors hunting."""
+    findings = check_rule_frontmatter("r.md", ["---", f"{bad_key}:", "  - 'x'", "---"])
+    assert len(findings) == 1
+    assert bad_key.casefold() in findings[0]
+    assert "loads in every session" in findings[0]
+
+
+def test_rule_with_paths_key_passes() -> None:
+    assert check_rule_frontmatter("r.md", ["---", "paths:", "  - 'src/**'", "---"]) == []
+
+
+# ---- check 9: rule scope actually matches -----------------------------------
+
+
+@pytest.mark.parametrize(
+    ("pattern", "path"),
+    [
+        ("src/**/*.py", "src/pkg/mod.py"),
+        ("src/**", "src/pkg/mod.py"),
+        ("src/**", "src"),  # a trailing /** also covers the directory itself
+        ("*.yaml", "top.yaml"),
+        ("src/*.py", "src/mod.py"),
+        ("src/**/*.{ts,tsx}", "src/a/b.tsx"),  # brace expansion
+    ],
+)
+def test_glob_matches_live_patterns(pattern: str, path: str) -> None:
+    assert glob_matches(pattern, [path]) is True
+
+
+@pytest.mark.parametrize(
+    ("pattern", "path"),
+    [
+        ("src/*.py", "src/pkg/mod.py"),  # a single * does not cross a separator
+        ("lib/**/*.tsx", "artifacts/a/b.tsx"),  # the real dead glob this check found
+        ("src/**/*.{ts,tsx}", "src/a/b.py"),
+    ],
+)
+def test_glob_does_not_match(pattern: str, path: str) -> None:
+    assert glob_matches(pattern, [path]) is False
+
+
+def test_dead_glob_is_flagged() -> None:
+    lines = ["---", "paths:", "  - 'lib/**/*.tsx'", "---"]
+    findings = check_rule_scope_matches("r.md", lines, ["artifacts/a/b.tsx"])
+    assert len(findings) == 1
+    assert "never fires" in findings[0]
+
+
+def test_live_glob_passes() -> None:
+    lines = ["---", "paths:", "  - 'lib/**/*.ts'", "---"]
+    assert check_rule_scope_matches("r.md", lines, ["lib/a/b.ts"]) == []
+
+
+def test_dead_glob_exception_requires_a_rationale(monkeypatch: pytest.MonkeyPatch) -> None:
+    lines = ["---", "paths:", "  - 'lib/**/*.tsx'", "---"]
+    monkeypatch.setattr(vad, "DEAD_GLOB_EXCEPTIONS", {"r.md": {"lib/**/*.tsx": "planned"}})
+    assert check_rule_scope_matches("r.md", lines, []) == []
+    monkeypatch.setattr(vad, "DEAD_GLOB_EXCEPTIONS", {"r.md": {"lib/**/*.tsx": "  "}})
+    findings = check_rule_scope_matches("r.md", lines, [])
+    assert findings == ["r.md: dead-glob exception for 'lib/**/*.tsx' has an empty rationale"]
+
+
+def test_rule_globs_reads_both_documented_spellings() -> None:
+    """`paths:` takes a YAML list or a single comma-separated string."""
+    as_list = ["---", "paths:", '  - "a/**"', '  - "b/**"', "---"]
+    as_string = ["---", 'paths: "a/**, b/**"', "---"]
+    assert rule_globs(as_list) == ["a/**", "b/**"]
+    assert rule_globs(as_string) == ["a/**", "b/**"]
 
 
 def test_main_reports_findings_and_exits_one(

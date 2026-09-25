@@ -156,9 +156,9 @@ start.
 
 ## Step 2 — six path-scoped rules
 
-- [ ] T-2.1 `.claude/rules/{meshsa-core,meshsa-tests,perception}.md` with `paths:`
+- [x] T-2.1 `.claude/rules/{meshsa-core,meshsa-tests,perception}.md` with `paths:`
       frontmatter.
-- [ ] T-2.2 `.claude/rules/{generated-code,ts-workspace,governance}.md`.
+- [x] T-2.2 `.claude/rules/{generated-code,ts-workspace,governance}.md`.
       `generated-code.md` is the one that solves the fire-on-open case rev.3 could not.
 
 ## Step 3 — procedure back to skills
@@ -192,6 +192,23 @@ start.
 > guide-relative citations scoped guides use (`ops/` and `hardware/` were checking
 > **zero** tokens), and an unordered-only bullet pattern that skipped
 > `packages/jetson_yolo_gcs`'s five numbered conventions.
+>
+> **Step 2 added checks 8 and 9**, both for the same reason and both earning their
+> place immediately:
+>
+> - **8 — rule frontmatter.** A `.claude/rules/*.md` whose frontmatter does not parse,
+>   or whose scoping key is misspelled, is not skipped: it loads **unconditionally, in
+>   every session**, which is the exact inverse of the intent. Nothing reports that. A
+>   mutation test confirms the check catches both a `globs:` typo and a missing block.
+> - **9 — the scope matches something.** A `paths:` glob matching no tracked file is a
+>   rule that never fires and looks identical to one that works. It caught a real dead
+>   glob within minutes of the six rules being written: `lib/**/*.tsx` matched zero
+>   files, because the React components live under `artifacts/`, not `lib/`.
+>
+> The validator is therefore ~600 LOC against rev.4's "~120 LOC" estimate. The estimate
+> was for four structural checks over five files; it did not cover the two content rules
+> the spec delta already required, nor the four fail-closed checks that each exist
+> because a silent-pass defect was found in practice.
 
 - [x] T-4.1 `tools/validate_agents_docs.py`, ~120 LOC: (1) instruction files on disk match
       the module-constant list, enumerated via `git ls-files`; (2) every cited path
