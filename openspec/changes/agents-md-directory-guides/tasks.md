@@ -163,13 +163,32 @@ start.
 
 ## Step 3 — procedure back to skills
 
-- [ ] T-3.1 Move procedure-shaped content into the skills that already own it:
+- [x] T-3.1 **Satisfied by construction, not by a migration.** Step 1 wrote the `##
+      Traps` sections as facts only, with the rule stated in-file ("Procedure belongs
+      in a skill"), and the pre-existing `## Common Tasks` sections already delegate to
+      the skills below. A scan of all five guides for numbered or imperative procedure
+      returns nothing, so there was no content to move. Original text:
+      Move procedure-shaped content into the skills that already own it:
       `pre-pr-validator`, `meshsa-test-conventions`, `meshsa-schema-version-bump`,
       `meshsa-add-transport`, `meshsa-commanding-safety`, `config-literal-sweep`,
       `spec-driven-change`, `ops-deploy-base-node`. Per
       `.github/copilot-instructions.md`, this is the repo's standing policy, not a new one.
-- [ ] T-3.2 At most three new skills where none fits (`ts-codegen`, `ci-workflow-edit`,
+- [x] T-3.2 At most three new skills where none fits (`ts-codegen`, `ci-workflow-edit`,
       `governance-hooks`). Each must pass `python tools/validate_skills.py`.
+      **One of the three was written; the other two were assessed and declined.**
+      - `ts-codegen` — **added**. Genuinely procedural and genuinely uncovered: edit
+        the spec, run orval, review *both* committed generated trees, rebuild the
+        composite projects, typecheck. Verified end to end, including that the
+        `pnpm --filter` selector resolves (the package is `@workspace/api-spec`, not
+        the name first written).
+      - `ci-workflow-edit`, `governance-hooks` — **not added.** Their content is
+        constraints, not procedure — SHA-pinning, the load-bearing `shell: bash`, the
+        `archive/` exclusion living in invocations, the tool-pin gaps, scope_freeze's
+        fail-open rule — and all of it now lives in `.claude/rules/governance.md`,
+        which fires on `.github/workflows/**`, `tools/**/*.py` and `.claude/**`. A
+        skill would duplicate a rule that already arrives at the right moment, which
+        is the duplication this bundle spent four rounds removing. "At most three" is
+        a ceiling, not a target.
 
 ## Step 4 — the validator *(landed with seven checks, not four)*
 

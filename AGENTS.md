@@ -266,6 +266,7 @@ when a mandate below fits.
 | Base-node deploy / Pi provisioning | [ops-deploy-base-node](.agents/skills/ops-deploy-base-node/SKILL.md) | skill |
 | Before opening a PR | [pre-pr-validator](.agents/skills/pre-pr-validator/SKILL.md) | skill |
 | Sweeping literals into config | [config-literal-sweep](.agents/skills/config-literal-sweep/SKILL.md) | skill |
+| OpenAPI spec change / regenerating the TS clients | [ts-codegen](.agents/skills/ts-codegen/SKILL.md) | skill |
 | A long single-domain task | the modes in [.github/agents](.github/agents) | agent mode |
 
 The subagent roster lives in [.claude/agents](.claude/agents); each entry declares its
