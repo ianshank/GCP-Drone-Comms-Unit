@@ -6,8 +6,15 @@ Date: 2026-07-08; surface inventory re-derived and corrected 2026-07-31 (see
 [CHARTER_ALIGNMENT_AUDIT_PLAN.md](CHARTER_ALIGNMENT_AUDIT_PLAN.md) Phase D — this file's rows #10/#11
 and two Gap-summary items were stale against commit `fab3ab1`, landed 2026-07-29 after the original
 audit date).
-Scope: every socket-bound or link-bound surface in `packages/meshsa` and
-`packages/jetson_yolo_gcs`, and its actual authentication / encryption posture.
+Scope: **every socket-bound or link-bound surface in the repository**, and its actual
+authentication / encryption posture. Widened 2026-09-25 from the original
+`packages/meshsa` + `packages/jetson_yolo_gcs` scope: the ROADMAP M2 invariant ("no
+unauthenticated surface is exposed by default") is repo-wide, so a `packages/`-only
+inventory could not evidence it. Rows #18–#20 were added by that widening and were never
+previously in scope — they are a **scope gap, not a regression**. Note that
+`tools/claude_hooks/bind_guard.py::SCAN_GLOBS` is Python-only
+(`packages/**/src/**/*.py`, `flightctl/**/*.py`, `tools/**/*.py`), so TypeScript and shell
+listeners are outside its reach and are audited here by inspection only.
 Prerequisite task from [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) Track 0.2 / Track E.3: the
 maintainer's M2-gate clearance for Initiative-C commanding requires this enumeration first. This
 audit **does not clear the gate** — it supplies the evidence the CHARTER §6 decision needs.
@@ -63,6 +70,9 @@ until one lands.
 | 15 | Jetson `LandingTargetBridge` — `mavlink/bridge.py`, `core/config.py::MavlinkSettings.endpoint` | Bidirectional MAVLink | `udpout:127.0.0.1:14550` | **None** (no signing on this leg) | Plaintext UDP | Feature off by default; when on, **safety** fail-closed via heartbeat gate (not an auth control) |
 | 16 | Jetson health listener | — | **Does not exist** (only the gstreamer udpsink; `--health-check` is a CLI self-test) | n/a | n/a | n/a |
 | 17 | Operator console — `ui/app.py`, `ui/config.py` | Inbound listener | `127.0.0.1:8100`, `enabled=False` | Bearer `MESHSA_UI_TOKEN` on `/api/*`; `?token=` gate on `/`; default off, loopback; `/healthz` open. Read-only (`GET` + non-command `POST /api/chat`). XSS-hardened (JSON-encoded injection, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`netauth.validate_bind` inside `build_ui_app`) |
+| 18 | TS API server — `artifacts/api-server/src/index.ts`, `src/app.ts` | Inbound listener | `app.listen(port, cb)` with **no host argument** ⇒ **all interfaces**; `PORT` is required and throws when unset (that gates startup, not exposure) | **None.** `src/middlewares/` holds only `.gitkeep`; `app.use(cors())` is unrestricted-origin. Sole route is `GET /api/healthz` returning `HealthCheckResponse.parse({status:"ok"})` — no data path, no mutation, no DB access despite the `@workspace/db` dependency | Plaintext HTTP | **Fails open.** *Severity context:* the exposed surface is one unauthenticated static health route, and `.replit-artifact/artifact.toml` (`localPort = 8080`, `paths = ["/api"]`) deploys it behind the platform proxy, where an all-interfaces bind **inside the container** is required. Comparable to rows #5/#9's open `/healthz`, not to a data surface |
+| 19 | MAVLink router ingress — `flightctl/scripts/start_all.sh:165` (`mavp2p`) | Inbound listener (UDP) | `udps:0.0.0.0:$MAVP2P_IN_PORT`, default **14550** ⇒ **all interfaces** | **None** — unsigned MAVLink ingest. Note this sits two lines below the script's own comment warning that a `0.0.0.0` bind for mavlink2rest *"would be a command-injection vector"*; that reasoning was applied to `M2R_BIND` (loopback default, row #20's sibling) but not to the router's own ingress | Plaintext UDP | **Fails open.** The most serious of #18–#20: anything on the LAN can inject MAVLink into the router, which fans out to the gateway and mavlink2rest |
+| 20 | FreeTAKServer Web UI — `flightctl/scripts/start_all.sh:130` | Inbound listener | `FTS_UI_EXPOSED_IP=0.0.0.0`, port `$FTS_UI_PORT` default **5000** ⇒ **all interfaces** | FreeTAKServer's own UI auth (external to this repo; not verified here). `FTS_UI_WSKEY` is set to the literal placeholder `YourWebsocketKey` in the script | Plaintext HTTP | **Fails open** with respect to this repo's controls — the bind is unconditional, with no `validate_bind` equivalent and no token gate owned here |
 
 ## Gap summary
 

@@ -223,6 +223,9 @@ jobs:
       - name: Skills playbook lint
         run: python tools/validate_skills.py
 
+      - name: Instruction-file lint
+        run: python tools/validate_agents_docs.py
+
       - name: Tool-pin sync
         run: python tools/check_tool_pins.py
 

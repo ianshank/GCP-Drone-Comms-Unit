@@ -187,8 +187,10 @@ class Pipeline:
         Error handling is **path-specific**: a recoverable :class:`DetectionError` drops
         the frame and continues; a stream-egress failure is best-effort (dropped). A
         ``bridge.publish`` failure is **tolerated then escalated**: consecutive failures are
-        counted and rate-limited-logged, but once they reach ``publish_failure_tolerance``
-        the exception re-raises so a persistently broken LANDING_TARGET (safety) feed fails
+        counted and rate-limited-logged, and the exception re-raises once they *exceed*
+        ``publish_failure_tolerance`` (so ``tolerance`` blips are tolerated and the
+        ``tolerance + 1``-th escalates -- matching :meth:`_publish_target` and the ``>``
+        predicate it applies), so a persistently broken LANDING_TARGET (safety) feed fails
         loudly rather than looking healthy. A single transient blip no longer kills the
         camera+stream loop. Unexpected detector errors (e.g. CUDA OOM, bugs) still propagate.
         """

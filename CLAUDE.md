@@ -1,8 +1,15 @@
 # Claude Code Guide
 
-Read [AGENTS.md](AGENTS.md) first, then the nearest scoped `AGENTS.md` in the
-folder you are editing. This file exists only for Claude Code discovery; keep
-project rules in AGENTS.md.
+The canonical guide is imported below, so Claude Code loads it mechanically rather
+than relying on this file's prose. A Markdown link would not: with any `CLAUDE.md`
+at or above the working directory, Claude Code's default instruction mode reads
+`CLAUDE.md` files only, so before this import no `AGENTS.md` in the repository was
+loaded at all.
+
+@AGENTS.md
+
+Also read the nearest scoped `AGENTS.md` in the folder you are editing. This file
+exists only for Claude Code discovery; keep project rules in AGENTS.md.
 
 Claude-specific notes:
 

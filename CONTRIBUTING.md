@@ -47,7 +47,24 @@ CI runs lint + type + test + build on every push and pull request.
 
 AI coding agents should read [AGENTS.md](AGENTS.md) first, then any nested
 `AGENTS.md` in the folder they edit. Repeatable agent workflows live under
-[.agents/skills](.agents/skills).
+[.agents/skills](.agents/skills), and path-scoped rules under
+[.claude/rules](.claude/rules) load when a file they match is opened.
+
+If you edit an `AGENTS.md` or a `.claude/rules/*.md`, run
+`python tools/validate_agents_docs.py`. It checks the things that otherwise fail
+silently: a cited path that no longer resolves, a rule with no recorded reason, a
+security rule that names no enforcing control, a hidden Unicode code point, and — for
+a rule file — a missing or misspelled `paths:` key (which makes the rule load in
+*every* session instead of none) or a `paths:` glob that matches nothing (which makes
+it load in none). It is stdlib-only, runs in well under a second, and is wired into
+`make -f tools/Makefile checkers`, `make validate-pre-pr`, pre-commit, and CI.
+
+Note for your own setup: Claude Code reads `AGENTS.md` only because `CLAUDE.md`
+imports it with `@AGENTS.md`. Under the default instruction mode, a `CLAUDE.md`
+anywhere at or above the working directory means `AGENTS.md` files are not loaded on
+their own — a Markdown link to it does **not** work. Other harnesses (Codex, Copilot,
+Cursor) read `AGENTS.md` directly and do not read `.claude/rules/`, which is why the
+portable content stays in the five guides.
 
 ## Branch / PR model
 
@@ -65,7 +82,8 @@ AI coding agents should read [AGENTS.md](AGENTS.md) first, then any nested
 A PR is mergeable when every `ci` workflow job is green: `test` (py3.10–3.12: ruff,
 mypy, pytest with the coverage gate, build), `perception` (same for
 `packages/jetson_yolo_gcs`), `governance` (hook tests, `bind_guard`, `literal_guard`,
-workforce lint, tool-pin sync, gitleaks), and `shell` lint. Branch protection on `main` is expected to require these
+workforce lint, skills lint, instruction-file lint, tool-pin sync, gitleaks), and
+`shell` lint. Branch protection on `main` is expected to require these
 four checks plus a CODEOWNERS review; pushing directly to `main` is blocked locally by
 pre-commit (`no-commit-to-branch`).
 
