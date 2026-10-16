@@ -6,7 +6,7 @@ paths:
 # jetson_yolo_gcs perception
 
 Fires anywhere in the perception distribution. Full context is in
-[packages/jetson_yolo_gcs/AGENTS.md](packages/jetson_yolo_gcs/AGENTS.md).
+[packages/jetson_yolo_gcs/AGENTS.md](../../packages/jetson_yolo_gcs/AGENTS.md).
 
 ## Rules
 

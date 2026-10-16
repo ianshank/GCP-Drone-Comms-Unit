@@ -42,9 +42,13 @@ failure mode is *silence* rather than a red build.
   (CI args, pre-commit `exclude:`, `scripts/validate-pre-pr.sh`), so a new invocation
   silently picks the archive up.
 - Cite a step in `scripts/validate-pre-pr.sh` by name, never by number — why: the
-  header comment collapses the two pytest runs into one entry, so it lists 18 steps
-  while the script issues 19 `run_step` calls; the `.agents` `.gitignore` probe is
-  header-#17 and runtime-#18. Note that probe writes a file into the working tree.
+  header comment collapses the two pytest runs into one entry, so it always lists one
+  fewer step than the script issues `run_step` calls (19 vs 20 today), *and* inserting
+  a step renumbers every one after it — the `.agents` `.gitignore` probe moved from
+  header-#17/runtime-#18 to header-#18/runtime-#19 when the instruction-file lint was
+  added ahead of it, which falsified this very bullet's previous wording. If you add a
+  step, update the header list in the same commit. Note that probe writes a file into
+  the working tree.
 - Keep the subshell in `step_py_test` — why: the older `cd … && cd -` form left the
   script's cwd inside `packages/meshsa` after a failure, which made the next step's
   directory guard skip the jetson suite and count it as passing.

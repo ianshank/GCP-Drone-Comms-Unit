@@ -85,6 +85,24 @@ GUIDE_MANIFEST: tuple[str, ...] = (
     "hardware/AGENTS.md",
 )
 
+#: Every other file some harness loads as trusted system context. These get the
+#: control-character check only — they are not guides, so a ``## Traps`` section or a
+#: ``— why:`` clause would be the wrong demand — but the injection surface is identical
+#: and was previously unscanned by anything: neither ``validate_skills.py`` nor
+#: ``validate_workforce.py`` looks for hidden code points, so a Tags-block payload in a
+#: subagent definition or in ``CLAUDE.md`` passed the whole gate.
+#:
+#: ``CLAUDE.md`` matters most here: it is Claude Code's entry point and the file whose
+#: ``@AGENTS.md`` import makes every guide load at all.
+CONTEXT_SCAN_GLOBS: tuple[str, ...] = (
+    "CLAUDE.md",
+    "**/CLAUDE.md",
+    ".github/copilot-instructions.md",
+    ".agents/skills/*/SKILL.md",
+    ".claude/agents/*.md",
+    ".github/agents/*.md",
+)
+
 #: Path-scoped rules. Unlike guides these are *discovered*, not allowlisted: they all
 #: live in one directory by construction, so there is no placement decision to police.
 RULES_DIR = ".claude/rules"
@@ -158,13 +176,36 @@ SECURITY_KEYWORDS: tuple[str, ...] = (
 )
 
 #: Code points that carry no legitimate meaning in an instruction file and that the
-#: disclosed rules-file backdoor uses to hide payloads from a human reviewer:
-#: bidirectional overrides/isolates and zero-width characters.
+#: disclosed rules-file backdoor uses to hide payloads from a human reviewer.
 #:
-#: A broader "ASCII-dominant" rule is deliberately *not* imposed: the authoring
-#: contract itself mandates U+2014 in every `— why:` clause and U+00B7 in every
-#: breadcrumb, so any density threshold would fire on the format it requires.
-FORBIDDEN_CODE_POINTS: frozenset[str] = frozenset("‪‫‬‭‮⁦⁧⁨⁩​‌‍﻿")
+#: Built as ranges rather than a literal string so the set is readable in source and so
+#: the Tags block can be included at all — it is 128 code points, and every one of them
+#: renders as nothing while round-tripping ASCII exactly. Tags are the canonical
+#: invisible-ASCII smuggling encoding and the most published one, so a deny-list that
+#: omitted them would name the attack in its own docstring and then miss its primary
+#: form.
+#:
+#: A broader "ASCII-dominant" or density rule is still deliberately *not* imposed: the
+#: authoring contract itself mandates U+2014 in every `— why:` clause and U+00B7 in
+#: every breadcrumb, so any threshold would fire on the format it requires. That
+#: argument does not extend to an explicit list of non-rendering code points, which is
+#: why this set is broad where a density rule cannot be.
+_FORBIDDEN_CODE_POINT_RANGES: tuple[tuple[int, int, str], ...] = (
+    (0x00AD, 0x00AD, "soft hyphen"),
+    (0x180E, 0x180E, "Mongolian vowel separator"),
+    (0x200B, 0x200F, "zero-width space/joiners and LRM/RLM"),
+    (0x202A, 0x202E, "bidirectional embeddings and overrides"),
+    (0x2060, 0x2064, "word joiner and invisible operators"),
+    (0x2066, 0x2069, "bidirectional isolates"),
+    (0xFE00, 0xFE0F, "variation selectors"),
+    (0xFEFF, 0xFEFF, "zero-width no-break space / BOM"),
+    (0xE0000, 0xE007F, "Unicode Tags block — invisible ASCII"),
+    (0xE0100, 0xE01EF, "variation selectors supplement"),
+)
+
+FORBIDDEN_CODE_POINTS: frozenset[str] = frozenset(
+    chr(cp) for low, high, _ in _FORBIDDEN_CODE_POINT_RANGES for cp in range(low, high + 1)
+)
 
 #: The one frontmatter key Claude Code reads from a file under :data:`RULES_DIR`. It
 #: scopes the rule to matching paths, so the rule loads when such a file is opened
@@ -404,6 +445,20 @@ def discovered_rules(root: Path) -> list[str]:
     return sorted(str(p.relative_to(root)) for p in rules_dir.glob(RULES_GLOB))
 
 
+def discovered_context_files(root: Path, tracked: list[str]) -> list[str]:
+    """Tracked files matching :data:`CONTEXT_SCAN_GLOBS`, sorted and de-duplicated.
+
+    Drawn from the git index rather than the filesystem so an untracked instruction
+    file — which a harness would still load but review would never see — is absent
+    rather than quietly scanned and passed.
+    """
+    seen: set[str] = set()
+    for pattern in CONTEXT_SCAN_GLOBS:
+        compiled = glob_to_regex(pattern)
+        seen.update(path for path in tracked if compiled.match(path))
+    return sorted(seen)
+
+
 def resolution_bases(rel_path: str, root: Path) -> tuple[Path, ...]:
     """Directories a citation in *rel_path* may be relative to, in priority order.
 
@@ -562,6 +617,21 @@ def check_cited_paths(rel_path: str, text: str, root: Path) -> list[str]:
             continue
         seen.add(token)
         if token_resolves(token, bases):
+            # A Markdown link is followed by a renderer relative to the file it is
+            # written in, so resolving only via the repo-root fallback means the link
+            # is dead for every human and every renderer — while the check that exists
+            # to catch reference rot reports it clean. Caught five such links in the
+            # first six `.claude/rules/*.md`, which are two directories deep.
+            if (
+                origin == ORIGIN_LINK
+                and not token.startswith(RELATIVE_PREFIXES)
+                and not token_resolves(token, (bases[0],))
+                and token not in allowed
+            ):
+                findings.append(
+                    f"{rel_path}: link target resolves only from the repo root, so it is "
+                    f"dead when followed from {bases[0].name or '.'}/ — make it relative: {token}"
+                )
             continue
         if token in allowed:
             if not allowed[token].strip():
@@ -753,11 +823,20 @@ def validate_instruction_files(root: Path) -> list[str]:
     findings = check_manifest(root)
     for rel_path in sorted(set(GUIDE_MANIFEST) & set(tracked_guides(root))):
         findings.extend(validate_file(rel_path, root, require_sections=True))
+    tracked_all = tracked_files(root)
+    for rel_path in discovered_context_files(root, tracked_all):
+        path = root / rel_path
+        if not path.is_file():
+            continue
+        # Control characters only: these are not guides, so the section and rationale
+        # checks would be the wrong obligation. The injection surface is the same.
+        findings.extend(check_control_characters(rel_path, path.read_text(encoding="utf-8")))
+
     rules = discovered_rules(root)
     if rules:
         # Enumerated once and shared: the scope check needs the whole index, and
         # shelling out to git per rule file would be the same answer N times.
-        tracked = tracked_files(root)
+        tracked = tracked_all
         for rel_path in rules:
             findings.extend(
                 validate_file(rel_path, root, require_sections=False, is_rule=True, tracked=tracked)
@@ -790,8 +869,12 @@ def main(argv: list[str] | None = None) -> int:
             print(finding)
         print(f"FAIL: {len(findings)} finding(s) across the instruction files under {root}")
         return 1
-    count = len(GUIDE_MANIFEST) + len(discovered_rules(root))
-    print(f"OK: {count} instruction file(s) under {root} passed all checks")
+    instruction_count = len(GUIDE_MANIFEST) + len(discovered_rules(root))
+    context_count = len(discovered_context_files(root, tracked_files(root)))
+    print(
+        f"OK: {instruction_count} instruction file(s) under {root} passed all checks "
+        f"({context_count} further context file(s) scanned for hidden code points)"
+    )
     return 0
 
 

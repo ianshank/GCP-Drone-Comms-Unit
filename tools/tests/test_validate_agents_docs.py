@@ -319,7 +319,19 @@ def test_citation_exception_without_rationale_is_itself_a_finding(
 # ---- check 4: control characters ---------------------------------------------
 
 
-@pytest.mark.parametrize("char", ["‮", "​", "⁦", "﻿"])
+@pytest.mark.parametrize(
+    "char",
+    [
+        "‮",  # bidi override — the classic "rules-file backdoor"
+        "​",  # zero-width space
+        "⁦",  # bidi isolate
+        "﻿",  # BOM
+        "⁠",  # word joiner
+        "­",  # soft hyphen
+        "\U000e0041",  # Tags block "A" — invisible ASCII, the primary smuggling form
+        "️",  # variation selector
+    ],
+)
 def test_forbidden_code_points_flagged(char: str) -> None:
     findings = check_control_characters("AGENTS.md", f"safe{char}text")
     assert len(findings) == 1
@@ -328,8 +340,19 @@ def test_forbidden_code_points_flagged(char: str) -> None:
 
 
 def test_mandated_punctuation_is_not_flagged() -> None:
-    """The authoring contract mandates U+2014 and U+00B7; neither may trip the check."""
-    assert check_control_characters("AGENTS.md", "a — b · c") == []
+    """The authoring contract mandates U+2014 and U+00B7; neither may trip the check.
+
+    This is the reason the check is an explicit deny-list of non-rendering code points
+    rather than a density or "ASCII-dominant" threshold: any threshold would fire on
+    the format the contract itself requires.
+    """
+    assert check_control_characters("AGENTS.md", "a — b · c ≤ d") == []
+
+
+def test_tags_block_is_covered_end_to_end() -> None:
+    """The whole Tags block, not just a sample: it is the primary smuggling encoding."""
+    missing = [cp for cp in range(0xE0000, 0xE0080) if chr(cp) not in vad.FORBIDDEN_CODE_POINTS]
+    assert missing == []
 
 
 # ---- check 5: a check that would otherwise go quiet --------------------------
@@ -601,3 +624,19 @@ def test_cli_runs_clean_against_the_real_repo() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     expected_count = len(vad.GUIDE_MANIFEST) + len(vad.discovered_rules(REPO_ROOT))
     assert result.stdout.startswith(f"OK: {expected_count} instruction file(s)")
+
+
+def test_context_files_are_scanned_for_hidden_code_points() -> None:
+    """CLAUDE.md and the skill/agent definitions are in the sweep's reach.
+
+    They get the control-character check only — they are not guides — but the
+    injection surface is identical, and neither sibling linter looks for hidden code
+    points, so before this they passed the whole gate regardless of content.
+    """
+    context = vad.discovered_context_files(REPO_ROOT, vad.tracked_files(REPO_ROOT))
+    assert "CLAUDE.md" in context
+    assert any(p.startswith(".agents/skills/") for p in context)
+    assert any(p.startswith(".claude/agents/") for p in context)
+    for rel_path in context:
+        text = (REPO_ROOT / rel_path).read_text(encoding="utf-8")
+        assert check_control_characters(rel_path, text) == []

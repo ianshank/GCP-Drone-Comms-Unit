@@ -169,9 +169,11 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
   files, so `types: [text]` hooks skip it while `gitleaks` and
   `check-added-large-files` still see it.
 - **`scripts/validate-pre-pr.sh` has two conflicting step numberings** — its header
-  comment collapses the two pytest runs into one entry, so the header list has 18
-  entries while the script issues 19 `run_step` calls. Cite a step by *name*, not
-  number: the `.agents/*`-vs-`.agents/` `.gitignore` probe is header-#17 but runtime-#18.
+  comment collapses the two pytest runs into one entry, so the header list has one
+  fewer entry than the script has `run_step` calls (19 vs 20 today). **Cite a step by
+  *name*, not number**, and note that any added step shifts every number after it: the
+  `.agents/*`-vs-`.agents/` `.gitignore` probe is header-#18 and runtime-#19, having
+  been #17/#18 before the instruction-file lint was inserted ahead of it.
   That probe writes a file into the working tree. The subshell in `step_py_test` is
   deliberate — the older `cd … && cd -` form left the script's cwd inside
   `packages/meshsa` after a failure, which made the next step's directory guard skip the
@@ -291,5 +293,16 @@ against *documentation-borne* injection — content an agent reads while working
 a different entry point from the instruction files themselves, which are the
 higher-success surface and which this directive does **not** defend, because an
 attacker editing this file would simply delete it. The control for that surface is
-human review: `.github/CODEOWNERS` routes every `AGENTS.md`, `CLAUDE.md`, and
-`.claude/rules/**` change to a maintainer.
+human review: [.github/CODEOWNERS](.github/CODEOWNERS) carries explicit rules for
+`AGENTS.md`, `CLAUDE.md`, `.claude/rules/**`, `.claude/agents/**`, `.agents/skills/**`
+and the hook config. Stated precisely, because it matters how strong this is: those
+entries name the same single owner the file's `*` wildcard already routes to, so they
+add no reviewer today — their effect is that the surface is explicit, and that adding a
+second maintainer later cannot dilute review here while leaving the wildcard intact.
+Review strength depends on branch protection actually requiring a CODEOWNERS review,
+which `CONTRIBUTING.md` records as expected rather than verified.
+
+The mechanical backstop is narrower than the control: `tools/validate_agents_docs.py`
+rejects bidirectional-override, zero-width, Tags-block and other non-rendering code
+points across all 38 trusted-context files, but no checker can validate what an
+instruction *means*.

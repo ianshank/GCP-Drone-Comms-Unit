@@ -9,7 +9,7 @@ paths:
 
 # TypeScript workspace
 
-Fires in `lib/` and `artifacts/`. The root [AGENTS.md](AGENTS.md) carries the same
+Fires in `lib/` and `artifacts/`. The root [AGENTS.md](../../AGENTS.md) carries the same
 facts; this file exists so they arrive when you are in the workspace rather than only
 at session start.
 
@@ -29,7 +29,7 @@ at session start.
   not emit that file, so treating it as generated and "regenerating" it loses the
   schema.
 - Do not add a network listener in `artifacts/` without recording it in
-  [docs/AUDIT_M2_AUTH.md](docs/AUDIT_M2_AUTH.md) — why: `bind_guard`'s `SCAN_GLOBS` is
+  [docs/AUDIT_M2_AUTH.md](../../docs/AUDIT_M2_AUTH.md) — why: `bind_guard`'s `SCAN_GLOBS` is
   Python-only, so no TypeScript listener has ever been in its scope; the existing
   `api-server` all-interfaces bind went unnoticed for exactly this reason
   — control: none mechanical for TypeScript — advisory, and that gap is the point:

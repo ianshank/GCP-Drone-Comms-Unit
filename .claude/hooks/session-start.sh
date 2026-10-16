@@ -40,7 +40,7 @@ echo "Gates (run from the package dir): ruff check . | python -m mypy src | pyth
 echo "Governance checkers (run from repo root): python tools/claude_hooks/bind_guard.py |" \
      "python tools/claude_hooks/literal_guard.py | python tools/check_tool_pins.py |" \
      "python tools/check_task_sync.py | python tools/validate_workforce.py |" \
-     "python tools/validate_skills.py"
+     "python tools/validate_skills.py | python tools/validate_agents_docs.py"
 echo "Or the full pre-PR gate: bash scripts/validate-pre-pr.sh"
 
 # Governance visibility: surface the current M2 gap state from the auth audit so

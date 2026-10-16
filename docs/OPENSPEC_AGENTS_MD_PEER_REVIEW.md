@@ -576,3 +576,131 @@ writing any new one.
    as a null result, not as an effect with a smaller number.
 3. Any change that adds files the agent harness **auto-loads as trusted context** is a
    security change and is reviewed as one, whatever else it touches.
+
+---
+
+## Round 6 — adversarial security review of the implemented branch (S-1…S-10)
+
+Run by the **security-reviewer** subagent against `git diff origin/main...HEAD`, as the
+root guide's binding pre-PR rule requires for any diff touching `packages/`. It cleared
+every claim about executable behaviour and the fail-closed posture, verified each
+security statement written into the guides against the code, and found **ten** defects.
+All ten are fixed; the two it would not merge past are first.
+
+**S-1 (HIGH, fixed) — the audit of record contradicted the table the same commit added.**
+Widening `docs/AUDIT_M2_AUTH.md`'s scope and adding rows #18–#20 left four downstream
+sections stale: the Gap summary still asserted "3 fail-open surfaces, only 1 an actual
+`bind_guard`-scoped listener gap … no new bind surface since 2026-07-08"; "What is done
+well" and the maintainer Verdict still said auth "fails closed on **all five** HTTP
+surfaces" when #18 and #20 are HTTP surfaces that do not; and the Follow-up backlog
+gained no entry for any of the three. An audit that understates its own table is worse
+than one with no summary. All four corrected, with the superseded sentence kept inline so
+the change is auditable, and four backlog items added (#19 first — it is the command
+path's ingress).
+
+**S-1b (fixed in the same pass, and self-inflicted) — the corrected summary then
+reproduced the bug.** The original bullet reconciled a specific `grep -ci 'fails open'`
+total, and the rewrite restated that total as 9 — which the rewrite itself changed to 8,
+and a later edit to 9 again. The number is **self-referential**: the session-start banner
+greps this file, so the sentence stating the count is counted. The fix is to stop
+asserting it. The authoritative figure is now the **6 inventory rows**; the banner's
+larger number is explained as including prose self-references, and the document no longer
+claims a specific grep total it cannot keep true.
+
+**S-2 (MEDIUM-HIGH, fixed) — a rules file named a control that does not enforce its rule.**
+`.claude/rules/meshsa-core.md` cited `bind_guard` as the control for
+`netauth.validate_bind`'s `not token` predicate. `bind_guard` checks that a listener
+*calls* `validate_bind` or is a declared exception; it never parses that function's body,
+so rewriting the predicate leaves it green. The real controls are
+`test_netauth.py::test_validate_bind_empty_token_is_no_token` and
+`test_run_commander.py::test_validate_bind_exposed_with_empty_token_fails_closed`, now
+named, with an explicit "**not** `bind_guard`, and here is why" clause.
+
+The systemic half matters more: `check_security_control_tag` enforces that a
+security-keyworded rule *contains* `control:` or `advisory`. It cannot check that the
+named control is real. So the linter validated the shape of exactly the claim it was
+added to protect, and manufactured the appearance of verification. **No checker can close
+this** — it is a human-review obligation, now stated as one rather than implied away.
+
+**S-3 (MEDIUM, fixed) — the diff falsified a trap it added.** Both the root guide and
+`.claude/rules/governance.md` stated `scripts/validate-pre-pr.sh` had "18 header entries,
+19 `run_step` calls, probe at header-#17/runtime-#18". The same diff inserted a `run_step`,
+making it 19/20 with the probe at #18/#19 — and left the script's own header list
+unrenumbered. Header fixed, both traps corrected, and the rule strengthened to say *why*
+a number is the wrong thing to cite: inserting a step renumbers everything after it, which
+is precisely what happened here.
+
+**S-4 (MEDIUM, fixed) — the hidden-Unicode check omitted the primary smuggling encoding.**
+`FORBIDDEN_CODE_POINTS` held 13 code points (bidi + four zero-width forms) while naming
+the rules-file backdoor in its own docstring. Missing: **U+E0000–U+E007F, the Unicode Tags
+block** — the canonical invisible-ASCII encoding and the most published one — plus
+U+2060–U+2064, U+00AD, U+200E/F, U+180E and the variation selectors. Rebuilt from named
+ranges: **406 code points**. Verified that U+2014, U+00B7 and U+2264, which the authoring
+contract *mandates*, stay out, and that the whole Tags block is covered.
+
+**S-5 (MEDIUM, fixed) — 27 trusted-context files were outside every content check**,
+including `CLAUDE.md`, the entry point this diff edits. Neither sibling linter looks for
+hidden code points, so a Tags-block payload in `CLAUDE.md` or in a subagent definition
+passed the entire gate. Added `CONTEXT_SCAN_GLOBS`: `CLAUDE.md` (root and nested),
+`copilot-instructions.md`, the 13 skills, the 7 subagents and the 5 agent modes now get
+the control-character check — correctly *not* the guide checks, since a `## Traps` section
+would be the wrong demand. Coverage goes from 11 files to **38**. A mutation test confirms
+an invisible-ASCII payload in `CLAUDE.md` is now caught.
+
+**S-6 (LOW, fixed) — "six declared waivers" was a miscount.** `.claude/governance.yaml`
+declares **four** `literal_guard.exceptions`; six is the checker's *findings* count. An
+agent asked to audit the waivers would have opened the file, counted four, and concluded
+the guide was stale. Both files corrected, and each now says explicitly that the "6
+excepted" output line counts findings, not waivers.
+
+**S-7 (LOW, fixed) — and it revealed a real hole in check 3.** Five links in the new rules
+files were repo-root-relative, so they were dead when followed from `.claude/rules/` — and
+they passed, because `resolution_bases` appends the repo root as a last base. The check
+built to catch reference rot was resolving links no human or renderer could follow. Links
+fixed, and **the class closed**: a Markdown link target that resolves *only* via the root
+fallback is now a finding, since a renderer follows a link relative to the file it is
+written in. Mutation-tested.
+
+**S-8 (LOW, fixed)** — `.claude/hooks/session-start.sh` listed six governance checkers;
+every session was told a list the Makefile, pre-PR script, pre-commit and CI all
+disagreed with. Added.
+
+**S-9 (LOW, fixed) — the named control for the trusted-context surface was a wildcard.**
+The root guide calls `.github/CODEOWNERS` the load-bearing control for a surface this
+change deliberately widens by six files, but CODEOWNERS was a single `* @ianshank` with no
+path-specific rule, so an instruction-file change carried the same review weight as a
+README typo. Explicit entries added for `AGENTS.md`, `CLAUDE.md`, `.claude/rules/**`,
+`.claude/agents/**`, `.claude/hooks/**`, `.agents/skills/**`, `.github/agents/**` and
+`governance.yaml`. The guide now states precisely how strong this is: the entries name the
+same owner the wildcard already routes to, so they add **no reviewer today** — their effect
+is that the surface is explicit and a second maintainer cannot later dilute review here
+while leaving the wildcard intact. It also notes that review strength depends on branch
+protection actually requiring a CODEOWNERS review, which `CONTRIBUTING.md` records as
+*expected*, not verified.
+
+**S-10 (LOW, fixed)** — rows #19/#20 cited `start_all.sh:165` and `:130` while the rest of
+the inventory cites by `module.py::SYMBOL`. Line numbers in the inventory of record rot on
+the next edit to that script. Re-cited by construct (`mavp2p` ingress / `MAVP2P_IN_PORT`,
+`FTS_UI_EXPOSED_IP`).
+
+### What round 6 cleared
+
+No added line in the diff creates, moves or removes a bind, listener or outbound call.
+`tools/claude_hooks/` is byte-identical to `origin/main`; `.claude/governance.yaml` is
+untouched with `c_gate_met: false` and no glob list edited, so invariant I-2 holds. All
+three `subprocess.run` calls use fixed-list argv with no `shell=True` and a timeout; the
+only interpolated value is a module constant. The `pipeline.py` edit is docstring-only and
+its *new* wording is the correct one. The `validate_skills.py` refactor was shown
+behaviour-identical by a side-by-side differential over 1,298 tokens — three
+classification drifts, all subtractive, zero tokens moving from clean to missing. Every
+security claim written into the guides was checked against the code and held. Nothing in
+the six new rules files widens permissions, disables a check, or contradicts a safety
+invariant, and none contains hidden Unicode.
+
+### Standing rule added by this round
+
+4. A `— control:` clause must name a mechanism that would **actually fail** if the rule
+   were violated. "A checker exists in this area" is not a control for a specific
+   predicate. `check_security_control_tag` validates the *shape* of this claim and cannot
+   validate its truth, so the claim is a human-review obligation — and the cheapest way to
+   discharge it is to name a test, which can be run.

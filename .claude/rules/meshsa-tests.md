@@ -6,7 +6,7 @@ paths:
 # meshsa test suite
 
 Fires when a framework test is opened. Procedure for writing tests lives in
-[.agents/skills/meshsa-test-conventions/SKILL.md](.agents/skills/meshsa-test-conventions/SKILL.md);
+[.agents/skills/meshsa-test-conventions/SKILL.md](../../.agents/skills/meshsa-test-conventions/SKILL.md);
 this file is only the things that surprise people.
 
 ## Rules

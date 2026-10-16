@@ -6,7 +6,7 @@ paths:
 # meshsa framework source
 
 Fires when a framework source file is opened. The package guide
-[packages/meshsa/AGENTS.md](packages/meshsa/AGENTS.md) carries the same invariants at
+[packages/meshsa/AGENTS.md](../../packages/meshsa/AGENTS.md) carries the same invariants at
 session scope; this file exists so they arrive when you are actually in the code.
 
 ## Rules
@@ -25,13 +25,18 @@ session scope; this file exists so they arrive when you are actually in the code
 - Do not change `netauth.validate_bind`'s `not token` guard to `token is None` — why:
   the commander's former local guard used `token is None`, so an empty-string token
   passed when called directly; `not token` is the fix, not a sloppy truthiness check
-  — control: `bind_guard` (`tools/claude_hooks/bind_guard.py`) and the row table in
-  `docs/AUDIT_M2_AUTH.md`.
+  — control: `packages/meshsa/tests/test_netauth.py::test_validate_bind_empty_token_is_no_token`
+  and `packages/meshsa/tests/test_run_commander.py::test_validate_bind_exposed_with_empty_token_fails_closed`.
+  **Not `bind_guard`** — it checks that a listener *calls* `validate_bind` (or is a
+  declared exception) and never parses that function's body, so rewriting the predicate
+  leaves it entirely green.
 - Put new operator-tunable values in a Pydantic config model — why: field nodes are
   reconfigured by environment, never by edit-and-redeploy, so a literal buried in logic
   is unreachable once deployed — control: `literal_guard`, which enforces four literal
   classes (`ports`, `hosts`, `magics`, `endpoints`) over
-  `packages/**/src/**/*.py`; six declared waivers exist repo-wide.
+  `packages/**/src/**/*.py`, `flightctl/**/*.py` and `tools/**/*.py`. **Four** waivers
+  are declared in `.claude/governance.yaml::literal_guard.exceptions`; the checker's
+  "6 excepted" output line counts excepted *findings*, not waivers.
 - Keep `Router`'s `schema_mismatch` counter distinct from `dropped_undecodable` — why:
   it is the only signal separating a version skew from a corrupt frame, and a mixed
   version mesh is the normal case here.

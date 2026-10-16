@@ -34,9 +34,11 @@ This guide applies under `packages/meshsa`. Also follow the root
   `literal_guard` `"*"` waiver is scoped to `command/config.py` alone — not to the
   directory.
 - **`defaults.py` is not the home for *all* literals** — `literal_guard` enforces four
-  classes only (`ports`, `hosts`, `magics`, `endpoints`), with six declared waivers
-  repo-wide. Its own docstring still describes a staged sweep that is only partly
-  done (`code-hygiene-modularity` T-3.5b is unchecked), so treat that line as history.
+  classes only (`ports`, `hosts`, `magics`, `endpoints`), with **four** waivers declared
+  in `.claude/governance.yaml::literal_guard.exceptions` — the checker's "6 excepted"
+  output line counts excepted *findings*, not waivers, so do not read it as the waiver
+  count. `defaults.py`'s own docstring still describes a staged sweep that is only
+  partly done (`code-hygiene-modularity` T-3.5b is unchecked), so treat it as history.
 - **The operator console is read-only but not all-GET.** Invariant I-2 permits exactly
   one mutating-method route, `POST /api/chat`, which answers questions and mutates
   nothing. `tests/test_ui_app.py` asserts the whole route table and ends

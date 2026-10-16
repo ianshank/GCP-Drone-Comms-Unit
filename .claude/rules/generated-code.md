@@ -37,7 +37,7 @@ edit here is discarded by the next generator run, silently and without a conflic
   failing diff — why: a snapshot diff means the **wire format changed**, which is the
   signal the snapshot exists to raise. Regenerate deliberately with
   `MESHSA_UPDATE_SNAPSHOTS=1` and treat the result as a schema-version decision
-  (see [.agents/skills/meshsa-schema-version-bump/SKILL.md](.agents/skills/meshsa-schema-version-bump/SKILL.md)).
+  (see [.agents/skills/meshsa-schema-version-bump/SKILL.md](../../.agents/skills/meshsa-schema-version-bump/SKILL.md)).
 - Treat `archive/**` as read-only history; do not update a snapshot during feature work
   — why: it records what shipped, so editing one destroys the record it exists to keep.
   Note the tooling asymmetry: `archive/` is five `.zip` files, so the `types: [text]`
