@@ -9,6 +9,53 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+#### Agent instruction files (openspec `agents-md-directory-guides`)
+- `tools/validate_agents_docs.py` — a stdlib-only linter for the files a coding-agent
+  harness loads as trusted system context: the five `AGENTS.md` guides and the new
+  `.claude/rules/*.md`. The third mechanical sibling of `validate_workforce.py` and
+  `validate_skills.py`. Wired into `make -f tools/Makefile checkers`,
+  `scripts/validate-pre-pr.sh`, the CI `governance` job, and (scoped to instruction
+  files) pre-commit. Nine checks, every one of which exists because the corresponding
+  failure is *silent*: manifest drift, a missing `## Traps` section, a cited path that
+  no longer resolves, bidirectional-override or zero-width code points, a file whose
+  rules no check can read, a rule with no recorded reason, a security rule naming no
+  enforcing control, a rule file with a missing or misspelled `paths:` key, and a
+  `paths:` glob that matches nothing.
+- `.claude/rules/{meshsa-core,meshsa-tests,perception,generated-code,ts-workspace,governance}.md`
+  — path-scoped rules that load when a matching file is opened. `generated-code.md`
+  covers the case a directory guide cannot: orval output, the vendored shadcn tree, the
+  mockup `.generated` module, wire-format snapshots and `archive/`, all of which read as
+  ordinary source when opened and discard an edit at the next generator run.
+- A `## Traps` section in all five `AGENTS.md` guides, plus a `— why:` clause on every
+  rule and `— control:` / `— advisory` on every security-relevant one, so a rule's
+  reason and its actual enforcement are both recorded rather than assumed.
+- `packages/jetson_yolo_gcs/tests/unit/test_imports_clean.py::test_package_does_not_import_meshsa`
+  — the "no runtime dependency on `meshsa`" invariant was documented as a hard
+  architectural gate but nothing enforced it; that test file checked only the six
+  heavy/hardware modules. The rule held in fact; now it is checked.
+
+### Changed
+- `CLAUDE.md` imports the canonical guide with `@AGENTS.md` instead of linking to it.
+  Under Claude Code's default instruction mode a `CLAUDE.md` at or above the working
+  directory means `AGENTS.md` files are not loaded at all, so before this change no
+  `AGENTS.md` in the repository was being read by Claude Code.
+- `docs/AUDIT_M2_AUTH.md`'s declared scope widened from two packages to the whole
+  repository, matching the ROADMAP M2 invariant, with three previously-unaudited
+  non-loopback surfaces added: `artifacts/api-server`'s hostless `app.listen`, and
+  `flightctl/scripts/start_all.sh`'s mavp2p `udps:0.0.0.0:$MAVP2P_IN_PORT` and
+  `FTS_UI_EXPOSED_IP=0.0.0.0`. Recorded, not remediated — `bind_guard`'s `SCAN_GLOBS`
+  is Python-only, so no TypeScript or shell listener has ever been in its scope.
+- `tools/validate_skills.py` splits candidate extraction from the checkability
+  predicate (`iter_raw_path_tokens`, `is_path_shaped`) so the new linter can apply a
+  wider predicate over the same regexes. Behaviour unchanged.
+
+### Fixed
+- `packages/jetson_yolo_gcs/AGENTS.md` and `.agents/skills/jetson-perception/SKILL.md`
+  described the `LANDING_TARGET` publish as "fails loud". It tolerates then escalates,
+  re-raising only once consecutive failures *exceed* `publish_failure_tolerance`
+  (default `3`). `pipeline.py::step`'s own docstring said "reach" where the predicate is
+  `>`, and `docs/specs/initiative-d-perception.md` implied the same. All four corrected.
+
 #### Logging & observability follow-up
 - `transports/base.py::_ingest_nowait` throttles its inbox-full warning (first drop,
   then every 100th) instead of logging every single dropped frame under sustained

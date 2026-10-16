@@ -21,13 +21,20 @@
 #   13. Workforce roster lint (.claude/agents)
 #   14. Skills playbook lint — .agents/skills/*/SKILL.md frontmatter, name-vs-dir
 #       agreement, and cited repo-path existence (tools/validate_skills.py)
-#   15. Tool-pin sync — pre-commit revs == pyproject ruff/mypy pins
-#   16. Task-checkbox sync (advisory; warns, never fails the gate)
-#   17. Skills trackable — .gitignore must not re-exclude .agents/skills/
-#   18. Python syntax check (py_compile) — every *.py under packages/,
+#   15. Instruction-file lint — AGENTS.md guides and .claude/rules/*.md: cited
+#       paths, rule rationale, security-control disclosure, hidden Unicode, and
+#       rule `paths:` scoping (tools/validate_agents_docs.py)
+#   16. Tool-pin sync — pre-commit revs == pyproject ruff/mypy pins
+#   17. Task-checkbox sync (advisory; warns, never fails the gate)
+#   18. Skills trackable — .gitignore must not re-exclude .agents/skills/
+#   19. Python syntax check (py_compile) — every *.py under packages/,
 #       flightctl/, tools/, deliverables/ (not deliverables/ alone)
 #
-# Steps 10-17 are the T-2.2b governance gate.
+# Steps 10-18 are the T-2.2b governance gate.
+#
+# NOTE ON NUMBERING: this list collapses the meshsa and jetson pytest runs into a
+# single entry (#9), so it has one fewer entry than the script has `run_step` calls
+# (19 here vs 20 at runtime). Cite a step by NAME, not number.
 #
 # Usage:
 #   bash scripts/validate-pre-pr.sh
@@ -212,6 +219,12 @@ step_skills_lint() {
   python tools/validate_skills.py 2>&1
 }
 
+step_agents_docs() {
+  # Lints the AGENTS.md guides and .claude/rules/*.md the harness loads as trusted
+  # system context. Stdlib-only, so no _require_pyyaml guard is needed.
+  python tools/validate_agents_docs.py 2>&1
+}
+
 step_tool_pins() {
   _require_pyyaml || return 1
   python tools/check_tool_pins.py 2>&1
@@ -283,6 +296,7 @@ run_step "Bind guard"                step_bind_guard
 run_step "Literal guard"             step_literal_guard
 run_step "Workforce roster lint"     step_workforce
 run_step "Skills playbook lint"      step_skills_lint
+run_step "Instruction-file lint"     step_agents_docs
 run_step "Tool-pin sync"             step_tool_pins
 run_step "Task-checkbox sync (advisory)" step_task_sync
 run_step "Skills trackable (.gitignore)" step_skills_tracked

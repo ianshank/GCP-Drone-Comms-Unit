@@ -60,6 +60,25 @@ repos:
         files: "\\.tsx?$"
         types: [file]
 
+  # ── Instruction files ───────────────────────────────────────────────────────
+  # Deliberately the only governance checker here; the other six (bind_guard,
+  # literal_guard, check_tool_pins, check_task_sync, validate_workforce,
+  # validate_skills) run from `make -f tools/Makefile checkers`,
+  # scripts/validate-pre-pr.sh, and the CI `governance` job. This one is also in
+  # all three of those — the local copy exists because these files are loaded as
+  # trusted system context, so catching a dead path or a misspelled `paths:` key at
+  # edit time is worth the ~100ms. It is stdlib-only and `files:`-scoped, so it runs
+  # only when an instruction file is staged. Like every pre-commit hook it is
+  # bypassable with --no-verify; CI is the copy that is not.
+  - repo: local
+    hooks:
+      - id: validate-agents-docs
+        name: instruction-file lint (AGENTS.md, .claude/rules)
+        language: system
+        entry: python tools/validate_agents_docs.py
+        pass_filenames: false
+        files: "(^|/)AGENTS\\.md$|^\\.claude/rules/.*\\.md$"
+
   # ── Python (repo-wide) ──────────────────────────────────────────────────────
   # Revs below must match the ruff/mypy pins in both packages' pyproject [dev] extras —
   # tools/check_tool_pins.py fails CI on a mismatch (code-hygiene-modularity T-2.10).

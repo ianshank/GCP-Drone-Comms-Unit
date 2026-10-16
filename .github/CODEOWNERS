@@ -1,3 +1,28 @@
 # Default owner for every file: review requests route here automatically.
 # Scoped AGENTS.md files govern agent behavior; this file governs human review.
 * @ianshank
+
+# ── Trusted agent context ───────────────────────────────────────────────────────
+# These files are loaded by coding-agent harnesses as *system context*, without
+# inspection, so an edit here changes how every future agent behaves. They are the
+# highest-success prompt-injection entry point in this repository, and no mechanical
+# check can validate the *content* of an instruction — only its shape
+# (tools/validate_agents_docs.py). Human review is the real control.
+#
+# The `* @ianshank` rule above already routes these, so these entries add no new
+# reviewer. They are here to be explicit about which paths carry that weight, and so
+# that adding a second maintainer later cannot accidentally dilute review on this
+# surface while leaving the wildcard intact. Keep them in sync with
+# CONTEXT_SCAN_GLOBS and GUIDE_MANIFEST in tools/validate_agents_docs.py.
+/AGENTS.md                      @ianshank
+**/AGENTS.md                    @ianshank
+/CLAUDE.md                      @ianshank
+**/CLAUDE.md                    @ianshank
+/.claude/rules/                 @ianshank
+/.claude/agents/                @ianshank
+/.claude/governance.yaml        @ianshank
+/.claude/hooks/                 @ianshank
+/.agents/skills/                @ianshank
+/.github/agents/                @ianshank
+/.github/copilot-instructions.md @ianshank
+/.github/CODEOWNERS             @ianshank

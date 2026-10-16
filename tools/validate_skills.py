@@ -28,6 +28,7 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 logger = logging.getLogger("validate_skills")
@@ -56,6 +57,10 @@ _TOKEN_STRIP = "`\"'(),;:"
 #: that is not repo-root-relative — those are intentionally left unchecked
 #: rather than mis-flagged, since only the maintainer's actual package layout
 #: (context this script does not have) could resolve them correctly.
+#:
+#: Shared with ``tools/validate_agents_docs.py``, which resolves the
+#: package-relative shorthand this script cannot (it knows each guide's own
+#: directory, so it can try ``<guide dir>/src/<pkg>/`` as a third base).
 CHECKABLE_PATH_PREFIXES: tuple[str, ...] = (
     "packages/",
     "docs/",
@@ -69,6 +74,12 @@ CHECKABLE_PATH_PREFIXES: tuple[str, ...] = (
     "hardware/",
     "deliverables/",
     "archive/",
+    # Added for the instruction-file linter, which covers guides citing the
+    # TypeScript workspace; no skill cites under these today, so the existing
+    # skill corpus is unaffected.
+    "lib/",
+    "artifacts/",
+    "scripts/",
 )
 #: Bare (slash-free) root filenames worth checking when cited directly.
 CHECKABLE_ROOT_FILES: frozenset[str] = frozenset(
@@ -91,6 +102,102 @@ CHECKABLE_ROOT_FILES: frozenset[str] = frozenset(
 _PLACEHOLDER_CHARS = "*<>{}"
 
 _BACKTICK_SPAN_RE = re.compile(r"`([^`]+)`")
+#: Markdown inline-link targets — `[text](path)`. Skill bodies cite in backticks,
+#: so this is off by default here; the instruction-file linter turns it on,
+#: because guides cite almost exclusively by link.
+_LINK_TARGET_RE = re.compile(r"\]\(([^)\s]+)\)")
+#: Trailing pip extras (`packages/meshsa[dev,meshtastic]`) — a dependency spec,
+#: not a path component.
+_EXTRAS_SUFFIX_RE = re.compile(r"\[[^\]]*\]$")
+#: A symbol or anchor suffix (`module.py::SYMBOL`, `docs/C4.md#level-2`): the
+#: path is everything before it.
+_SYMBOL_SUFFIX_RE = re.compile(r"(?:::|#).*$")
+#: A bare file extension (`.pt`, `.onnx`, `.hef`) cited to name a *format*.
+#: Without this it reads as a dotfile path and is reported missing.
+_BARE_EXTENSION_RE = re.compile(r"^\.[A-Za-z0-9]{1,6}$")
+#: Prefixes marking a token as a URL or an import directive rather than a path.
+_NON_PATH_PREFIXES: tuple[str, ...] = ("http://", "https://", "@")
+
+
+def normalize_path_token(raw: str) -> str:
+    """Reduce a cited token to the bare path it refers to.
+
+    Strips prose punctuation, a trailing symbol/anchor suffix, and a trailing
+    pip-extras group. Each removal is subtractive — it can only turn a token
+    that would have been reported missing into one that resolves — so callers
+    that were green stay green.
+    """
+    token = raw.strip().strip(_TOKEN_STRIP).rstrip(".")
+    token = _SYMBOL_SUFFIX_RE.sub("", token)
+    return _EXTRAS_SUFFIX_RE.sub("", token)
+
+
+def is_path_shaped(token: str) -> bool:
+    """Whether *token* could name a path at all, ignoring where it must live.
+
+    The structural half of :func:`is_checkable_path_token`: rejects template
+    placeholders, URLs, import directives, absolute paths (a leading ``/``
+    marks an HTTP route such as ``/metrics``, not a repo path) and bare file
+    extensions. Split out so a caller that resolves against a different set of
+    base directories can reuse this gate instead of restating it — see
+    ``tools/validate_agents_docs.py``, which also accepts guide-relative
+    citations that are never repo-root-relative.
+    """
+    if not token or any(char in token for char in _PLACEHOLDER_CHARS):
+        return False
+    if token.startswith(_NON_PATH_PREFIXES) or token.startswith("/"):
+        return False
+    return not _BARE_EXTENSION_RE.match(token)
+
+
+def is_checkable_path_token(token: str) -> bool:
+    """Whether *token* looks like a concrete *repo-root-relative* path.
+
+    Path-shaped (:func:`is_path_shaped`) and rooted at a known top-level
+    directory, or a known bare root filename. This is the conservative
+    predicate skill bodies need, since a skill carries no directory context
+    against which a relative citation could be resolved.
+    """
+    if not is_path_shaped(token):
+        return False
+    if "/" in token:
+        return token.startswith(CHECKABLE_PATH_PREFIXES)
+    return token in CHECKABLE_ROOT_FILES
+
+
+#: How a candidate token was written. The distinction is load-bearing for
+#: callers that weigh the two differently: a Markdown link target is a path
+#: claim by construction, whereas a backtick span also holds command names,
+#: signal names and prose, so it needs a stricter predicate.
+ORIGIN_BACKTICK = "backtick"
+ORIGIN_LINK = "link"
+
+
+def iter_raw_path_tokens(
+    text: str, *, include_link_targets: bool = False
+) -> Iterator[tuple[str, str]]:
+    """Yield ``(normalized token, origin)`` for every citation candidate in *text*.
+
+    Unfiltered on purpose: extraction (which regexes find candidates, and how a
+    candidate is normalized) is shared, while the decision about which
+    candidates are worth resolving belongs to the caller that knows what the
+    tokens are relative to. Backtick spans are split on whitespace, because a
+    span often holds a command rather than a single path; link targets are
+    taken whole.
+    """
+    for span in _BACKTICK_SPAN_RE.findall(text):
+        for raw in span.split():
+            yield normalize_path_token(raw), ORIGIN_BACKTICK
+    if include_link_targets:
+        for raw in _LINK_TARGET_RE.findall(text):
+            yield normalize_path_token(raw), ORIGIN_LINK
+
+
+def iter_cited_path_tokens(text: str, *, include_link_targets: bool = False) -> Iterator[str]:
+    """Yield normalized, repo-root-relative path tokens cited in *text*, in order."""
+    for token, _origin in iter_raw_path_tokens(text, include_link_targets=include_link_targets):
+        if is_checkable_path_token(token):
+            yield token
 
 
 def repo_root() -> Path:
@@ -137,13 +244,9 @@ def body_lines(lines: list[str]) -> list[str]:
     return []
 
 
-def _is_checkable_path_token(token: str) -> bool:
-    """Whether *token* looks like a concrete, repo-root-relative path."""
-    if not token or any(char in token for char in _PLACEHOLDER_CHARS):
-        return False
-    if "/" in token:
-        return token.startswith(CHECKABLE_PATH_PREFIXES)
-    return token in CHECKABLE_ROOT_FILES
+#: Backwards-compatible alias: the predicate was private before the extraction
+#: helpers above were shared with ``tools/validate_agents_docs.py``.
+_is_checkable_path_token = is_checkable_path_token
 
 
 def cited_path_findings(body: list[str], root: Path) -> list[str]:
@@ -151,14 +254,12 @@ def cited_path_findings(body: list[str], root: Path) -> list[str]:
     missing: list[str] = []
     seen: set[str] = set()
     for line in body:
-        for span in _BACKTICK_SPAN_RE.findall(line):
-            for raw in span.split():
-                token = raw.strip(_TOKEN_STRIP).rstrip(".")
-                if not _is_checkable_path_token(token) or token in seen:
-                    continue
-                seen.add(token)
-                if not (root / token).exists():
-                    missing.append(token)
+        for token in iter_cited_path_tokens(line):
+            if token in seen:
+                continue
+            seen.add(token)
+            if not (root / token).exists():
+                missing.append(token)
     return missing
 
 

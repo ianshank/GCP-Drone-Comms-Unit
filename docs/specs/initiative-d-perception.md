@@ -97,7 +97,8 @@ from it:
   the health snapshot. It is **never** passed to `_select_target` or `_publish_target`; target
   selection remains "highest-confidence detection (optionally class-filtered)", byte-for-byte
   identical with the tracker enabled or disabled. This is pinned by a regression test (§7).
-- **Fail-safe, never fail-loud.** Unlike the publish path, a tracker `update()` fault is
+- **Fail-safe, never fail-loud.** Unlike the publish path — which tolerates then escalates,
+  re-raising once consecutive failures *exceed* `publish_failure_tolerance` — a tracker `update()` fault is
   **dropped-and-counted** (`dropped_tracks`, throttled log) and the loop continues — the tracker is
   advisory, so a fault must not stop the camera/stream/publish loop. `tracks_active` retains its last
   good value on a fault.

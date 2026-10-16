@@ -6,8 +6,15 @@ Date: 2026-07-08; surface inventory re-derived and corrected 2026-07-31 (see
 [CHARTER_ALIGNMENT_AUDIT_PLAN.md](CHARTER_ALIGNMENT_AUDIT_PLAN.md) Phase D — this file's rows #10/#11
 and two Gap-summary items were stale against commit `fab3ab1`, landed 2026-07-29 after the original
 audit date).
-Scope: every socket-bound or link-bound surface in `packages/meshsa` and
-`packages/jetson_yolo_gcs`, and its actual authentication / encryption posture.
+Scope: **every socket-bound or link-bound surface in the repository**, and its actual
+authentication / encryption posture. Widened 2026-09-25 from the original
+`packages/meshsa` + `packages/jetson_yolo_gcs` scope: the ROADMAP M2 invariant ("no
+unauthenticated surface is exposed by default") is repo-wide, so a `packages/`-only
+inventory could not evidence it. Rows #18–#20 were added by that widening and were never
+previously in scope — they are a **scope gap, not a regression**. Note that
+`tools/claude_hooks/bind_guard.py::SCAN_GLOBS` is Python-only
+(`packages/**/src/**/*.py`, `flightctl/**/*.py`, `tools/**/*.py`), so TypeScript and shell
+listeners are outside its reach and are audited here by inspection only.
 Prerequisite task from [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) Track 0.2 / Track E.3: the
 maintainer's M2-gate clearance for Initiative-C commanding requires this enumeration first. This
 audit **does not clear the gate** — it supplies the evidence the CHARTER §6 decision needs.
@@ -63,21 +70,47 @@ until one lands.
 | 15 | Jetson `LandingTargetBridge` — `mavlink/bridge.py`, `core/config.py::MavlinkSettings.endpoint` | Bidirectional MAVLink | `udpout:127.0.0.1:14550` | **None** (no signing on this leg) | Plaintext UDP | Feature off by default; when on, **safety** fail-closed via heartbeat gate (not an auth control) |
 | 16 | Jetson health listener | — | **Does not exist** (only the gstreamer udpsink; `--health-check` is a CLI self-test) | n/a | n/a | n/a |
 | 17 | Operator console — `ui/app.py`, `ui/config.py` | Inbound listener | `127.0.0.1:8100`, `enabled=False` | Bearer `MESHSA_UI_TOKEN` on `/api/*`; `?token=` gate on `/`; default off, loopback; `/healthz` open. Read-only (`GET` + non-command `POST /api/chat`). XSS-hardened (JSON-encoded injection, `textContent`, no `innerHTML`) | Plaintext HTTP | **Fails closed** (`netauth.validate_bind` inside `build_ui_app`) |
+| 18 | TS API server — `artifacts/api-server/src/index.ts`, `src/app.ts` | Inbound listener | `app.listen(port, cb)` with **no host argument** ⇒ **all interfaces**; `PORT` is required and throws when unset (that gates startup, not exposure) | **None.** `src/middlewares/` holds only `.gitkeep`; `app.use(cors())` is unrestricted-origin. Sole route is `GET /api/healthz` returning `HealthCheckResponse.parse({status:"ok"})` — no data path, no mutation, no DB access despite the `@workspace/db` dependency | Plaintext HTTP | **Fails open.** *Severity context:* the exposed surface is one unauthenticated static health route, and `.replit-artifact/artifact.toml` (`localPort = 8080`, `paths = ["/api"]`) deploys it behind the platform proxy, where an all-interfaces bind **inside the container** is required. Comparable to rows #5/#9's open `/healthz`, not to a data surface |
+| 19 | MAVLink router ingress — `flightctl/scripts/start_all.sh` (`mavp2p` ingress, `MAVP2P_IN_PORT`) | Inbound listener (UDP) | `udps:0.0.0.0:$MAVP2P_IN_PORT`, default **14550** ⇒ **all interfaces** | **None** — unsigned MAVLink ingest. Note this sits two lines below the script's own comment warning that a `0.0.0.0` bind for mavlink2rest *"would be a command-injection vector"*; that reasoning was applied to `M2R_BIND` (loopback default, row #20's sibling) but not to the router's own ingress | Plaintext UDP | **Fails open.** The most serious of #18–#20: anything on the LAN can inject MAVLink into the router, which fans out to the gateway and mavlink2rest |
+| 20 | FreeTAKServer Web UI — `flightctl/scripts/start_all.sh` (`FTS_UI_EXPOSED_IP`) | Inbound listener | `FTS_UI_EXPOSED_IP=0.0.0.0`, port `$FTS_UI_PORT` default **5000** ⇒ **all interfaces** | FreeTAKServer's own UI auth (external to this repo; not verified here). `FTS_UI_WSKEY` is set to the literal placeholder `YourWebsocketKey` in the script | Plaintext HTTP | **Fails open** with respect to this repo's controls — the bind is unconditional, with no `validate_bind` equivalent and no token gate owned here |
 
 ## Gap summary
 
-- **Re-derived fail-open surface count (2026-07-31): 3, and only 1 of those is an actual
-  `bind_guard`-scoped listener gap.** A naive `grep -ci 'fails open'` over this file returns 6
-  (the session-start banner's figure): 3 surface-inventory rows plus 3 Gap-summary prose lines,
-  including the quoted grep command itself; after correcting rows #10/#11
-  above, the surface-inventory table has 3 rows still saying "fails open": #1 `TakTcpTransport`, #2
-  `TakMulticastTransport`, #4 `MeshtasticTransport`. Of those, only **#2** is actually in
-  `bind_guard`'s scope (a listener that calls `.bind()`) and is a declared, still-valid governance
-  exception (`.claude/governance.yaml::bind_guard.exceptions`, "multicast CoT binds all interfaces —
-  inherent to the protocol"). **#1 and #4 are not listeners at all** — #1 is an outbound TLS client
-  connection and #4 is serial/BLE or an outbound `TCPInterface` connect — so their "fails open"
-  language describes plaintext/PSK-not-enforced *encryption* posture, not a `bind_guard` gap; neither
-  is scanned by `bind_guard` by construction. No new bind surface has appeared since 2026-07-08.
+- **Re-derived fail-open surface count (2026-09-25): 6 rows, of which 4 are genuine
+  unauthenticated inbound listeners.** The authoritative figure is the **6 surface-inventory
+  rows** whose Fail-closed column reads "fails open".
+  - **The session-start banner's number is always larger and is not a surface count.**
+    `.claude/hooks/session-start.sh` runs `grep -ci 'fails open'` over this file, so it also
+    counts every prose mention — including the sentence you are reading. That makes the total
+    self-referential: editing this bullet changes it. Do **not** write the banner's number into
+    this document, which is how the previous version of this bullet came to assert 6 while the
+    banner printed 9. Compare row counts, not grep counts.
+  The 6 rows are #1 `TakTcpTransport`, #2
+  `TakMulticastTransport`, #4 `MeshtasticTransport`, and the three added when this document's
+  scope widened to the whole repository — #18 TS API server, #19 mavp2p ingress, #20
+  FreeTAKServer Web UI.
+  - **#1 and #4 are not listeners at all** — #1 is an outbound TLS client connection and #4 is
+    serial/BLE or an outbound `TCPInterface` connect — so their "fails open" language describes
+    plaintext/PSK-not-enforced *encryption* posture, not a bind gap. Neither is scanned by
+    `bind_guard` by construction.
+  - **#2** is a listener, in `bind_guard`'s scope, and a declared still-valid governance
+    exception (`.claude/governance.yaml::bind_guard.exceptions`, "multicast CoT binds all
+    interfaces — inherent to the protocol").
+  - **#18, #19 and #20 are unauthenticated inbound listeners on all interfaces, and none of
+    them has ever been in any mechanical control's scope**, because `bind_guard::SCAN_GLOBS` is
+    Python-only (`packages/**/src/**/*.py`, `flightctl/**/*.py`, `tools/**/*.py`) and these are
+    TypeScript and shell. That scope mismatch — not any single omission — is why they went
+    unrecorded. **#19 is the serious one**: unsigned MAVLink ingest on `0.0.0.0`, two lines
+    below the same script's comment warning that a `0.0.0.0` bind "would be a command-injection
+    vector". **#18 is the mildest**: one static `GET /api/healthz`, no data path, and its
+    `.replit-artifact/artifact.toml` deploys it behind a platform proxy where an
+    all-interfaces bind *inside* the container is required.
+  - These three are **recorded, not remediated.** Recording a surface is not authenticating it.
+    See the follow-up backlog.
+  - Superseded statement, kept so the change is auditable: this bullet previously read
+    "3 [rows], and only 1 … is an actual `bind_guard`-scoped listener gap … No new bind surface
+    has appeared since 2026-07-08." That was true of the old two-package scope and is false
+    under the repo-wide scope declared above.
 - **`/healthz`+`/metrics` was the one fail-open HTTP surface — fixed on this branch.** Every other
   HTTP surface routed through `netauth.validate_bind`; `serve_healthz` did not, and its host is
   operator-overridable off-loopback (`MESHSA_HEALTH_HOST`), exposing `/metrics` (router/transport/
@@ -108,8 +141,10 @@ until one lands.
 ## What is done well
 
 - One audited primitive (`netauth.py`) with constant-time bearer comparison
-  (`netauth.py::authorize`) and consistent fail-closed bind validation, now shared by all five
-  HTTP surfaces.
+  (`netauth.py::authorize`) and consistent fail-closed bind validation, shared by all five
+  **`packages/meshsa` Python** HTTP surfaces. Scoped deliberately: rows #18 and #20 are HTTP
+  surfaces outside that set — TypeScript and FreeTAKServer respectively — and neither routes
+  through `netauth`, so "all HTTP surfaces" would be false under this document's repo-wide scope.
 - Service defaults (ports, hosts, queue/backoff, endpoint) are single-sourced in
   `meshsa/defaults.py` as of `code-hygiene-modularity` T-3.5a, with pinned-value tests
   (`tests/test_defaults.py`) asserting every default in this inventory is numerically unchanged
@@ -125,7 +160,11 @@ until one lands.
 ## Verdict for the maintainer (CHARTER §6 M2 gate)
 
 M2's transport-encryption building block (TAK mutual TLS) exists, and per-endpoint HTTP auth now
-exists and **fails closed on all five HTTP surfaces**. But this is **per-surface** auth, **not
+exists and **fails closed on all five `packages/meshsa` HTTP surfaces** — but not on the two
+HTTP surfaces outside that package that this document's widened scope brought in (#18 TS API
+server, #20 FreeTAKServer Web UI), neither of which routes through `netauth`. Further, three
+unauthenticated all-interfaces listeners (#18, #19, #20) sit outside every mechanical control,
+because `bind_guard` scans Python only. But this is **per-surface** auth, **not
 transport-wide endpoint authentication**: the wire transports (Meshtastic, MAVLink/MSP/CRSF ingest,
 detection UDP, TAK multicast, Jetson RTP/MAVLink) carry no endpoint auth, and encryption is
 plaintext-by-default outside opt-in TAK TLS. The CHARTER §3 commanding carve-out requires that "no
@@ -145,3 +184,18 @@ satisfies §3, or whether transport-wide auth is required first.
    **Done** (commit `fab3ab1`, 2026-07-29 — `detection_ingest` moved to `8097`).
 4. Document that all HTTP + MAVLink/RTP surfaces are plaintext by default; TAK TLS (`:8089`) is the
    only wired-in transport encryption.
+5. **Bind mavp2p's ingress to loopback, or authenticate it (#19).** `udps:0.0.0.0:14550` accepts
+   unsigned MAVLink from any interface. Highest-severity item in this list: it is the command
+   path's ingress, and the same script's own comment calls a `0.0.0.0` bind for the sibling
+   service "a command-injection vector". Needs its own change — a bind narrowing here alters
+   the bring-up contract described at `flightctl/scripts/start_all.sh` lines 9-13.
+6. **Narrow `FTS_UI_EXPOSED_IP` from `0.0.0.0` (#20), or document the deployment as
+   trusted-network-only.** Note `FTS_UI_WSKEY` ships as the literal placeholder
+   `YourWebsocketKey`.
+7. **Decide the `artifacts/api-server` posture (#18).** The all-interfaces bind is *required*
+   inside its container by the Replit platform proxy, so the fix is not a host argument — it is
+   deciding whether that deployment model is in M2's scope at all, and recording the answer.
+8. **Extend `bind_guard` beyond Python, or state that TypeScript and shell listeners are
+   review-only.** `SCAN_GLOBS` is Python-only, which is the structural reason #18-#20 were
+   never surfaced. Until one or the other happens, every non-Python listener in this repository
+   depends entirely on a human noticing it.

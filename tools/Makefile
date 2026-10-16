@@ -30,7 +30,8 @@ help:
 	@echo "  type-all     - type + type-jetson"
 	@echo "  checkers     - run all deterministic governance checkers (bind_guard,"
 	@echo "                 literal_guard, check_tool_pins, check_task_sync,"
-	@echo "                 validate_workforce, validate_skills)"
+	@echo "                 validate_workforce, validate_skills,"
+	@echo "                 validate_agents_docs)"
 
 install:
 	$(PY) -m pip install -e $(MESHSA)
@@ -85,6 +86,7 @@ checkers:
 	$(PY) tools/check_task_sync.py
 	$(PY) tools/validate_workforce.py
 	$(PY) tools/validate_skills.py
+	$(PY) tools/validate_agents_docs.py
 
 clean:
 	rm -rf $(MESHSA)/build $(MESHSA)/dist $(MESHSA)/*.egg-info
