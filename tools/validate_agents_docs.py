@@ -226,6 +226,14 @@ RULES_KEY_NEAR_MISSES: tuple[str, ...] = ("path", "globs", "glob", "appliesto", 
 #: Frontmatter fence.
 FRONTMATTER_FENCE = "---"
 
+#: Rules that deliberately carry no ``paths:`` scope and so load in every session,
+#: keyed by repo-relative path with the reason as the value. An ambient rule is a
+#: legitimate choice — it is how a rule becomes always-on context, the same priority as
+#: ``.claude/CLAUDE.md`` — but it widens the always-on surface this change exists to keep
+#: narrow, so it has to be a stated decision rather than an omission. An entry with an
+#: empty rationale is itself a finding, as with the other two exception tables.
+AMBIENT_RULE_EXCEPTIONS: dict[str, str] = {}
+
 #: Glob patterns a rule may declare that match nothing today, keyed by the rule's
 #: repo-relative path, with the reason as the value. Forward-looking coverage is a
 #: legitimate choice; it just has to be a stated one, because a pattern matching nothing
@@ -683,10 +691,15 @@ def check_rule_frontmatter(rel_path: str, lines: list[str]) -> list[str]:
     whereas a misspelled key looks like scoping and is not.
     """
     if not lines or lines[0].strip() != FRONTMATTER_FENCE:
+        if rel_path in AMBIENT_RULE_EXCEPTIONS:
+            if not AMBIENT_RULE_EXCEPTIONS[rel_path].strip():
+                return [f"{rel_path}: ambient-rule exception has an empty rationale"]
+            logger.debug("%s: declared ambient rule, no scope expected", rel_path)
+            return []
         return [
             f"{rel_path}: no frontmatter block, so this rule loads in every session. "
-            f"Add '{RULES_FRONTMATTER_KEY}:' to scope it, or state in-file that it is "
-            "deliberately ambient"
+            f"Add a '{RULES_FRONTMATTER_KEY}:' key to scope it, or declare it in "
+            "AMBIENT_RULE_EXCEPTIONS with a reason if it is meant to be always-on"
         ]
     try:
         close = lines.index(FRONTMATTER_FENCE, 1)
@@ -702,6 +715,12 @@ def check_rule_frontmatter(rel_path: str, lines: list[str]) -> list[str]:
         if ":" in line and not line.startswith((" ", "\t", "-"))
     }
     if RULES_FRONTMATTER_KEY in keys:
+        if not rule_globs(lines):
+            return [
+                f"{rel_path}: '{RULES_FRONTMATTER_KEY}' is declared but parses to no "
+                "pattern, so the rule has no effective scope — it is neither path-scoped "
+                "nor a declared ambient rule, and nothing else reports that"
+            ]
         return []
     near = sorted(keys.intersection(RULES_KEY_NEAR_MISSES))
     if near:

@@ -487,6 +487,29 @@ def test_rule_with_paths_key_passes() -> None:
     assert check_rule_frontmatter("r.md", ["---", "paths:", "  - 'src/**'", "---"]) == []
 
 
+def test_rule_with_empty_paths_key_is_flagged() -> None:
+    """`paths:` with nothing under it leaves the rule with no effective scope.
+
+    It is neither path-scoped nor a declared ambient rule, and the scope check below
+    cannot see it either — there are no patterns to call dead.
+    """
+    findings = check_rule_frontmatter("r.md", ["---", "paths:", "---"])
+    assert len(findings) == 1
+    assert "no effective scope" in findings[0]
+
+
+def test_declared_ambient_rule_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A rule may be deliberately always-on, but it has to say so."""
+    monkeypatch.setattr(vad, "AMBIENT_RULE_EXCEPTIONS", {"r.md": "always-on by design"})
+    assert check_rule_frontmatter("r.md", ["## Rules", "- a — why: b"]) == []
+
+
+def test_ambient_rule_exception_requires_a_rationale(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(vad, "AMBIENT_RULE_EXCEPTIONS", {"r.md": "  "})
+    findings = check_rule_frontmatter("r.md", ["## Rules", "- a — why: b"])
+    assert findings == ["r.md: ambient-rule exception has an empty rationale"]
+
+
 # ---- check 9: rule scope actually matches -----------------------------------
 
 
