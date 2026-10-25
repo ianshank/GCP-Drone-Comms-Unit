@@ -28,6 +28,26 @@
       hook denies writes there while `c_gate_met` is `false`, and the correct default is itself the
       open question for the second one.
 
+## Code quality & tech-debt reflection (2026-10-25)
+> A measured, whole-tree reflection pass taken before the next feature step:
+> [CODE_QUALITY_TECH_DEBT_PLAN.md](CODE_QUALITY_TECH_DEBT_PLAN.md). It re-prioritizes the open
+> half of the `code-hygiene-modularity` bundle below and adds what that bundle does not cover:
+> the dependabot pin triple that keeps ruff/mypy PRs red by design, the missing TypeScript CI
+> job (T-2.3b's deferral reason is gone), a complexity ratchet, the `defaults.py` adoption gap,
+> confirmed dead code, and the `docs/` reorganization. Phase 0 is CI-only and behavior-free.
+
+- [ ] **Phase 0 — make CI/CD honest** (P0-1…P0-8: grouped dependabot updates, merge the ten
+      green dependabot PRs, `ts` CI job, `tools/` coverage floor, Python 3.13, cut `v0.3.0`,
+      shell credential defaults).
+- [ ] **Phase 1 — guardrails** (P1-1…P1-6: ruff `C90`/`PLR09xx` ratchet, advisory vulture,
+      docs path check, pragma reasons, pytest markers, Python constraints file).
+- [ ] **Phase 2 — foundations, then the god functions** (= T-3.1/T-3.2/T-3.5/T-4.4/T-4.5 plus
+      transport `*Options` models and the `validate_agents_docs.py` split).
+- [ ] **Phase 3 — config sweep, dead code, docs organization** (incl. T-2.3b).
+- [ ] **Phase 4 — `meshsa_core`** (T-7) once a release exists.
+- [ ] **Maintainer decisions** — that plan's §7 (six items; the A1 option and the `v0.3.0`
+      cut gate Phase 0).
+
 ## Code hygiene & modularity program (`code-hygiene-modularity` branch)
 > Repo-wide gap analysis + hardening pass: gates that didn't gate (pre-commit scoped to ~2% of
 > tracked Python files), security-relevant duplication drift across four aiohttp auth scaffolds,
