@@ -60,9 +60,9 @@ release). None of it is risky to fix; most of it is a few focused PRs each.
 
 | Kind | Count | CI | Why |
 | ---- | ----- | -- | --- |
-| `pip` ruff / mypy bumps (#67, #68, #71, #72) | 4 | **red** | `tools/check_tool_pins.py` requires the pin to agree across **three** files (`packages/meshsa/pyproject.toml`, `packages/jetson_yolo_gcs/pyproject.toml`, `.pre-commit-config.yaml`); dependabot moves one. The `dependabot.yml` comment says the pair "lands green once merged as a pair" — it is a **triple**, and no single PR can ever be green. |
+| ruff / mypy pin bumps — `pip` (#67, #68, #71, #72) and `pre-commit` (#50, #51) | 6 | **red** | `tools/check_tool_pins.py` requires the pin to agree across **three** files (`packages/meshsa/pyproject.toml`, `packages/jetson_yolo_gcs/pyproject.toml`, `.pre-commit-config.yaml`); dependabot moves one. The `dependabot.yml` comment says the pair "lands green once merged as a pair" — it is a **triple**, and no single PR can ever be green. Dependabot names the pre-commit side by full repository URL (`https://github.com/astral-sh/ruff-pre-commit`, `https://github.com/pre-commit/mirrors-mypy`), which matters for P0-1's `patterns:`. |
 | `github-actions` majors (#37, #38, #40, #39, #48) | 5 | green | Unmerged since August; every CI log now carries the "Node.js 20 is deprecated … forced to run on Node.js 24" warning these fix. |
-| `pre-commit` revs (#41, #43, #45, #50, #51) | 5 | green | #43 (gitleaks 8.21.2 → 8.30.1) is green only because nothing checks the pre-commit rev against the CI `GITLEAKS_VERSION`/`GITLEAKS_SHA256` — a known trap, now with a live example. |
+| other `pre-commit` revs (#41, #43, #45) | 3 | green | #43 (gitleaks 8.21.2 → 8.30.1) is green only because nothing checks the pre-commit rev against the CI `GITLEAKS_VERSION`/`GITLEAKS_SHA256` — a known trap, now with a live example. |
 | structlog range widening (#42, #44) | 2 | — | stale since 2026-08-15 |
 
 ### 1.3 Size and shape
@@ -93,9 +93,11 @@ release). None of it is risky to fix; most of it is a few focused PRs each.
 | 19 functions total over 6 args; 8 over complexity 10; 33 findings in all | | |
 
 Four of the five aiohttp app factories (`ui/app.py`, `scout/station/app.py`, `llm/server.py`,
-`health.py`, plus `flightctl/run_commander.py`) each re-implement bearer-auth + bind-guard +
-route wiring — the duplication T-3.1's `_web.py` was specified to remove, and the reason three
-of the top-four complexity scores are `build_*app` functions.
+`health.py`, plus `flightctl/run_commander.py`) each re-implement bearer-auth, token
+normalization, error responses and route wiring — the duplication T-3.1's `_web.py` (design
+D-5) was specified to remove, and the reason three of the top-four complexity scores are
+`build_*app` functions. The per-service `validate_bind` adapters are **not** part of that
+duplication: `bind_guard` recognizes exactly that shape (design D-4), so they stay.
 
 ### 1.5 Environment trap found this pass
 
@@ -127,7 +129,7 @@ item **P0-6** adds 3.13 to the matrix and records the trap.
   vitest and the api-server build locally; CI never does. T-2.3b deferred this "pending a
   Node/pnpm toolchain in the working environment" — that toolchain exists now (this pass ran
   all four green with `pnpm 10.28 / node 22`), so the deferral reason is gone.
-- **A3. Stale green dependabot PRs.** Five actions majors and five pre-commit revs are green
+- **A3. Stale green dependabot PRs.** Five actions majors and three pre-commit revs are green
   and unmerged for two months. Merging the actions set also clears the Node 20 deprecation
   warning on every job.
 - **A4. gitleaks version is pinned in two places with no sync check** (`.pre-commit-config.yaml`
@@ -175,9 +177,11 @@ left is **function-level**, and it clusters in three shapes:
 
 `meshsa/defaults.py` is the right pattern (leaf module, port table, separate loopback/target
 constants with the rationale recorded) and `literal_guard` enforces ports, hosts, queue/backoff
-names and MAVLink endpoints with four declared waivers. The gap is adoption: the module's own
-docstring says the queue/backoff/endpoint constants "are sourced here now but only swept into
-their ~15 call sites in T-3.5". The config-guardian sweep run for this plan found:
+names and MAVLink endpoints with four declared waivers. Adoption of the queue/backoff/endpoint/
+port/host constants **shipped in T-3.5a** (13 sites; every transport constructor now defaults
+from `defaults.py`) — the module's own docstring still says they are "only swept into their
+~15 call sites in T-3.5", which is stale and is itself a P3-1 fix. The residual gap is the
+classes of literal the sweep did not cover. The config-guardian sweep run for this plan found:
 
 **C1. Credential defaults in shell (tightening only, highest priority).**
 - `ops/pi5-node/setup_pi5_node.sh:27` — `AP_PSK="change-me-please"` is written verbatim into
@@ -220,7 +224,7 @@ The Meshtastic `PRIVATE_APP` portnum `256` appears in `meshtastic_radio.py:105`,
 and `base.env.example:6`; `literal_guard`'s `ports` rule cannot see it because it is not a
 `PORT_*` name — `defaults.DEFAULT_MESHTASTIC_PORTNUM` closes that.
 
-**C5. Timing defaults not single-sourced (the T-3.5 bucket).** The source-transport trio
+**C5. Timing defaults not single-sourced (outside T-3.5a's scope; P3-1).** The source-transport trio
 `join_timeout_s / log_every_n / log_interval_s` (`polling_source.py:60-63`,
 `msp_source.py:78-82`), `poll_interval_s=1.0` (`crsf_source.py:74`), `recv_timeout_s=1.0`
 (`mavlink_source.py:83`), and `tak.py:196-198` (`pacing_rate_hz=10.0`, `pacing_burst=1`,
@@ -292,7 +296,7 @@ carve-out set (`ArmGuard.update_health`/`latched`, `crsf/rc.py` `ticks_to_us`/`u
 
 | Pair | What | Fix |
 | ---- | ---- | --- |
-| `llm/server.py:103`, `ui/app.py:51`, `scout/station/app.py:35` | three identical 2-arg `validate_bind(host, token)` wrappers differing only in `service`/`remedy` strings | `netauth.make_bind_validator(service, remedy)`; folds into P2-1 |
+| `llm/server.py:103`, `ui/app.py:51`, `scout/station/app.py:35` | three near-identical 2-arg `validate_bind(host, token)` wrappers differing only in `service`/`remedy` strings | **Keep.** This is the shape `bind_guard` recognizes (design D-4): a `def validate_bind` outside `netauth` must delegate to the canonical symbol, and a listener file must call an imported `validate_bind` alias. A factory-produced callable would fail the checker. Only the `service`/`remedy` strings are candidates for `_web.py`'s `ServiceAuth` (D-5) |
 | `cv/geo.py:27` ↔ `scout/survey.py:24` | `_EARTH_R_M` twice **inside meshsa** | `defaults.py` (C7) |
 | `.github/workflows/ci.yml:81-91` ↔ `:149-159` (+ an awk variant at `:207`) | coverage-summary heredoc duplicated per job | `tools/coverage_summary.py <name> <gate>`; the `tools/` floor (P0-5) then uses it too |
 | `tools/check_task_sync.py:50-99` ↔ `tools/validate_agents_docs.py:284-328` | same `subprocess.run(["git", …])` boilerplate ×5 with repeated `# noqa: S603` | `tools/_git.py::git_lines(root, *args)`; lands with P2-6 |
@@ -405,18 +409,18 @@ Sizing: **S** = one PR under ~200 lines, **M** = one PR, a day, **L** = several 
 delta. Every code item carries the standing rules: security-reviewer on anything under
 `packages/`, test-engineer first, unchanged public facade, coverage floors untouched.
 
-### Phase 0 — Make CI/CD honest (≈1 week, all S/M, no behavior change)
+### Phase 0 — Make CI/CD honest (≈1 week, all S/M; no behavior change except P0-8)
 
 | ID | Item | Theme | Size | Acceptance |
 | -- | ---- | ----- | ---- | ---------- |
-| **P0-1** | `dependabot.yml`: `multi-ecosystem-groups` `python-tooling` spanning `/packages/meshsa`, `/packages/jetson_yolo_gcs` (pip) and `/` (pre-commit) with `patterns: [ruff, mypy, ruff-pre-commit, mirrors-mypy]`; close #67/#68/#71/#72 and let the grouped PR regenerate | A1 | S | next ruff bump arrives as **one** green PR; `check_tool_pins.py` unchanged |
-| **P0-2** | Merge the five green actions PRs (#37, #38, #39, #40, #48) and five pre-commit PRs (#41, #43, #45, #50, #51); bump CI `GITLEAKS_VERSION`/`SHA256` to match #43 | A3, A4 | S | zero "Node.js 20 deprecated" warnings in a CI log |
+| **P0-1** | `dependabot.yml`: `multi-ecosystem-groups` `python-tooling` spanning `/packages/meshsa`, `/packages/jetson_yolo_gcs` (pip, `patterns: [ruff, mypy]`) and `/` (pre-commit, `patterns: ["https://github.com/astral-sh/ruff-pre-commit", "https://github.com/pre-commit/mirrors-mypy"]` — dependabot names pre-commit hooks by full repository URL, so a bare `ruff-pre-commit` pattern matches nothing); close #67/#68/#71/#72/#50/#51 **only after** the grouped PR has appeared | A1 | S | next ruff bump arrives as **one** green PR touching all three files; `check_tool_pins.py` unchanged |
+| **P0-2** | Merge the five green actions PRs (#37, #38, #39, #40, #48) and the three green pre-commit PRs (#41, #43, #45); bump CI `GITLEAKS_VERSION`/`SHA256` to match #43 | A3, A4 | S | zero "Node.js 20 deprecated" warnings in a CI log |
 | **P0-3** | `check_tool_pins.py::TOOLS` gains `gitleaks` (pre-commit `rev` ↔ `ci.yml` env) and `pydantic`/`pyyaml`/`pytest` (CI governance install ↔ pre-commit `additional_dependencies`) | A4 | S | the test `test_real_repo_is_in_sync` covers five tools; a mutation on `GITLEAKS_VERSION` fails it |
 | **P0-4** | **`ts` CI job**: `pnpm/action-setup` (version from a new `packageManager` field) + `actions/setup-node` with `cache: pnpm`, `pnpm install --frozen-lockfile`, lib build, typecheck, lint, test, api-server build; `concurrency` and `timeout-minutes` like the others; add to CONTRIBUTING's required-checks list | A2, A8 | M | job green on this branch; `validate-pre-pr.sh` header says CI runs steps 1–4 |
 | **P0-5** | `tools/` coverage floor `--cov-fail-under=90` in the governance job (measured 95–96) | A5, G4 | S | floor in CI; `ci.yml` comment updated |
 | **P0-6** | Python 3.13 in both matrices + classifiers; `mypy.ini` keeps `python_version = 3.10`; AGENTS.md trap entry for the 3.13/numpy-stub behavior | A6 | S | 3.13 green or a documented skip with the failing module named |
 | **P0-7** | Cut **`v0.3.0`**: move `[Unreleased]` into a dated section, tag, let `release.yml` build (PyPI step is already token-gated and will no-op) | A7 | S | tag exists; CHANGELOG `[Unreleased]` is empty |
-| **P0-8** | Credential defaults in shell (C1): `AP_PSK` becomes required, `FTH_FTS_API_Auth` loses its fallback; audit rows for C1 and the three unrecorded all-interfaces surfaces (C2) — **bind-auditor** on the diff | C1, C2, E1 | S | an unedited `setup_pi5_node.sh` run fails before touching hostapd; `AUDIT_M2_AUTH.md` inventory gains five rows |
+| **P0-8** | **Operator-visible credential hardening** (C1): `AP_PSK` becomes required, `FTH_FTS_API_Auth` loses its fallback — an existing provisioning run that relied on either published default now fails fast (`setup_pi5_node.sh`) or skips the WebMap step (`start_all.sh`) until the operator sets the variable; audit rows for C1 and the three unrecorded all-interfaces surfaces (C2) — **bind-auditor** on the diff | C1, C2, E1 | S | an unedited `setup_pi5_node.sh` run fails before touching hostapd; `AUDIT_M2_AUTH.md` inventory gains five rows; CHANGELOG `### Changed` entry under operator-visible changes; the two variables documented in `ops/pi5-node/README_pi5_node.md` and `flightctl/README.md` |
 
 ### Phase 1 — Guardrails before refactoring (≈1 week)
 
@@ -435,11 +439,11 @@ Order matters: the foundations remove the duplication that *is* the complexity.
 
 | ID | Item | Theme | Bundle | Size | Acceptance |
 | -- | ---- | ----- | ------ | ---- | ---------- |
-| **P2-1** | `meshsa/_web.py`: `bearer_auth_middleware`, `validate_and_bind`, `no_store_headers`, route-table helper; characterization tests first (route/status/header pins for all four apps), then migrate `health.py`, `llm/server.py`, `scout/station/app.py`, `ui/app.py` | B1, A | T-3.1 | L | `build_ui_app` complexity ≤ 12; auth matrix tests unchanged and green; `bind_guard` exceptions list unchanged |
-| **P2-2** | `meshsa/_envconfig.py`: declarative `EnvPrefix` → model mapper with typed coercion + `warn_deprecated` hook; migrate `NodeConfig.from_env`, `fpv/config.py`, `ui/config.py`, `llm/server.py`, `scout/cli.py`; Hypothesis property: `from_env(to_env(cfg)) == cfg` | B2, G3 | T-3.2 | L | `from_env` ≤ 30 lines; nine `os.environ` sites → one helper; every `MESHSA_*` var still parsed (golden env-var inventory test) |
+| **P2-1** | `meshsa/_web.py` per design D-5 — HTTP/auth/response helpers only (`ServiceAuth`, `normalize_token`, `unauthorized`, `bearer_auth_middleware`, `no_store_headers`, route-table helper); the per-service `validate_bind` adapters stay as the direct-delegating shape `bind_guard` recognizes (D-4); characterization tests first (route/status/header pins for all four apps), then migrate `health.py`, `llm/server.py`, `scout/station/app.py`, `ui/app.py` | B1, A | T-3.1 | L | `build_ui_app` complexity ≤ 12; auth matrix tests unchanged and green; `bind_guard` clean with its exceptions list unchanged |
+| **P2-2** | `meshsa/_envconfig.py`: declarative `EnvPrefix` → model mapper with typed coercion + `warn_deprecated` hook; migrate `NodeConfig.from_env`, `fpv/config.py`, `ui/config.py`, `llm/server.py`, `scout/cli.py`; Hypothesis property: `from_env(to_env(cfg)) == cfg` | B2, G3 | T-3.2 | L | `from_env` ≤ 30 lines; the **seven eligible** `os.environ` sites (Appendix B) → one helper, with `command/config.py` and `run_commander.py` explicitly deferred to T-8.8 while `c_gate_met` is false; every `MESHSA_*` var still parsed (golden env-var inventory test) |
 | **P2-3** | `cot.py`: `_CotNaming` + module-level `encode_*`/`decode_*` behind the `CotCodec` facade; property round-trip extended to richer detail | B3, G3 | T-4.4 | M | `decode` ≤ 10 complexity; golden snapshot files unchanged |
 | **P2-4** | Transport `*Options` models (`TakTcpOptions`, `MeshtasticOptions`, `MspOptions`, `MavlinkSourceOptions`) accepted alongside keywords (additive); registry factories pass the model | B4, F1 | new (T-4.2b pattern) | M | `__init__` arity ≤ 6 on the four transports; existing keyword call sites untouched and tested |
-| **P2-5** | `_queues.py` `BoundedDropQueue` adopted in `flight_logger.py`, `inference/service.py` offline queue, `ui/snapshot.py`; `defaults.DEFAULT_QUEUE_MAXSIZE`/backoff constants swept into the ~15 call sites | C, D | T-3.5 | M | `literal_guard` scope widened to the swept names; zero new waivers |
+| **P2-5** | `_queues.py` `BoundedDropQueue` adopted in `flight_logger.py`, `inference/service.py` offline queue, `ui/snapshot.py` (T-3.5a's constant sweep is already done; the C5 timing literals are P3-1's, not this item's) | D | T-3.5b | M | three drop-and-count queues share one implementation; drop counters byte-identical in existing tests; zero new `literal_guard` waivers |
 | **P2-6** | `tools/agents_docs/` package split of `validate_agents_docs.py` (+ its tests) by check family; same CLI entry point | B5 | new | M | no file in `tools/` over 400 lines; checker output byte-identical on the current tree |
 | **P2-7** | jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies; `Pipeline` takes a `PipelineDeps` object | B6 | T-4.5 | M | body-FRD wire output byte-identical (existing pin); arity ≤ 6 |
 
@@ -476,12 +480,12 @@ Order matters: the foundations remove the duplication that *is* the complexity.
 
 | Metric | Today | Target (end of Phase 3) |
 | ------ | ----- | ----------------------- |
-| Open dependabot PRs red by design | 4 | 0 (grouped) |
+| Open dependabot PRs red by design | 6 | 0 (grouped) |
 | CI jobs covering the TS workspace | 0 | 1 required check |
 | Functions over McCabe 10 | 8 | ≤ 2 (the frozen `run_commander.build_app` + one named exception) |
 | Functions over 6 args | 19 | ≤ 6 |
 | Largest file (any language) | 901 lines | ≤ 450 |
-| `os.environ` parsing sites | 9 | 1 helper + `_envconfig` declarations |
+| `os.environ` parsing sites | 9 | 1 helper + `_envconfig` declarations on the 7 eligible sites; the 2 frozen sites wait for T-8.8 |
 | aiohttp app factories re-implementing auth/bind | 4 | 0 (one `_web.py`) |
 | `tools/` coverage floor | none | 90 → 95 |
 | Python versions in CI | 3 | 4 (3.10–3.13) |
@@ -514,9 +518,11 @@ Phase 0 (CI honest)  ──►  Phase 1 (guardrails)  ──►  Phase 2 (founda
                                       Phase 3 (sweep, dead code, docs)  ──►  Phase 4 (meshsa_core)
 ```
 
-- Phases 0 and 1 are **zero-behavior-change** and can land in any order within the phase; they
-  go first because P1-1's ratchet is what proves Phase 2 actually reduced complexity rather than
-  moved it.
+- Phases 0 and 1 are **zero-behavior-change with one exception** — P0-8 is operator-visible
+  credential hardening (a provisioning run that relied on a published default now fails fast
+  or skips a step until the variable is set) and ships with its own CHANGELOG and runbook
+  lines. Within a phase, items can land in any order; the phases go first because P1-1's
+  ratchet is what proves Phase 2 actually reduced complexity rather than moved it.
 - Phase 2 is ordered P2-1 → P2-2 → P2-3 because `_web.py` and `_envconfig.py` are what the
   `build_*app` and `from_env` functions decompose *into*; doing the splits first would produce
   four private copies of each.
@@ -525,8 +531,10 @@ Phase 0 (CI honest)  ──►  Phase 1 (guardrails)  ──►  Phase 2 (founda
   `from_env` reads (grep + a fixture), assert the new mapper reads exactly that set, and run the
   Hypothesis round-trip. If that test is not written first, do not start P2-2.
 - Nothing in Phases 0–3 changes the wire schema, a default port, a bind host, or a public
-  constructor signature (new `*Options` are additive). Backward compatibility is by construction,
-  and `CHANGELOG.md` gets one `### Changed` line per phase, not per PR.
+  constructor signature (new `*Options` are additive); the one operator-visible change is
+  P0-8's removal of two credential defaults. Backward compatibility is otherwise by
+  construction, and `CHANGELOG.md` gets one `### Changed` line per phase (plus P0-8's own),
+  not per PR.
 
 ---
 

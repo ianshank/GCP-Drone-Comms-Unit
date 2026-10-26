@@ -34,11 +34,12 @@
 > half of the `code-hygiene-modularity` bundle below and adds what that bundle does not cover:
 > the dependabot pin triple that keeps ruff/mypy PRs red by design, the missing TypeScript CI
 > job (T-2.3b's deferral reason is gone), a complexity ratchet, the `defaults.py` adoption gap,
-> confirmed dead code, and the `docs/` reorganization. Phase 0 is CI-only and behavior-free.
+> confirmed dead code, and the `docs/` reorganization. Phase 0 is CI-only and behavior-free
+> except P0-8, which is operator-visible credential hardening (two shell defaults removed).
 
-- [ ] **Phase 0 — make CI/CD honest** (P0-1…P0-8: grouped dependabot updates, merge the ten
-      green dependabot PRs, `ts` CI job, `tools/` coverage floor, Python 3.13, cut `v0.3.0`,
-      shell credential defaults).
+- [ ] **Phase 0 — make CI/CD honest** (P0-1…P0-8: grouped dependabot updates covering all
+      six red ruff/mypy pin PRs, merge the eight green dependabot PRs, `ts` CI job, `tools/`
+      coverage floor, Python 3.13, cut `v0.3.0`, shell credential defaults — operator-visible).
 - [ ] **Phase 1 — guardrails** (P1-1…P1-6: ruff `C90`/`PLR09xx` ratchet, advisory vulture,
       docs path check, pragma reasons, pytest markers, Python constraints file).
 - [ ] **Phase 2 — foundations, then the god functions** (= T-3.1/T-3.2/T-3.5/T-4.4/T-4.5 plus
