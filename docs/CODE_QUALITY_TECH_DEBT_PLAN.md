@@ -422,6 +422,11 @@ delta. Every code item carries the standing rules: security-reviewer on anything
 | **P0-7** | Cut **`v0.3.0`**: move `[Unreleased]` into a dated section, tag, let `release.yml` build (PyPI step is already token-gated and will no-op) | A7 | S | tag exists; CHANGELOG `[Unreleased]` is empty |
 | **P0-8** | **Operator-visible credential hardening** (C1): `AP_PSK` becomes required, `FTH_FTS_API_Auth` loses its fallback — an existing provisioning run that relied on either published default now fails fast (`setup_pi5_node.sh`) or skips the WebMap step (`start_all.sh`) until the operator sets the variable; audit rows for C1 and the three unrecorded all-interfaces surfaces (C2) — **bind-auditor** on the diff | C1, C2, E1 | S | an unedited `setup_pi5_node.sh` run fails before touching hostapd; `AUDIT_M2_AUTH.md` inventory gains five rows; CHANGELOG `### Changed` entry under operator-visible changes; the two variables documented in `ops/pi5-node/README_pi5_node.md` and `flightctl/README.md` |
 
+**Status (2026-10-27):** P0-1, P0-3, P0-4, P0-5, P0-6 and P0-8 landed on this branch
+(PR #73). P0-3 also moved gitleaks to 8.30.1 in both places, which supersedes PR #43.
+P0-2 (merging the remaining green dependabot PRs #37/#38/#39/#40/#48/#41/#45 and closing
+#43 as superseded) and P0-7 (tagging `v0.3.0`) are maintainer actions on `main`.
+
 ### Phase 1 — Guardrails before refactoring (≈1 week)
 
 | ID | Item | Theme | Size | Acceptance |

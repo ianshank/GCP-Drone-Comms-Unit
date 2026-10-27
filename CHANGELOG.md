@@ -35,6 +35,31 @@ Versions follow [Semantic Versioning](https://semver.org/).
   heavy/hardware modules. The rule held in fact; now it is checked.
 
 ### Changed
+#### Code-quality reflection, Phase 0 (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- **Operator-visible — two shipped credential defaults removed (P0-8).**
+  `ops/pi5-node/setup_pi5_node.sh` no longer carries `AP_PSK="change-me-please"`; the
+  WPA2 passphrase for the ATAK client AP must be exported as `AP_PSK` or the script
+  aborts before writing `hostapd.conf`. `flightctl/scripts/start_all.sh` no longer falls
+  back to FreeTAKServer's upstream default SystemUser token for `FTH_FTS_API_Auth`; the
+  token is read from `fts.env` or the environment, and the WebMap step is skipped with an
+  error line when it is unset. Both were published credentials. Audit rows #21–#25 added
+  to `docs/AUDIT_M2_AUTH.md` (the two credential defaults, now closed, plus three
+  all-interfaces listeners in shell/TS configuration, recorded not remediated).
+- **CI gets a `ts` job (P0-4):** pnpm frozen install, composite-lib build, typecheck,
+  ESLint, vitest and the api-server build — the four TypeScript steps of
+  `scripts/validate-pre-pr.sh` that had never run in CI. `package.json` gains
+  `packageManager: pnpm@10.28.0`, which the job reads instead of hard-coding a version.
+- **`tools/` coverage is now gated at 90 %** in the governance job (P0-5), after two
+  months of report-only measurement at 95–96 %.
+- **Python 3.13** added to both CI matrices and both packages' classifiers (P0-6).
+- **gitleaks 8.21.2 → 8.30.1** in pre-commit and CI together, and
+  `tools/check_tool_pins.py` now fails when the pre-commit rev and the CI
+  `GITLEAKS_VERSION` disagree (P0-3). The CI checksum was re-derived from the release
+  tarball.
+- **`dependabot.yml` groups the ruff/mypy pins** across both packages' pip extras and the
+  pre-commit mirrors into one `python-tooling` multi-ecosystem group (P0-1), so a tool
+  bump arrives as a single PR that can be green; the per-ecosystem PRs were red by
+  construction.
 - `CLAUDE.md` imports the canonical guide with `@AGENTS.md` instead of linking to it.
   Under Claude Code's default instruction mode a `CLAUDE.md` at or above the working
   directory means `AGENTS.md` files are not loaded at all, so before this change no

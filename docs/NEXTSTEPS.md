@@ -40,6 +40,8 @@
 - [ ] **Phase 0 — make CI/CD honest** (P0-1…P0-8: grouped dependabot updates covering all
       six red ruff/mypy pin PRs, merge the eight green dependabot PRs, `ts` CI job, `tools/`
       coverage floor, Python 3.13, cut `v0.3.0`, shell credential defaults — operator-visible).
+      **2026-10-27:** P0-1/3/4/5/6/8 landed (PR #73); P0-2 (merge the green dependabot PRs)
+      and P0-7 (tag `v0.3.0`) remain as maintainer actions.
 - [ ] **Phase 1 — guardrails** (P1-1…P1-6: ruff `C90`/`PLR09xx` ratchet, advisory vulture,
       docs path check, pragma reasons, pytest markers, Python constraints file).
 - [ ] **Phase 2 — foundations, then the god functions** (= T-3.1/T-3.2/T-3.5/T-4.4/T-4.5 plus
