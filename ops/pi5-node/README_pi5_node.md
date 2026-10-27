@@ -18,7 +18,8 @@ chmod +x setup_pi5_node.sh mesh-up.sh
 # EDIT the CONFIG block at the top of setup_pi5_node.sh first. AP_PSK is deliberately
 # NOT in that block: the script refuses to run without it, so the ATAK client AP can
 # never come up on a shipped passphrase. Export it (WPA2, 8-63 chars), then:
-AP_PSK='<your-passphrase>' ./setup_pi5_node.sh
+read -rs -p 'AP_PSK: ' AP_PSK && export AP_PSK   # prompts; keeps the PSK out of shell history
+./setup_pi5_node.sh
 sudo systemctl start mesh-up tak-gateway adsbcot
 ```
 Order on boot: `mesh-up` → `dnsmasq`/`hostapd` → `tak-gateway` + `adsbcot`; FTS runs

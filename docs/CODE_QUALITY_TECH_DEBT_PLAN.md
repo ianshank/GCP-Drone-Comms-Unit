@@ -426,6 +426,14 @@ delta. Every code item carries the standing rules: security-reviewer on anything
 (PR #73). P0-3 also moved gitleaks to 8.30.1 in both places, which supersedes PR #43.
 P0-2 (merging the remaining green dependabot PRs #37/#38/#39/#40/#48/#41/#45 and closing
 #43 as superseded) and P0-7 (tagging `v0.3.0`) are maintainer actions on `main`.
+**P0-1 needs one post-merge check:** the `multi-ecosystem-groups` semantics (that pip
+dependencies outside the `patterns:` still get their own PRs, and that `directories:` is
+accepted beside `multi-ecosystem-group:`) could not be confirmed against docs.github.com
+from this environment. A dependabot config error never fails a build — it shows only under
+Insights → Dependency graph → Dependabot. Open that tab after merge; if it reports a parse
+error or no non-ruff/mypy pip PR ever appears again, restore the two per-directory `pip`
+entries (same ecosystem + directory cannot be listed twice, so the group would then have to
+go).
 
 ### Phase 1 — Guardrails before refactoring (≈1 week)
 

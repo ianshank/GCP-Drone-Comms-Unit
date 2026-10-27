@@ -138,7 +138,11 @@ do_start() {
   # 3) WebMap — FreeTAKHub Node-RED flow (:1880/tak-map) ----------------------
   #    Skipped, loudly, when no FTS SystemUser API token is configured: there is no
   #    default to fall back to (see the FTH_FTS_API_Auth note above).
+  #    Precedence: a value in $FTS_ENV_FILE overrides the environment (load_env_file
+  #    exports after the shell started), so an uncommented empty line there also skips.
+  WEBMAP_STARTED=0
   if ( load_env_file "$FTS_ENV_FILE"; [ -n "${FTH_FTS_API_Auth:-}" ] ); then
+    WEBMAP_STARTED=1
     ( load_env_file "$FTS_ENV_FILE"
       export PATH="$NODE_BIN:$PATH" npm_config_cache="$SSD/node/npm-cache"
       export FTH_FTS_URL=127.0.0.1 FTH_FTS_TCP_Port="$FTS_COT_PORT" \
@@ -148,7 +152,7 @@ do_start() {
         "$NODE_BIN/node-red" --userDir "$NODE_RED_USERDIR" "$NODE_RED_USERDIR/flows.json" )
     wait_port tcp "$WEBMAP_PORT" webmap 40 || true
   else
-    err "FTH_FTS_API_Auth is unset — WebMap skipped. Put the FreeTAKServer SystemUser API token in $FTS_ENV_FILE (FTH_FTS_API_Auth=...) or the environment; no default ships."
+    err "FTH_FTS_API_Auth is unset — WebMap skipped. Put the FreeTAKServer SystemUser API token in $FTS_ENV_FILE (FTH_FTS_API_Auth=...; a line there overrides the environment) or export it; no default ships."
   fi
 
   # 4) meshsa gateway — binds udpin:14551, bridges MAVLink->CoT->FTS ----------
@@ -184,7 +188,11 @@ do_start() {
   echo
   ok "stack up. URLs:"
   printf '   FTS Web UI    http://%s:%s/   (FTS ships default credentials admin/password — change them on first login)\n' "${LAN_IP:-127.0.0.1}" "$FTS_UI_PORT"
-  printf '   WebMap        http://%s:%s/tak-map/\n' "${LAN_IP:-127.0.0.1}" "$WEBMAP_PORT"
+  if [ "$WEBMAP_STARTED" = 1 ]; then
+    printf '   WebMap        http://%s:%s/tak-map/\n' "${LAN_IP:-127.0.0.1}" "$WEBMAP_PORT"
+  else
+    printf '   WebMap        (skipped: FTH_FTS_API_Auth unset)\n'
+  fi
   printf '   mavlink2rest  http://%s:%s/\n' "${LAN_IP:-127.0.0.1}" "$M2R_PORT"
   printf '   TAK/CoT       %s:%s  (point ATAK here)\n' "${LAN_IP:-127.0.0.1}" "$FTS_COT_PORT"
   if [ "$OPEN_BROWSER" = 1 ]; then

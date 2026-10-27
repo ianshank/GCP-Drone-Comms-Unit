@@ -70,6 +70,11 @@ _CI_VERSION_RE: Final[re.Pattern[str]] = re.compile(
     re.MULTILINE,
 )
 
+#: The release-URL fragment the secret-scan step must build from the env value. A pinned
+#: ``GITLEAKS_VERSION`` that the download line does not reference would let the checker
+#: pass while CI quietly ran a hardcoded other version.
+_CI_DOWNLOAD_USES_VERSION: Final[str] = "v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_"
+
 
 def pyproject_pins(text: str, rel_path: str) -> dict[str, str]:
     """Exact ``tool==version`` pins found in one pyproject's text.
@@ -128,6 +133,11 @@ def ci_workflow_pins(text: str) -> dict[str, str]:
             pins[tool] = f"CONFLICT({pins[tool]} vs {version} in {CI_WORKFLOW})"
         else:
             pins[tool] = version
+    if "gitleaks" in pins and _CI_DOWNLOAD_USES_VERSION not in text:
+        pins["gitleaks"] = (
+            f"UNUSED({pins['gitleaks']}: GITLEAKS_VERSION is set but the download URL in "
+            f"{CI_WORKFLOW} does not reference it)"
+        )
     return pins
 
 

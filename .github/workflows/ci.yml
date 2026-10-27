@@ -259,9 +259,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up pnpm
-        # No `version:` input on purpose: the action reads `packageManager` from the root
-        # package.json, so CI, the Dockerfile and a contributor's shell all resolve the
-        # same pnpm (pnpm itself enforces that field locally).
+        # No `version:` input on purpose: the action reads `packageManager` (version +
+        # integrity hash, written by `corepack use`) from the root package.json, so CI and
+        # a contributor's shell resolve the same pnpm (pnpm itself enforces that field
+        # locally). The Dockerfile still runs `corepack prepare pnpm@latest`; P3-4 aligns it.
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Set up Node

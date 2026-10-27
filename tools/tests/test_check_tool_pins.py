@@ -36,7 +36,9 @@ jobs:
         env:
           GITLEAKS_VERSION: 8.30.1
           GITLEAKS_SHA256: deadbeef
-        run: echo "${GITLEAKS_VERSION}"
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tgz \\
+            "https://example.invalid/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
 """
 
 
@@ -66,10 +68,31 @@ def test_precommit_revs_strips_leading_v() -> None:
 
 def test_ci_workflow_pins_reads_the_env_value_quoted_or_not() -> None:
     assert ci_workflow_pins(CI_OK) == {"gitleaks": "8.30.1"}
-    assert ci_workflow_pins('env:\n  GITLEAKS_VERSION: "v8.30.1"  # pinned\n') == {
-        "gitleaks": "8.30.1"
-    }
+    quoted = CI_OK.replace("GITLEAKS_VERSION: 8.30.1", 'GITLEAKS_VERSION: "v8.30.1"  # pinned')
+    assert ci_workflow_pins(quoted) == {"gitleaks": "8.30.1"}
     assert ci_workflow_pins("steps: []\n") == {}
+
+
+def test_ci_workflow_commented_out_version_is_not_a_pin(tmp_path: Path) -> None:
+    # `# GITLEAKS_VERSION: x` must neither count as the pin nor satisfy the checker.
+    commented = CI_OK.replace(
+        "          GITLEAKS_VERSION: 8.30.1", "          # GITLEAKS_VERSION: 8.30.1"
+    )
+    assert ci_workflow_pins(commented) == {}
+    repo = _write_repo(tmp_path, PYPROJECT_OK, PRECOMMIT_OK, ci=commented)
+    assert any("ci.yml: no exact gitleaks pin found" in p for p in check(repo))
+
+
+def test_ci_workflow_version_not_used_by_download_url_is_reported(tmp_path: Path) -> None:
+    # A pinned env value that the curl line ignores would let CI run a hardcoded other
+    # version while the checker stays green — so it is reported as a non-matching pin.
+    hardcoded = CI_OK.replace(
+        "v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_", "v8.21.2/gitleaks_8.21.2_"
+    )
+    assert ci_workflow_pins(hardcoded)["gitleaks"].startswith("UNUSED(")
+    repo = _write_repo(tmp_path, PYPROJECT_OK, PRECOMMIT_OK, ci=hardcoded)
+    problems = check(repo)
+    assert any("gitleaks pins disagree" in p and "UNUSED(" in p for p in problems)
 
 
 def test_ci_workflow_duplicate_versions_conflict() -> None:
@@ -96,7 +119,9 @@ def test_missing_ci_workflow_is_reported(tmp_path: Path) -> None:
     (repo / ".github" / "workflows" / "ci.yml").unlink()
     problems = check(repo)
     assert any("missing .github/workflows/ci.yml" in p for p in problems)
-    assert any("no exact gitleaks pin" in p and ".pre-commit" not in p for p in problems) is False
+    # With the workflow absent the gitleaks source set collapses to pre-commit alone, so
+    # the only gitleaks-specific problem must be the missing file, not a false disagreement.
+    assert not any("gitleaks pins disagree" in p for p in problems)
 
 
 def test_in_sync_repo_is_clean(tmp_path: Path) -> None:
