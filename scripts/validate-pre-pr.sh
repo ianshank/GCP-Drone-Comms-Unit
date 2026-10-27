@@ -30,7 +30,9 @@
 #   19. Python syntax check (py_compile) — every *.py under packages/,
 #       flightctl/, tools/, deliverables/ (not deliverables/ alone)
 #
-# Steps 10-18 are the T-2.2b governance gate.
+# Steps 10-18 are the T-2.2b governance gate. Steps 1-4 are mirrored by the CI `ts`
+# job, 6-9 by `test`/`perception`, 10-16 by `governance` (P0-4 of
+# docs/CODE_QUALITY_TECH_DEBT_PLAN.md); this script remains the one local gate.
 #
 # NOTE ON NUMBERING: this list collapses the meshsa and jetson pytest runs into a
 # single entry (#9), so it has one fewer entry than the script has `run_step` calls

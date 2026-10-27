@@ -145,24 +145,37 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
 
 **`tools`, `.claude`, `.github`, `scripts`, `archive`**
 
-- **Coverage under `tools/` is measured, not gated** — deliberately, and stated in CI.
-  The `--cov-fail-under` floors are package-local: 97 (meshsa), 96 (jetson).
+- **Coverage under `tools/` is gated at 90 on the pytest command line in `ci.yml`**, not
+  in a config file — `tools/` has no pyproject of its own, so a local pytest run over
+  the tools tree without `--cov-fail-under=90` reports a number and gates nothing. The
+  package floors
+  are in each pyproject: 97 (meshsa), 96 (jetson).
 - **`scope_freeze.py` must keep failing open.** A malformed payload, a missing field, or
   an unreadable governance config all return allow, because the config lives under
   `.claude/` and must stay editable to be fixed. A deny is expressed only via stdout
   JSON, never an exit code.
 - `.claude/governance.yaml` is Pydantic `extra="forbid"`; only a maintainer flips
   `c_gate_met`. Do not put documentation data in it.
-- **`check_tool_pins.py::TOOLS` is `("ruff", "mypy")` only.** PyYAML, pydantic and
-  pytest are pinned in CI and pre-commit but nothing validates that they agree.
+- **`check_tool_pins.py` syncs exactly three tools**: ruff and mypy across the two
+  pyprojects + pre-commit, and gitleaks across the pre-commit `rev` + `ci.yml`
+  `GITLEAKS_VERSION`. PyYAML, pydantic and pytest are pinned in CI and pre-commit but
+  nothing validates that they agree. A dependabot bump of one ruff/mypy file is red by
+  construction; the `python-tooling` multi-ecosystem group in `dependabot.yml` is what
+  moves all three files in one PR.
 - **mypy is invoked at four distinct sites in `ci.yml`** (meshsa `src`, `flightctl/`+`tools/`,
-  `deliverables/`, jetson `src`) — 12 runs once the Python matrix is applied.
+  `deliverables/`, jetson `src`) — 16 runs once the 3.10–3.13 Python matrix is applied.
+- **A dev image on Python 3.13 with numpy installed cannot run `mypy flightctl/ tools/`.**
+  `mypy.ini` pins `python_version = 3.10` and numpy's stubs use the 3.12 `type`
+  statement, so mypy aborts on the stub before checking a single repo file. CI installs
+  no numpy for those sites and is the verdict; locally, use an environment without numpy
+  or `python_version`-compatible interpreter. Separately, the `mypy` on `PATH` can be a
+  different interpreter from `python` with none of the deps — always `python -m mypy`.
 - **`shell: bash` on the governance step is load-bearing**, not cosmetic: the default
   runner shell lacks `pipefail`, so a piped `pytest | tee` would report a fully failing
   suite as green. It is on that one piped step.
 - Actions are SHA-pinned across all four workflows, with no exceptions. The gitleaks
-  **version** in CI matches the pre-commit `rev`; the CI **checksum** has no pre-commit
-  counterpart, and nothing enforces that the two stay in sync.
+  **version** in CI must equal the pre-commit `rev` (`check_tool_pins.py` enforces it); the
+  CI **checksum** has no pre-commit counterpart and is hand-verified on every bump.
 - **`ruff.toml` exists but does not exclude `archive/`.** Every `archive` exclusion
   lives in the *invocations* (CI args, pre-commit `exclude:`, `validate-pre-pr.sh`), so
   a hand-run `ruff check .` or `mypy .` picks the archive up. `archive/` is five `.zip`

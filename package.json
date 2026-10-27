@@ -16,6 +16,7 @@
   },
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@10.28.0",
   "dependencies": {
     "@replit/connectors-sdk": "^0.4.1"
   },

@@ -79,12 +79,14 @@ portable content stays in the five guides.
 
 ### Required checks
 
-A PR is mergeable when every `ci` workflow job is green: `test` (py3.10–3.12: ruff,
+A PR is mergeable when every `ci` workflow job is green: `test` (py3.10–3.13: ruff,
 mypy, pytest with the coverage gate, build), `perception` (same for
-`packages/jetson_yolo_gcs`), `governance` (hook tests, `bind_guard`, `literal_guard`,
-workforce lint, skills lint, instruction-file lint, tool-pin sync, gitleaks), and
+`packages/jetson_yolo_gcs`), `governance` (hook tests with a 90 % coverage floor,
+`bind_guard`, `literal_guard`, workforce lint, skills lint, instruction-file lint,
+tool-pin sync, gitleaks), `ts` (pnpm frozen install, lib build, typecheck, ESLint,
+vitest, api-server build — the same steps as `scripts/validate-pre-pr.sh` 1–4), and
 `shell` lint. Branch protection on `main` is expected to require these
-four checks plus a CODEOWNERS review; pushing directly to `main` is blocked locally by
+five checks plus a CODEOWNERS review; pushing directly to `main` is blocked locally by
 pre-commit (`no-commit-to-branch`).
 
 ### Flaky-test policy

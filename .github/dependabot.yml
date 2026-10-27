@@ -1,28 +1,48 @@
 # Keeps the exact tool pins (ruff/mypy in the package [dev] extras, SHA-pinned workflow
-# actions) from rotting: pins without update automation are staleness by design.
-# tools/check_tool_pins.py fails CI if a pyproject pin and the pre-commit rev diverge,
-# so a dependabot bump of one surfaces the required bump of the other.
-# The pnpm workspace is intentionally absent until its CI job lands (T-2.3b).
+# actions, the gitleaks rev) from rotting: pins without update automation are staleness
+# by design. tools/check_tool_pins.py fails CI if a pyproject pin, the pre-commit rev, or
+# the CI gitleaks version diverge.
+#
+# The pnpm workspace is intentionally absent: its `ts` CI job landed (P0-4 of
+# docs/CODE_QUALITY_TECH_DEBT_PLAN.md), but the workspace still carries Replit-era
+# packages that T-2.3b archives; enable an `npm` entry once that archive lands so
+# dependabot is not bumping packages scheduled for deletion.
 version: 2
+
+# ruff and mypy are pinned in THREE files that must agree (both packages' pyproject
+# [dev] extras + the .pre-commit-config.yaml mirror revs). A per-ecosystem bump moves
+# one file, so every such PR was red by design (PRs #67/#68/#71/#72/#50/#51). This
+# group makes the three move in one PR. Dependabot names pre-commit hooks by their full
+# repository URL, so the pre-commit patterns are URLs, not hook ids.
+multi-ecosystem-groups:
+  python-tooling:
+    schedule:
+      interval: weekly
+
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-  # Required, not optional: check_tool_pins.py fails CI when a pyproject ruff/mypy pin
-  # and the matching pre-commit rev disagree. Without this ecosystem dependabot could
-  # only ever move one side, so every ruff/mypy bump PR would land red and need a hand
-  # edit. With both enabled the two PRs are each red alone and green once merged as a
-  # pair — that is the intended signal.
+
+  # pre-commit: the ruff/mypy mirrors ride the python-tooling group; every other hook
+  # (gitleaks, pre-commit-hooks) still gets its own PR. A gitleaks bump is red until the
+  # CI GITLEAKS_VERSION/GITLEAKS_SHA256 pair is bumped to match — that is the signal
+  # check_tool_pins.py exists to give, and the checksum has to be hand-verified anyway.
   - package-ecosystem: pre-commit
     directory: /
-    schedule:
-      interval: weekly
+    multi-ecosystem-group: python-tooling
+    patterns:
+      - "https://github.com/astral-sh/ruff-pre-commit"
+      - "https://github.com/pre-commit/mirrors-mypy"
+
+  # pip: ruff and mypy ride the python-tooling group; every other dependency in both
+  # packages still gets its own PR per directory.
   - package-ecosystem: pip
-    directory: /packages/meshsa
-    schedule:
-      interval: weekly
-  - package-ecosystem: pip
-    directory: /packages/jetson_yolo_gcs
-    schedule:
-      interval: weekly
+    directories:
+      - /packages/meshsa
+      - /packages/jetson_yolo_gcs
+    multi-ecosystem-group: python-tooling
+    patterns:
+      - ruff
+      - mypy

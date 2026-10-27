@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.11", "3.12"]
+        python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -111,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.11", "3.12"]
+        python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -191,12 +191,13 @@ jobs:
           # models are extra="forbid" — its verdict must not drift with an upstream release.
           pip install pydantic==2.13.4 pyyaml==6.0.3 pytest==9.1.1 pytest-cov==7.1.0
 
-      - name: Governance hook tests (coverage report-only)
-        # Coverage is measured, not gated, for the tools tree: scope_freeze.py is
-        # subprocess-tested and reads low until it gains in-process tests (tracked in
-        # the code-hygiene-modularity bundle), so a floor set today would encode that
-        # artifact. The step summary carries the current number; a floor lands once it
-        # is stable (measure-first, then gate).
+      - name: Governance hook tests (coverage floor 90)
+        # The tools tree was measured report-only from 2026-08 to 2026-10 and held at
+        # 95-96% the whole time, so the floor is now gated at 90 (P0-5 of
+        # docs/CODE_QUALITY_TECH_DEBT_PLAN.md). The remaining gap is scope_freeze.py,
+        # which is subprocess-tested and reads ~28%; the floor rises to 95 once it gains
+        # in-process tests. --cov-fail-under sits on the pytest command, not in a config
+        # file, because tools/ has no pyproject of its own.
         #
         # `shell: bash` is load-bearing, not cosmetic: the default runner shell is
         # `bash -e` WITHOUT pipefail, so `pytest | tee` would exit with tee's status and
@@ -204,9 +205,9 @@ jobs:
         shell: bash
         run: |
           python -m pytest tools/claude_hooks/tests tools/tests -q \
-            --cov=tools --cov-report=term | tee /tmp/tools-cov.txt
+            --cov=tools --cov-report=term --cov-fail-under=90 | tee /tmp/tools-cov.txt
           if ! grep -E '^TOTAL' /tmp/tools-cov.txt \
-            | awk '{print "**tools/claude_hooks coverage (report-only)**: " $NF}' \
+            | awk '{print "**tools/claude_hooks coverage (gate: 90%)**: " $NF}' \
             >> "$GITHUB_STEP_SUMMARY"; then
             echo "::warning title=Coverage summary missing::no TOTAL line in the pytest --cov output"
           fi
@@ -234,14 +235,63 @@ jobs:
         # non-bypassable copy. Version matches the pre-commit rev; the checksum pins the
         # exact artifact.
         env:
-          GITLEAKS_VERSION: 8.21.2
-          GITLEAKS_SHA256: 5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba
+          # Must equal the gitleaks rev in .pre-commit-config.yaml (tools/check_tool_pins.py
+          # fails the governance job when they disagree). The checksum is for the linux_x64
+          # release tarball of exactly this version; verify it by hand on every bump.
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
           curl -sSfL -o /tmp/gitleaks.tgz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           /tmp/gitleaks detect --config .gitleaks.toml --source . --no-banner --redact
+
+  ts:
+    name: ts
+    runs-on: ubuntu-latest
+    # The TypeScript workspace had a full local gate (scripts/validate-pre-pr.sh steps
+    # 1-4: typecheck, ESLint, vitest, api-server build) and no CI job at all until P0-4
+    # of docs/CODE_QUALITY_TECH_DEBT_PLAN.md. Measured 2026-10-27: install ~7s from a warm
+    # store, the four gates well under a minute; the timeout is install-dominated.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up pnpm
+        # No `version:` input on purpose: the action reads `packageManager` from the root
+        # package.json, so CI, the Dockerfile and a contributor's shell all resolve the
+        # same pnpm (pnpm itself enforces that field locally).
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build composite libs
+        # lib/api-zod and lib/db are TS composite projects (emitDeclarationOnly) whose
+        # gitignored dist/ .d.ts output must exist before dependents resolve their
+        # `references` — the AGENTS.md "build the libs before type-checking" trap.
+        run: pnpm --filter './lib/*' run build
+
+      - name: Type check
+        run: pnpm -r run typecheck
+
+      - name: Lint
+        # Only api-server declares a `lint` script; mockup-sandbox is Replit-era and is
+        # archived by T-2.3b rather than linted.
+        run: pnpm -r run lint
+
+      - name: Test
+        run: pnpm -r run test
+
+      - name: Build api-server
+        run: pnpm --filter @workspace/api-server run build
 
   shell:
     name: shell lint
