@@ -24,7 +24,9 @@ UPLINK_IF="eth0"            # interface that reaches the internet/LAN (gateway N
 LAN_IF="eth0"              # iface the Jetson plugs into (can equal UPLINK_IF w/ care)
 AP_IF="wlan0"              # Pi 5 built-in Wi-Fi as the ATAK client AP
 AP_SSID="gcs-mesh"
-AP_PSK="change-me-please"
+# No shipped passphrase: an unedited run must not bring the ATAK client AP up on a
+# published PSK. Export AP_PSK (WPA2 passphrase, 8-63 chars) before running.
+AP_PSK="${AP_PSK:?export AP_PSK (WPA2 passphrase for the ATAK client AP, 8-63 chars); no default ships}"
 FTS_IP="${NODE_IP}"        # FreeTAKServer bind/host IP on the mesh
 COUNTRY="US"
 MESH_USER="$(whoami)"
