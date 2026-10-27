@@ -113,6 +113,10 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
   projects (`composite: true`, `emitDeclarationOnly: true`) whose gitignored `dist/`
   `.d.ts` output must exist before dependents resolve their `references`. The root
   `Makefile` runs `pnpm --filter './lib/*' run build` first for exactly this reason.
+  **`tsc --build` trusts the gitignored `.tsbuildinfo`:** deleting `dist/` alone leaves the
+  lib "up to date" and the rebuild emits nothing, so the next typecheck fails with
+  `TS6305 … has not been built`. Delete both (`make clean` does) or neither. CI never
+  hits this — a fresh checkout has no `.tsbuildinfo`.
   **`.pre-commit-config.yaml` runs a bare `pnpm -r run typecheck` with no lib build**,
   so that hook fails on a fresh clone until something has built them.
 - **`orval.config.ts` sets `clean: true` on both targets**, wiping the generated
