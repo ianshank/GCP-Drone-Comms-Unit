@@ -79,15 +79,16 @@ until one lands.
 | 19 | MAVLink router ingress — `flightctl/scripts/start_all.sh` (`mavp2p` ingress, `MAVP2P_IN_PORT`) | Inbound listener (UDP) | `udps:0.0.0.0:$MAVP2P_IN_PORT`, default **14550** ⇒ **all interfaces** | **None** — unsigned MAVLink ingest. Note this sits two lines below the script's own comment warning that a `0.0.0.0` bind for mavlink2rest *"would be a command-injection vector"*; that reasoning was applied to `M2R_BIND` (loopback default, row #20's sibling) but not to the router's own ingress | Plaintext UDP | **Fails open.** The most serious of #18–#20: anything on the LAN can inject MAVLink into the router, which fans out to the gateway and mavlink2rest |
 | 20 | FreeTAKServer Web UI — `flightctl/scripts/start_all.sh` (`FTS_UI_EXPOSED_IP`) | Inbound listener | `FTS_UI_EXPOSED_IP=0.0.0.0`, port `$FTS_UI_PORT` default **5000** ⇒ **all interfaces** | FreeTAKServer's own UI auth (external to this repo; not verified here). `FTS_UI_WSKEY` is set to the literal placeholder `YourWebsocketKey` in the script | Plaintext HTTP | **Fails open** with respect to this repo's controls — the bind is unconditional, with no `validate_bind` equivalent and no token gate owned here |
 | 21 | ATAK client AP passphrase — `ops/pi5-node/setup_pi5_node.sh` (`AP_PSK` → hostapd `wpa_passphrase`) | Inbound (Wi-Fi AP, WPA2-PSK) | `wlan0`, SSID `gcs-mesh` | WPA2-PSK. **Was** the shipped literal `change-me-please`, not env-overridable, so an unedited run brought the AP up on a published passphrase. **NOW** required from the environment (`${AP_PSK:?}`), no default (P0-8, 2026-10-27) | WPA2/CCMP | **NOW fails closed** — provisioning aborts before `hostapd.conf` is written; *was open by default* |
-| 22 | WebMap → FTS REST credential — `flightctl/scripts/start_all.sh` (`FTH_FTS_API_Auth`) | Outbound client credential (Node-RED → FTS API `:19023`, loopback) | n/a | **Was** a fallback to `token`, FreeTAKServer's upstream default SystemUser API token. **NOW** no fallback: read from `fts.env`/environment, WebMap skipped with an error line when unset (P0-8, 2026-10-27) | Plaintext HTTP on loopback | **NOW fails closed** (skip, never a default credential); *was open by default* |
-| 23 | FreeTAKServer CoT / REST / data-package listeners — `flightctl/systemd/fts.env.example` (`FTS_USER_ADDRESS`, `FTS_API_ADDRESS`, `FTS_DP_ADDRESS`) | Inbound listeners | `0.0.0.0` on `8087` / `19023` / data-package port, **as shipped in the example** | FreeTAKServer's own auth (external to this repo; not verified here); none owned here | Plaintext CoT/HTTP; TLS CoT on `8089` opt-in | Open with respect to this repo's controls — FTS is the intended ATAK ingress, so all-interfaces is the deployment, not an accident. **Recorded, not remediated**; same treatment as #18 |
-| 24 | mavp2p ingress via systemd — `flightctl/systemd/mavp2p.env.example` (`udps:0.0.0.0:14550`) | Inbound (UDP) | all interfaces | **None** — unsigned MAVLink ingest | Plaintext UDP | Same gap as #19 (this is its systemd twin; row #19 cites only `start_all.sh`). Backlog item 5 must cover both files |
-| 25 | mockup-sandbox Vite dev/preview server — `artifacts/mockup-sandbox/vite.config.ts` (`host: "0.0.0.0"`, `allowedHosts: true`) | Inbound listener (dev tooling) | all interfaces, both `server` and `preview` | **None** | Plaintext HTTP | Open. Replit-era dev tooling that T-2.3b archives; outside `bind_guard`'s Python-only scope like #18. **Recorded, not remediated** |
+| 22 | WebMap → FTS REST credential — `flightctl/scripts/start_all.sh` (`FTH_FTS_API_Auth`) | Outbound client credential (Node-RED → FTS API `:19023`, loopback) | n/a | **Was** a fallback to `token`, FreeTAKServer's upstream default SystemUser API token. **NOW** no fallback: read from `$FTS_ENV_FILE` (default `/mnt/ssd/flightctl/fts.env`) or the environment, WebMap skipped with an error line when unset (P0-8, 2026-10-27) | Plaintext HTTP on loopback | **NOW fails closed** (skip, never a default credential); *was open by default* |
+| 23 | FreeTAKServer CoT / REST / data-package listeners — `flightctl/systemd/fts.env.example` (`FTS_USER_ADDRESS`, `FTS_API_ADDRESS`, `FTS_DP_ADDRESS`) | Inbound listeners | `0.0.0.0` on `8087` / `19023` / the data-package port (`FTS_DP_PORT` not set; FTS upstream default), **as shipped in the example**; consumed by `freetakserver.service` (`EnvironmentFile`) and `start_all.sh` step 1 | FreeTAKServer's own auth (external to this repo; not verified here); none owned here | Plaintext CoT/HTTP; TLS CoT listener on `8089` (`FTS_SSLCOT_PORT`, FTS-managed certs) — clients opt in (row #1) | **Fails open** with respect to this repo's controls — FTS is the intended ATAK ingress, so all-interfaces is the deployment, not an accident. **Recorded, not remediated**; same treatment as #18 |
+| 24 | mavp2p ingress via systemd — `flightctl/systemd/mavp2p.env.example` (`udps:0.0.0.0:14550`) | Inbound (UDP) | all interfaces; consumed by `mavp2p.service` (`EnvironmentFile`, `ExecStart=… $MAVP2P_ENDPOINTS`) | **None** — unsigned MAVLink ingest | Plaintext UDP | **Fails open.** Same gap as #19 (this is its systemd twin; row #19 cites only `start_all.sh`). Backlog item 10, together with item 5 |
+| 25 | mockup-sandbox Vite dev/preview server — `artifacts/mockup-sandbox/vite.config.ts` (`host: "0.0.0.0"`, `allowedHosts: true`) | Inbound listener (dev tooling) | all interfaces, both `server` and `preview` | **None** | Plaintext HTTP | **Fails open.** Replit-era dev tooling that T-2.3b archives; outside `bind_guard`'s Python-only scope like #18. **Recorded, not remediated** |
 
 ## Gap summary
 
-- **Re-derived fail-open surface count (2026-09-25): 6 rows, of which 4 are genuine
-  unauthenticated inbound listeners.** The authoritative figure is the **6 surface-inventory
+- **Re-derived fail-open surface count (2026-10-27): 9 rows, of which 7 are genuine
+  unauthenticated inbound listeners** (was 6 / 4 at the 2026-09-25 re-derivation; rows
+  #23–#25 added three listeners). The authoritative figure is the **9 surface-inventory
   rows** whose Fail-closed column reads "fails open".
   - **The session-start banner's number is always larger and is not a surface count.**
     `.claude/hooks/session-start.sh` runs `grep -ci 'fails open'` over this file, so it also
@@ -95,9 +96,11 @@ until one lands.
     self-referential: editing this bullet changes it. Do **not** write the banner's number into
     this document, which is how the previous version of this bullet came to assert 6 while the
     banner printed 9. Compare row counts, not grep counts.
-  The 6 rows are #1 `TakTcpTransport`, #2
-  `TakMulticastTransport`, #4 `MeshtasticTransport`, and the three added when this document's
+  The 9 rows are #1 `TakTcpTransport`, #2
+  `TakMulticastTransport`, #4 `MeshtasticTransport`, the three added when this document's
   scope widened to the whole repository — #18 TS API server, #19 mavp2p ingress, #20
+  FreeTAKServer Web UI — and the three added 2026-10-27 (#23 shipped FTS listener binds,
+  #24 mavp2p's systemd twin, #25 the mockup-sandbox Vite server); the earlier three are
   FreeTAKServer Web UI.
   - **#1 and #4 are not listeners at all** — #1 is an outbound TLS client connection and #4 is
     serial/BLE or an outbound `TCPInterface` connect — so their "fails open" language describes
@@ -124,9 +127,9 @@ until one lands.
     `fts.env.example` binds every FTS listener on `0.0.0.0`), #24 (`mavp2p.env.example`,
     the systemd twin of #19) and #25 (the mockup-sandbox Vite server) are three more
     all-interfaces listeners outside `bind_guard`'s scope, recorded with the same
-    "accepted, not remediated" treatment as #18. The row-count figure above (6) is
-    unchanged by #21/#22; #23–#25 are open listeners but are counted here, not in that
-    bullet's Fail-closed-column tally, because their column does not use its phrase.
+    "accepted, not remediated" treatment as #18. They are counted in the row figure above
+    (6 → 9, listeners 4 → 7); #21/#22 are not, because they are closed. The banner's grep
+    count moved with them, as that bullet says it will.
   - Superseded statement, kept so the change is auditable: this bullet previously read
     "3 [rows], and only 1 … is an actual `bind_guard`-scoped listener gap … No new bind surface
     has appeared since 2026-07-08." That was true of the old two-package scope and is false
@@ -162,9 +165,10 @@ until one lands.
 
 - One audited primitive (`netauth.py`) with constant-time bearer comparison
   (`netauth.py::authorize`) and consistent fail-closed bind validation, shared by all five
-  **`packages/meshsa` Python** HTTP surfaces. Scoped deliberately: rows #18 and #20 are HTTP
-  surfaces outside that set — TypeScript and FreeTAKServer respectively — and neither routes
-  through `netauth`, so "all HTTP surfaces" would be false under this document's repo-wide scope.
+  **`packages/meshsa` Python** HTTP surfaces. Scoped deliberately: rows #18, #20, #23 and #25
+  are HTTP surfaces outside that set — TypeScript, FreeTAKServer (UI and REST), and the Vite dev
+  server — and none routes through `netauth`, so "all HTTP surfaces" would be false under this
+  document's repo-wide scope.
 - Service defaults (ports, hosts, queue/backoff, endpoint) are single-sourced in
   `meshsa/defaults.py` as of `code-hygiene-modularity` T-3.5a, with pinned-value tests
   (`tests/test_defaults.py`) asserting every default in this inventory is numerically unchanged
@@ -180,11 +184,12 @@ until one lands.
 ## Verdict for the maintainer (CHARTER §6 M2 gate)
 
 M2's transport-encryption building block (TAK mutual TLS) exists, and per-endpoint HTTP auth now
-exists and **fails closed on all five `packages/meshsa` HTTP surfaces** — but not on the two
+exists and **fails closed on all five `packages/meshsa` HTTP surfaces** — but not on the four
 HTTP surfaces outside that package that this document's widened scope brought in (#18 TS API
-server, #20 FreeTAKServer Web UI), neither of which routes through `netauth`. Further, three
-unauthenticated all-interfaces listeners (#18, #19, #20) sit outside every mechanical control,
-because `bind_guard` scans Python only. But this is **per-surface** auth, **not
+server, #20 FreeTAKServer Web UI, #23 FreeTAKServer REST/CoT as shipped, #25 Vite dev server),
+none of which routes through `netauth`. Further, six unauthenticated all-interfaces listeners
+(#18, #19, #20, #23, #24, #25) sit outside every mechanical control, because `bind_guard` scans
+Python only. But this is **per-surface** auth, **not
 transport-wide endpoint authentication**: the wire transports (Meshtastic, MAVLink/MSP/CRSF ingest,
 detection UDP, TAK multicast, Jetson RTP/MAVLink) carry no endpoint auth, and encryption is
 plaintext-by-default outside opt-in TAK TLS. The CHARTER §3 commanding carve-out requires that "no
@@ -208,7 +213,9 @@ satisfies §3, or whether transport-wide auth is required first.
    unsigned MAVLink from any interface. Highest-severity item in this list: it is the command
    path's ingress, and the same script's own comment calls a `0.0.0.0` bind for the sibling
    service "a command-injection vector". Needs its own change — a bind narrowing here alters
-   the bring-up contract described at `flightctl/scripts/start_all.sh` lines 9-13.
+   the bring-up contract described at `flightctl/scripts/start_all.sh` lines 9-13 — and must
+   cover the systemd twin `flightctl/systemd/mavp2p.env.example` (#24, consumed by
+   `mavp2p.service`) in the same change.
 6. **Narrow `FTS_UI_EXPOSED_IP` from `0.0.0.0` (#20), or document the deployment as
    trusted-network-only.** Note `FTS_UI_WSKEY` ships as the literal placeholder
    `YourWebsocketKey`.
@@ -216,8 +223,8 @@ satisfies §3, or whether transport-wide auth is required first.
    inside its container by the Replit platform proxy, so the fix is not a host argument — it is
    deciding whether that deployment model is in M2's scope at all, and recording the answer.
 8. **Extend `bind_guard` beyond Python, or state that TypeScript and shell listeners are
-   review-only.** `SCAN_GLOBS` is Python-only, which is the structural reason #18-#20 were
-   never surfaced. Until one or the other happens, every non-Python listener in this repository
+   review-only.** `SCAN_GLOBS` is Python-only, which is the structural reason #18–#20 and
+   #23–#25 were never surfaced. Until one or the other happens, every non-Python listener in this repository
    depends entirely on a human noticing it.
 9. ~~**Shipped credential defaults (#21 `AP_PSK`, #22 `FTH_FTS_API_Auth`).**~~ **Done**
    (P0-8, 2026-10-27): `setup_pi5_node.sh` requires `AP_PSK` from the environment;

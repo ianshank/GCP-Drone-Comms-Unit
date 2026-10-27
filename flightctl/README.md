@@ -94,7 +94,9 @@ sudo install -m755 /mnt/ssd/flightctl/bin/mavp2p /usr/local/bin/mavp2p
 sudo cp flightctl/systemd/*.service /etc/systemd/system/
 sudo cp flightctl/systemd/mavp2p.env.example   /etc/flightctl/mavp2p.env
 sudo cp flightctl/systemd/fts.env.example      /etc/flightctl/fts.env
-#    then set FTH_FTS_API_Auth=<FTS SystemUser API token> in that file: start_all.sh
+#    then set FTH_FTS_API_Auth=<FTS SystemUser API token>. NOTE: start_all.sh reads
+#    $FTS_ENV_FILE (default /mnt/ssd/flightctl/fts.env), not /etc/flightctl/fts.env —
+#    export FTS_ENV_FILE=/etc/flightctl/fts.env or set the token in that file too. It
 #    ships no default (the upstream one is public) and skips the WebMap without it
 sudo cp flightctl/configs/jetson_gateway.json  /etc/flightctl/
 sudo cp flightctl/run_gateway.py               /opt/flightctl/

@@ -183,7 +183,7 @@ from `defaults.py`) — the module's own docstring still says they are "only swe
 ~15 call sites in T-3.5", which is stale and is itself a P3-1 fix. The residual gap is the
 classes of literal the sweep did not cover. The config-guardian sweep run for this plan found:
 
-**C1. Credential defaults in shell (tightening only, highest priority).**
+**C1. Credential defaults in shell (tightening only, highest priority) — landed 2026-10-27 as P0-8; the text below describes the tree as found.**
 - `ops/pi5-node/setup_pi5_node.sh:27` — `AP_PSK="change-me-please"` is written verbatim into
   `/etc/hostapd/hostapd.conf` (`wpa_passphrase=${AP_PSK}`, line 102) and, unlike the sibling
   `mesh-up.sh`, is **not** env-overridable: an unedited run brings the field ATAK-client AP up
@@ -192,9 +192,9 @@ classes of literal the sweep did not cover. The config-guardian sweep run for th
   back to FreeTAKServer's upstream default SystemUser API token. Fix: no fallback; source from
   the untracked `fts.env` and skip the WebMap step when unset. Line 177 prints the upstream
   default UI credentials (`admin/password`) — cosmetic, but it normalizes leaving them.
-- Neither is in [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md). Both get a row.
+- Neither was in [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md); they are now rows #21 and #22.
 
-**C2. Unrecorded all-interfaces surfaces (record, do not change).**
+**C2. Unrecorded all-interfaces surfaces (record, do not change) — recorded 2026-10-27 as audit rows #23–#25.**
 `flightctl/systemd/fts.env.example:14-16` (`FTS_USER/API/DP_ADDRESS=0.0.0.0`, the shipped FTS
 deployment example), `flightctl/systemd/mavp2p.env.example:4` (the systemd twin of audit
 row #19, which cites only `start_all.sh`), and `artifacts/mockup-sandbox/vite.config.ts:60,68`
