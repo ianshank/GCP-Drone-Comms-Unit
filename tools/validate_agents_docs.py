@@ -926,7 +926,8 @@ def main(argv: list[str] | None = None) -> int:
     # Advisory, printed before the verdict so it never reads as part of it. GitHub's
     # `::warning` prefix turns each line into a run annotation and is harmless elsewhere.
     for warning in advisory_docs_citations(root, tracked_files(root)):
-        print(f"::warning title=docs citation (advisory, plan P1-3)::{warning}")
+        # No comma inside title=: the runner splits the property list on commas.
+        print(f"::warning title=docs citation advisory (plan P1-3)::{warning}")
     if findings:
         for finding in findings:
             print(finding)

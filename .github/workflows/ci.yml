@@ -239,16 +239,21 @@ jobs:
         # findings — registry-decorated factories, pydantic validators and Protocol
         # methods all read as unused at lower confidence. At 80 the only hit on the
         # baseline was a pypubsub callback parameter, now in tools/vulture_whitelist.py.
-        # Each candidate becomes a run annotation; the step never fails the job. No pipe,
-        # so this step does not depend on pipefail.
+        # Each candidate becomes a run annotation; the step never fails the job — the
+        # install is guarded too, so a PyPI/proxy failure degrades to one warning. The
+        # whitelist is passed explicitly, not reached through the `tools` root by accident.
         run: |
-          pip install vulture==2.16
+          if ! pip install vulture==2.16; then
+            echo "::warning title=vulture advisory (plan P1-2)::vulture install failed; scan skipped"
+            exit 0
+          fi
           vulture packages/meshsa/src packages/jetson_yolo_gcs/src \
             flightctl/run_gateway.py flightctl/run_commander.py flightctl/sim tools \
+            tools/vulture_whitelist.py \
             --exclude 'tools/claude_hooks/tests,tools/tests' --min-confidence 80 \
             > /tmp/vulture.txt || true
           while IFS= read -r line; do
-            echo "::warning title=vulture (advisory, plan P1-2)::${line}"
+            echo "::warning title=vulture advisory (plan P1-2)::${line}"
           done < /tmp/vulture.txt
           echo "**vulture (advisory, confidence >= 80)**: $(wc -l < /tmp/vulture.txt) candidate(s)" \
             >> "$GITHUB_STEP_SUMMARY"
@@ -261,7 +266,7 @@ jobs:
           grep -rnE '# pragma: no cover\s*$' packages/meshsa/src packages/jetson_yolo_gcs/src \
             flightctl tools --include='*.py' > /tmp/bare-pragmas.txt || true
           while IFS= read -r line; do
-            echo "::warning title=bare pragma (advisory, plan P1-4)::${line}"
+            echo "::warning title=bare pragma advisory (plan P1-4)::${line}"
           done < /tmp/bare-pragmas.txt
           total=$(grep -rE '# pragma: no cover' packages/meshsa/src packages/jetson_yolo_gcs/src \
             flightctl tools --include='*.py' | wc -l)

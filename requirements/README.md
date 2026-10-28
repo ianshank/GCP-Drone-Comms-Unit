@@ -16,3 +16,10 @@ uv pip compile --universal -p 3.10 --extra dev --extra inference \
 
 The ruff/mypy lines here must agree with the pyproject pins; `tools/check_tool_pins.py`
 does not read this file, so the `python-tooling` dependabot group carries it instead.
+
+Dependabot bumps one line at a time without re-resolving, so a bump that moves a package
+away from a co-pinned partner (`pydantic` without `pydantic-core`, `aiohttp` without
+`aiosignal`) can make that PR's install fail with a resolution error. That is the PR being
+honest, not the lock being wrong: regenerate with the command above and push the result.
+Only the `test` and `perception` jobs are constrained; `nightly.yml` and `fts-e2e.yml`
+install unconstrained on purpose, because their job is to catch optional-dependency drift.

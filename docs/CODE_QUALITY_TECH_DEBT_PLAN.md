@@ -450,9 +450,9 @@ go).
 the three ruff configs; `vulture` at 80 had one false positive (whitelisted); the bare
 pragma count is 1, the `__main__` guard in the frozen `run_commander.py`, which stays
 until T-8 so the freeze is honored; the docs
-citation sweep reports three dead paths in `docs/specs/` and none in README (the README's
-stale tree block sits in a code fence, which the token extractor skips by design — fix the
-block in P3-3 regardless); the `deptry`-style unused-extras check was **not** added (the
+citation sweep reports 45 dead paths on this tree (38 in `docs/*.md`, 6 in `docs/specs/`,
+1 in `docs/architecture/`, 1 in README — the first measurement here said three, a misread
+of a truncated output that the security review caught), which is the P3-3 worklist; the `deptry`-style unused-extras check was **not** added (the
 two empty extras, `meshsa[tak]` and `jetson_yolo_gcs[hailo]`, are already on P3-2's list
 and nothing else in the extras is unused). The lock was verified with `pip --dry-run`
 against both packages on 3.13 and with uv on a 3.10 interpreter.

@@ -600,7 +600,7 @@ def test_advisory_docs_citations_never_change_the_exit_code(
     git(repo, "add", ".")
     assert main(["--root", str(repo)]) == 0
     out = capsys.readouterr().out
-    assert "::warning title=docs citation (advisory, plan P1-3)::README.md: cited path" in out
+    assert "::warning title=docs citation advisory (plan P1-3)::README.md: cited path" in out
     assert out.rstrip().endswith("scanned for hidden code points)")
 
 

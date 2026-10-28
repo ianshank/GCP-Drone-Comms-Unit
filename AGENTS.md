@@ -158,6 +158,11 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
   an unreadable governance config all return allow, because the config lives under
   `.claude/` and must stay editable to be fixed. A deny is expressed only via stdout
   JSON, never an exit code.
+- **`scope_freeze.py` gates Write/Edit *tool calls* only.** A shell `sed`, a Python
+  script or `git checkout` writes the frozen command path with no deny at all — this
+  session proved it by accident on `flightctl/run_commander.py` and reverted. The freeze
+  is a convention the hook backs for one entry point; review is the control for the
+  rest, so route *any* write there through the charter-gate-keeper, however it is made.
 - `.claude/governance.yaml` is Pydantic `extra="forbid"`; only a maintainer flips
   `c_gate_met`. Do not put documentation data in it.
 - **`check_tool_pins.py` syncs exactly three tools**: ruff and mypy across the two
