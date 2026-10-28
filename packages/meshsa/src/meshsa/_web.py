@@ -204,6 +204,14 @@ def upstream_error(
 
 
 def register_routes(app: Any, routes: Iterable[tuple[str, str, Handler]]) -> None:
-    """Wire a ``(method, path, handler)`` table — the factory's whole remaining job."""
+    """Wire a ``(method, path, handler)`` table — the factory's whole remaining job.
+
+    GET entries go through ``add_get`` so aiohttp keeps registering the implicit HEAD
+    alongside them, exactly as the factories did before the kit (a load balancer probing
+    ``HEAD /healthz`` must keep getting 200, not 405).
+    """
     for method, path, handler in routes:
-        app.router.add_route(method, path, handler)
+        if method == "GET":
+            app.router.add_get(path, handler)
+        else:
+            app.router.add_route(method, path, handler)

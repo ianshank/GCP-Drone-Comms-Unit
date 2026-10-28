@@ -67,23 +67,110 @@ NODE_SECTIONS: dict[str, tuple[str, type[BaseModel], int]] = {
 }
 
 
+#: The golden inventory: every key, written out by hand once and never derived from the
+#: models, so renaming or dropping a section field fails here before it reaches a unit file.
+#: Adding a key is a documented change (CHANGELOG + the env tables in ``docs/specs``).
+GOLDEN_NODE_ENV_KEYS: tuple[str, ...] = (
+    "MESHSA_CONFIG_JSON",
+    "MESHSA_UID",
+    "MESHSA_CALLSIGN",
+    "MESHSA_TIER",
+    "MESHSA_PLI_INTERVAL_S",
+    "MESHSA_DEFAULT_STALE_S",
+    "MESHSA_MESH_CHANNEL",
+    "MESHSA_MESH_PSK",
+    "MESHSA_MESH_REGION",
+    "MESHSA_MESH_FREQ_KHZ",
+    "MESHSA_ROUTER_DEDUPE_CACHE_SIZE",
+    "MESHSA_ROUTER_QUEUE_MAXSIZE",
+    "MESHSA_HEALTH_ENABLED",
+    "MESHSA_HEALTH_HOST",
+    "MESHSA_HEALTH_PORT",
+    "MESHSA_HEALTH_TOKEN",
+    "MESHSA_HEALTH_METRICS_ENABLED",
+    "MESHSA_HEALTH_METRICS_PATH",
+    "MESHSA_HEALTH_METRICS_FORMAT",
+    "MESHSA_INFERENCE_ENABLED",
+    "MESHSA_INFERENCE_API_KEY",
+    "MESHSA_INFERENCE_BASE_URL",
+    "MESHSA_INFERENCE_MODEL",
+    "MESHSA_INFERENCE_SYSTEM_PROMPT",
+    "MESHSA_INFERENCE_TEMPERATURE",
+    "MESHSA_INFERENCE_MAX_TOKENS",
+    "MESHSA_INFERENCE_TIMEOUT_S",
+    "MESHSA_INFERENCE_MAX_RETRIES",
+    "MESHSA_INFERENCE_BACKOFF_BASE",
+    "MESHSA_INFERENCE_BACKOFF_MAX_S",
+    "MESHSA_INFERENCE_INSIGHT_PREFIX",
+    "MESHSA_INFERENCE_MIN_INTERVAL_S",
+    "MESHSA_INFERENCE_MAX_CONCURRENT_REQUESTS",
+    "MESHSA_INFERENCE_RESPONSE_FORMAT",
+    "MESHSA_INFERENCE_GUIDED_JSON_SCHEMA",
+    "MESHSA_INFERENCE_GUIDED_JSON_SUMMARY_FIELD",
+    "MESHSA_INFERENCE_MODELS",
+    "MESHSA_INFERENCE_OFFLINE_QUEUE_MAX",
+    "MESHSA_INFERENCE_MAX_PENDING_TASKS",
+    "MESHSA_SCOUT_ENABLED",
+    "MESHSA_SCOUT_RTK_ENABLED",
+    "MESHSA_SCOUT_VINE_SPACING_M",
+    "MESHSA_SCOUT_ROW_SPACING_M",
+    "MESHSA_SCOUT_DEDUP_RADIUS_M",
+    "MESHSA_SCOUT_SYNC_MAX_SKEW_S",
+    "MESHSA_SCOUT_ATTITUDE_SIGMA_DEG",
+    "MESHSA_SCOUT_POS_CEP_M",
+    "MESHSA_SCOUT_MARKER_STALE_S",
+    "MESHSA_SCOUT_FORWARD_OVERLAP",
+    "MESHSA_SCOUT_SIDE_OVERLAP",
+    "MESHSA_SCOUT_SURVEY_ALT_AGL_M",
+    "MESHSA_SCOUT_SURVEY_CRUISE_SPEED_MS",
+    "MESHSA_SCOUT_SURVEY_HOVER_SPEED_MS",
+    "MESHSA_SCOUT_CAMERA_IMG_W",
+    "MESHSA_SCOUT_CAMERA_IMG_H",
+    "MESHSA_SCOUT_CAMERA_H_FOV_DEG",
+    "MESHSA_SCOUT_CAMERA_V_FOV_DEG",
+    "MESHSA_SCOUT_DEM_PATH",
+    "MESHSA_SCOUT_STORE_PATH",
+    "MESHSA_SCOUT_STATION_HOST",
+    "MESHSA_SCOUT_STATION_PORT",
+    "MESHSA_SCOUT_STATION_TOKEN",
+    "MESHSA_UI_ENABLED",
+    "MESHSA_UI_HOST",
+    "MESHSA_UI_PORT",
+    "MESHSA_UI_TOKEN",
+    "MESHSA_UI_MAP_STYLE_URL",
+    "MESHSA_UI_POLL_INTERVAL_S",
+    "MESHSA_UI_TRACK_STALE_S",
+    "MESHSA_UI_DETECTION_STALE_S",
+    "MESHSA_UI_MAX_TRACKS",
+    "MESHSA_UI_MAX_DETECTIONS",
+    "MESHSA_UI_CHAT_ENABLED",
+    "MESHSA_UI_LOG_RING_ENABLED",
+    "MESHSA_UI_LOG_RING_SIZE",
+    "MESHSA_UI_LOG_RING_LEVEL",
+    "MESHSA_UI_METRICS_FORMAT",
+    "MESHSA_UI_TITLE",
+)
+
+
 def node_env_keys() -> list[str]:
-    """The full pinned inventory (78 keys) in a stable order."""
-    keys = list(NODE_TOP_LEVEL)
-    for env_section, model, _ in NODE_SECTIONS.values():
-        keys.extend(f"MESHSA_{env_section}_{name.upper()}" for name in model.model_fields)
-    return keys
+    """The pinned inventory (78 keys) in a stable order."""
+    return list(GOLDEN_NODE_ENV_KEYS)
 
 
 def test_inventory_size_is_pinned() -> None:
-    assert len(node_env_keys()) == 78
+    assert len(GOLDEN_NODE_ENV_KEYS) == 78
+    assert len(set(GOLDEN_NODE_ENV_KEYS)) == 78
     for section, (_, model, count) in NODE_SECTIONS.items():
         assert len(model.model_fields) == count, section
 
 
-def test_loader_inventory_equals_the_pinned_list_exactly() -> None:
-    """Both directions: the loader honours every pinned key and no key outside the pin."""
-    assert node_env_inventory() == node_env_keys()
+def test_loader_inventory_equals_the_golden_list_exactly() -> None:
+    """Both directions: the loader honours every golden key and no key outside it."""
+    assert node_env_inventory() == list(GOLDEN_NODE_ENV_KEYS)
+    derived = list(NODE_TOP_LEVEL)
+    for env_section, model, _ in NODE_SECTIONS.values():
+        derived.extend(f"MESHSA_{env_section}_{name.upper()}" for name in model.model_fields)
+    assert derived == list(GOLDEN_NODE_ENV_KEYS)  # the section models still match the pin
     assert tuple(NODE_ENV_SCALARS) == tuple(
         k.removeprefix("MESHSA_").lower() for k in NODE_TOP_LEVEL[1:]
     )
@@ -188,7 +275,14 @@ class _SpyEnv(dict[str, str]):
 
 
 def test_loader_reads_no_key_outside_the_inventory() -> None:
-    """Behavioural half of the pin: keys sharing the prefix but outside the list are inert."""
+    """Behavioural half of the pin: keys sharing the prefix but outside the list are inert.
+
+    ``NodeConfig.from_env`` snapshots its mapping with ``dict(...)`` first, so the spy is
+    handed to the three loader primitives exactly as ``from_env`` calls them; the spy's
+    observations are asserted to be non-empty (it saw the keys it should) before the bound.
+    """
+    from meshsa._envconfig import apply_overrides, load_sections, merge_config_json
+
     spy = _SpyEnv(
         {
             **_BASE,
@@ -198,9 +292,19 @@ def test_loader_reads_no_key_outside_the_inventory() -> None:
             "MESHSA_INFERENCE_MODEL_NAME": "x",
         }
     )
-    cfg = NodeConfig.from_env(spy)
-    assert cfg == NodeConfig.from_env(dict(_BASE))
-    assert spy.seen <= set(node_env_inventory())
+    data = merge_config_json({}, spy, prefix="MESHSA_")
+    apply_overrides(NodeConfig, data, spy, prefix="MESHSA_", fields=NODE_ENV_SCALARS)
+    load_sections(data, spy, prefix="MESHSA_", sections=NODE_ENV_SECTIONS)
+    assert NodeConfig.model_validate(data) == NodeConfig.from_env(dict(_BASE))
+    assert {
+        "MESHSA_CONFIG_JSON",
+        "MESHSA_UID",
+        "MESHSA_UI_PORT",
+        "MESHSA_SCOUT_ENABLED",
+    } <= spy.seen
+    assert spy.seen <= set(GOLDEN_NODE_ENV_KEYS)
+    # And the public entry point gives the same result on the same input.
+    assert NodeConfig.from_env(dict(spy)) == NodeConfig.from_env(dict(_BASE))
 
 
 def test_config_json_blob_is_honoured_then_overridden() -> None:

@@ -436,6 +436,34 @@ async def test_no_token_opens_every_guarded_route_on_all_four_apps() -> None:
             assert resp.headers.get("Cache-Control") == cache_control, (method, path)
 
 
+# ── HEAD: aiohttp registers it implicitly beside every GET; the kit must keep that ──
+
+
+@pytest.mark.parametrize(
+    "factory, path, kwargs, status",
+    [
+        (_ui_app, "/healthz", {}, 200),
+        (_ui_app, "/api/tracks", {"headers": BEARER}, 200),
+        (_ui_app, "/api/tracks", {}, 401),
+        (_station_app, "/healthz", {}, 200),
+        (_station_app, "/detections", {"headers": BEARER}, 200),
+        (_llm_app, "/healthz", {}, 200),
+        (_llm_app, "/", {}, 200),
+        (_health_app, "/healthz", {}, 200),
+        (_health_app, "/metrics", {"headers": BEARER}, 200),
+    ],
+)
+async def test_head_is_served_beside_every_get(
+    factory: Any, path: str, kwargs: dict[str, Any], status: int
+) -> None:
+    # A load balancer probing HEAD /healthz must keep getting 200, not 405, and the guard
+    # applies to HEAD exactly as to GET.
+    async with _serve(factory()) as client:
+        resp = await client.head(path, **kwargs)
+        assert resp.status == status, path
+        assert await resp.read() == b""
+
+
 # ── whitespace-only token: locked, never open (Phase 2a security review) ─────
 #
 # netauth.validate_bind guards on ``not token``, so ``"   "`` passes as a credential on a
