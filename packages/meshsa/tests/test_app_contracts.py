@@ -31,9 +31,10 @@ from aiohttp import web  # noqa: E402
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 
 from meshsa import NodeConfig, build_node  # noqa: E402
-from meshsa.health import build_healthz_app  # noqa: E402
+from meshsa.health import build_healthz_app, validate_healthz_bind  # noqa: E402
 from meshsa.llm.agent import AgentReply  # noqa: E402
 from meshsa.llm.server import build_app as build_llm_app  # noqa: E402
+from meshsa.llm.server import validate_bind as validate_llm_bind  # noqa: E402
 from meshsa.models import Envelope, MessageKind  # noqa: E402
 from meshsa.scout.schemas import GeoDetection  # noqa: E402
 from meshsa.scout.station import build_app as build_station_app  # noqa: E402
@@ -213,6 +214,10 @@ _HEALTH_AUTHED: list[tuple[str, str, dict[str, Any], int, str | None, str]] = [
     ("GET", "/metrics", {"headers": BEARER}, 200, "no-store", "text/plain"),
 ]
 
+_HEALTH_JSON_AUTHED: list[tuple[str, str, dict[str, Any], int, str | None, str]] = [
+    ("GET", "/metrics", {"headers": BEARER}, 200, "no-store", "application/json"),
+]
+
 
 async def _assert_pin(
     client: TestClient, method: str, path: str, kwargs: dict[str, Any], expect: tuple[Any, ...]
@@ -280,6 +285,21 @@ async def test_health_route_pins(
         await _assert_pin(client, method, path, kwargs, (status, cache_control, content_type))
 
 
+@pytest.mark.parametrize(
+    "method, path, kwargs, status, cache_control, content_type", _HEALTH_JSON_AUTHED
+)
+async def test_health_json_route_pins(
+    method: str,
+    path: str,
+    kwargs: dict[str, Any],
+    status: int,
+    cache_control: Any,
+    content_type: str,
+) -> None:
+    async with _serve(_health_app(fmt="json")) as client:
+        await _assert_pin(client, method, path, kwargs, (status, cache_control, content_type))
+
+
 # ── the 401 contract, per factory ─────────────────────────────────────────────
 #
 # Each refusal is pinned by body, Cache-Control and the WWW-Authenticate challenge. Before
@@ -289,7 +309,13 @@ async def test_health_route_pins(
 _UI_DENIED: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/", {}),
     ("GET", "/", {"params": {"token": "wrong"}}),
+    ("GET", "/", {"headers": BEARER}),  # a header does not satisfy the page's query gate
     ("GET", "/api/tracks", {}),
+    (
+        "GET",
+        "/api/tracks",
+        {"params": {"token": TOKEN}},
+    ),  # a query token never unlocks an API route
     ("GET", "/api/tracks", {"headers": WRONG_BEARER}),
     ("GET", "/api/detections", {"headers": WRONG_BEARER}),
     ("GET", "/api/health", {"headers": WRONG_BEARER}),
@@ -301,7 +327,9 @@ _UI_DENIED: list[tuple[str, str, dict[str, Any]]] = [
 _STATION_DENIED: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/", {}),
     ("GET", "/", {"params": {"token": "wrong"}}),
+    ("GET", "/", {"headers": BEARER}),
     ("GET", "/detections", {}),
+    ("GET", "/detections", {"params": {"token": TOKEN}}),
     ("GET", "/export.geojson", {"headers": WRONG_BEARER}),
     ("GET", "/export.csv", {"headers": WRONG_BEARER}),
     ("GET", "/block", {"headers": WRONG_BEARER}),
@@ -392,16 +420,84 @@ async def test_health_denied_pins(method: str, path: str, kwargs: dict[str, Any]
 
 async def test_no_token_opens_every_guarded_route_on_all_four_apps() -> None:
     cases = [
-        (_ui_app(None), "GET", "/api/tracks", {}),
-        (_ui_app(None), "GET", "/", {}),
-        (_station_app(None), "GET", "/detections", {}),
-        (_station_app(None), "GET", "/", {}),
-        (_llm_app(None), "POST", "/chat", {"json": {"prompt": "hi"}}),
-        (_health_app(None), "GET", "/metrics", {}),
+        (_ui_app(None), "GET", "/api/tracks", {}, "no-store"),
+        (_ui_app(None), "GET", "/", {}, "no-store"),
+        (_station_app(None), "GET", "/detections", {}, "no-store"),
+        (_station_app(None), "GET", "/", {}, "no-store"),
+        (_llm_app(None), "POST", "/chat", {"json": {"prompt": "hi"}}, "no-store"),
+        (_llm_app(None), "GET", "/", {}, None),  # the static widget embeds no token
+        (_health_app(None), "GET", "/metrics", {}, "no-store"),
     ]
-    for app, method, path, kwargs in cases:
+    for app, method, path, kwargs, cache_control in cases:
         async with _serve(app) as client:
-            assert (await client.request(method, path, **kwargs)).status == 200, (method, path)
+            resp = await client.request(method, path, **kwargs)
+            assert resp.status == 200, (method, path)
+            # The data routes are no-store whether or not a token is configured.
+            assert resp.headers.get("Cache-Control") == cache_control, (method, path)
+
+
+# ── whitespace-only token: locked, never open (Phase 2a security review) ─────
+#
+# netauth.validate_bind guards on ``not token``, so ``"   "`` passes as a credential on a
+# non-loopback bind (documented, pre-existing; a NEXTSTEPS maintainer item). The kit must
+# then treat it as a configured-but-unmatchable credential — every request refused — and
+# never as "no token". The console and the llm entry point normalise *before* their bind
+# check and so refuse at startup instead; both outcomes are pinned here.
+
+WHITESPACE = "   "
+
+
+def test_whitespace_token_console_refuses_the_bind() -> None:
+    # UIConfig normalises a whitespace credential to None at load (pinned in test_ui_config),
+    # and build_ui_app normalises a token override the same way *before* its bind check, so a
+    # non-loopback bind with such a token is refused at startup rather than served locked.
+    assert UIConfig(token=WHITESPACE).token is None
+    sources = UISources(
+        snapshot=SnapshotStore(
+            _Clock(), max_tracks=1, max_detections=1, track_stale_s=1.0, detection_stale_s=1.0
+        )
+    )
+    with pytest.raises(ValueError, match="without a token"):
+        build_ui_app(sources, UIConfig(token=WHITESPACE), host="0.0.0.0")
+    with pytest.raises(ValueError, match="without a token"):
+        build_ui_app(sources, UIConfig(), host="0.0.0.0", token=WHITESPACE)
+
+
+def test_whitespace_token_llm_entry_point_refuses_the_bind() -> None:
+    from meshsa.llm.server import resolve_config
+
+    cfg = resolve_config({"MESHSA_LLM_HOST": "0.0.0.0", "MESHSA_LLM_TOKEN": WHITESPACE})
+    assert cfg.token is None
+    with pytest.raises(ValueError, match="without a token"):
+        validate_llm_bind(cfg.host, cfg.token)
+
+
+@pytest.mark.parametrize(
+    "factory, method, path, kwargs",
+    [
+        (_station_app, "GET", "/detections", {}),
+        (_station_app, "GET", "/", {}),
+        (_station_app, "GET", "/", {"params": {"token": WHITESPACE}}),
+        (_station_app, "POST", "/detections/d1/status", {"json": {"status": "tagged"}}),
+        (_llm_app, "POST", "/chat", {"json": {"prompt": "hi"}}),
+        (_health_app, "GET", "/metrics", {}),
+    ],
+)
+async def test_whitespace_token_locks_station_llm_and_metrics(
+    factory: Any, method: str, path: str, kwargs: dict[str, Any]
+) -> None:
+    # The bind check accepts the whitespace token (pre-existing); the guard must then refuse
+    # everyone — including a client presenting the same whitespace — rather than open up.
+    validate_healthz_bind("0.0.0.0", WHITESPACE)
+    validate_llm_bind("0.0.0.0", WHITESPACE)
+    app = factory(WHITESPACE) if factory is not _station_app else None
+    if app is None:
+        store = InMemoryStore()
+        app = build_station_app(store, host="0.0.0.0", token=WHITESPACE)
+    async with _serve(app) as client:
+        assert (await client.request(method, path, **kwargs)).status == 401
+        presented = {**kwargs, "headers": {"Authorization": f"Bearer {WHITESPACE}"}}
+        assert (await client.request(method, path, **presented)).status == 401
 
 
 # ── malformed-body handling on the JSON-accepting routes ─────────────────────

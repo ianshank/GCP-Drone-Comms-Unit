@@ -166,6 +166,43 @@ def test_section_key_is_honoured(section: str, key: str) -> None:
     assert after != before, (key, sample)
 
 
+class _SpyEnv(dict[str, str]):
+    """Records every key the loader looks at, so unlisted keys are provably ignored."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.seen: set[str] = set()
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            self.seen.add(key)
+        return super().__contains__(key)
+
+    def __getitem__(self, key: str) -> str:
+        self.seen.add(key)
+        return super().__getitem__(key)
+
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        self.seen.add(key)
+        return super().get(key, default)
+
+
+def test_loader_reads_no_key_outside_the_inventory() -> None:
+    """Behavioural half of the pin: keys sharing the prefix but outside the list are inert."""
+    spy = _SpyEnv(
+        {
+            **_BASE,
+            "MESHSA_HEALTH": "1",  # the CLI's presence flag; shares the `health` section prefix
+            "MESHSA_UI_BOGUS": "x",
+            "MESHSA_TRANSPORTS": "[]",  # structured; binds only through CONFIG_JSON
+            "MESHSA_INFERENCE_MODEL_NAME": "x",
+        }
+    )
+    cfg = NodeConfig.from_env(spy)
+    assert cfg == NodeConfig.from_env(dict(_BASE))
+    assert spy.seen <= set(node_env_inventory())
+
+
 def test_config_json_blob_is_honoured_then_overridden() -> None:
     blob = '{"uid": "n1", "callsign": "BLOB", "router": {"queue_maxsize": 5}}'
     env = {"MESHSA_CONFIG_JSON": blob}

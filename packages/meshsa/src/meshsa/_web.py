@@ -19,8 +19,9 @@ the same rule the factories already follow.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 from .netauth import authorize
@@ -50,18 +51,20 @@ Handler = Callable[[Any], Awaitable[Any]]
 #: Every credential-bearing response carries this: an intermediary proxy must never persist
 #: an authorized payload for replay to an unauthenticated client (spec delta
 #: ``m2-bind-safety`` "Authenticated JSON Responses Are Non-Cacheable").
-NO_STORE_HEADERS: dict[str, str] = {"Cache-Control": "no-store"}
+NO_STORE_HEADERS: Mapping[str, str] = MappingProxyType({"Cache-Control": "no-store"})
 
-#: The one refusal body, house-wide: no detail, no partial data.
-UNAUTHORIZED_BODY: dict[str, str] = {"error": "unauthorized"}
+#: The one refusal body, house-wide: no detail, no partial data. Both constants are
+#: read-only views so no importer can change every 401 or every cache header by mutation.
+UNAUTHORIZED_BODY: Mapping[str, str] = MappingProxyType({"error": "unauthorized"})
 
 
 def normalize_token(token: str | None) -> str | None:
     """``""``/whitespace → ``None``: an empty credential is no credential.
 
-    The same rule ``UIConfig`` applies at load and ``llm/server.resolve_config`` applies to
-    ``MESHSA_LLM_TOKEN``; a whitespace credential must never satisfy the fail-closed bind
-    check nor count as a configured bearer.
+    The rule ``UIConfig`` applies at load and ``llm/server.resolve_config`` applies to
+    ``MESHSA_LLM_TOKEN``. A factory that normalises must do so **before** its bind check
+    (``build_ui_app`` does), so the fail-closed check and the bearer guard see the same
+    value; :class:`ServiceAuth` itself never normalises — see its docstring.
     """
     if token is None:
         return None
@@ -70,17 +73,21 @@ def normalize_token(token: str | None) -> str | None:
 
 @dataclass(frozen=True)
 class ServiceAuth:
-    """A service's bearer posture: its realm name and its (normalised) token.
+    """A service's bearer posture: its realm name and its token, **verbatim**.
 
-    ``token=None`` means open — :func:`meshsa.netauth.authorize` admits every request, and
-    loopback-only exposure is enforced separately by the factory's ``validate_bind`` adapter.
+    ``token`` is ``None``/``""`` for open — :func:`meshsa.netauth.authorize` admits every
+    request, and loopback-only exposure is enforced separately by the factory's
+    ``validate_bind`` adapter. Anything else is a configured credential, exactly as
+    ``netauth.validate_bind``'s ``not token`` guard sees it: the kit must never treat as
+    *open* a token the bind check accepted as a *credential*. So a whitespace-only token is
+    carried as is — ``authorize`` strips only the presented bearer, so such a token is
+    unmatchable (every request is refused; the documented pre-existing semantics, see
+    ``docs/NEXTSTEPS.md`` "whitespace-only bearer tokens") rather than silently open.
+    Normalising belongs to the caller, before its bind check (:func:`normalize_token`).
     """
 
     service: str
     token: str | None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "token", normalize_token(self.token))
 
     @property
     def challenge(self) -> str:
@@ -101,7 +108,7 @@ def unauthorized(auth: ServiceAuth) -> Any:
     from aiohttp import web
 
     return web.json_response(
-        UNAUTHORIZED_BODY,
+        dict(UNAUTHORIZED_BODY),
         status=401,
         headers={**NO_STORE_HEADERS, "WWW-Authenticate": auth.challenge},
     )
@@ -142,7 +149,7 @@ def api_json(body: Any, *, status: int = 200) -> Any:
     """A JSON response that an intermediary must not cache."""
     from aiohttp import web
 
-    return web.json_response(body, status=status, headers=NO_STORE_HEADERS)
+    return web.json_response(body, status=status, headers=dict(NO_STORE_HEADERS))
 
 
 def text_body(text: str, *, content_type: str, status: int = 200) -> Any:
@@ -150,7 +157,7 @@ def text_body(text: str, *, content_type: str, status: int = 200) -> Any:
     from aiohttp import web
 
     return web.Response(
-        text=text, content_type=content_type, status=status, headers=NO_STORE_HEADERS
+        text=text, content_type=content_type, status=status, headers=dict(NO_STORE_HEADERS)
     )
 
 
@@ -178,7 +185,11 @@ async def read_json_or_none(
 
 
 async def healthz(_request: Any) -> Any:
-    """The open liveness route every service exposes: discloses nothing (house norm)."""
+    """The open ``{"status": "ok"}`` liveness route of the console, station and llm server.
+
+    ``health.py`` keeps its own open ``/healthz`` that serves the node snapshot (audit row
+    #7); this one discloses nothing.
+    """
     from aiohttp import web
 
     return web.json_response({"status": "ok"})

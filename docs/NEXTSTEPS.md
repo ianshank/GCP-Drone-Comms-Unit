@@ -75,7 +75,11 @@
       and `ui/config.py` map whitespace→`None` and refuse; `scout/cli.py`'s
       `station_token or None` normalizes empty only, so a whitespace token binds but
       is unmatchable (`netauth.authorize` strips the presented credential, not the
-      configured one) — denial, not exposure; the transport-options path
+      configured one) — denial, not exposure (`_web.py::ServiceAuth` carries the token
+      verbatim for exactly this reason: a Phase 2a draft that normalised it inside the
+      kit turned #7/#9 open on that misconfiguration, caught in review and pinned by
+      `tests/test_app_contracts.py::test_whitespace_token_locks_station_llm_and_metrics`);
+      the transport-options path
       (`mavlink_source`, `detection_ingest`) neither normalizes nor authenticates
       datagrams, and is the variant that actually widens a bind. Documented by
       `test_mavlink_source.py::test_whitespace_token_currently_accepted_documented_gap`;

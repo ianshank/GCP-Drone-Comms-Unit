@@ -22,6 +22,7 @@ _PLAN_INTEGRATION_FILES = (
     "test_inference_e2e.py",
     "test_link_loss_soak.py",
     "test_detection_ingest.py",  # real loopback UDP socket
+    "test_app_contracts.py",  # aiohttp TestServer loopback TCP sockets
 )
 _PLAN_UNIT_FILES = ("test_pacing.py", "test_netauth.py", "test_compact.py", "test_router.py")
 

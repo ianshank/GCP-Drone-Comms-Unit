@@ -73,6 +73,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
   that now sets it.
 - `meshsa.config._parse_bool` is an alias of `meshsa._envconfig.parse_bool`, kept only
   because the frozen `command/config.py` imports it (retired in T-8.8).
+- Review fix (security-reviewer, bind-auditor and test-engineer, independently): a draft of
+  `_web.ServiceAuth` normalised a whitespace-only token to "no token" *after* the
+  per-factory bind check had accepted it as a credential, which would have turned the
+  station and `/metrics` from locked (unmatchable token, every request refused — the
+  documented pre-existing semantics) to open on a non-loopback bind. `ServiceAuth` now
+  carries the token verbatim; the invariant "open to all ⇔ `validate_bind` would refuse
+  the bind" is pinned, and the whitespace case is pinned on all four factories. The
+  normalisation decision itself stays the NEXTSTEPS maintainer item. `NO_STORE_HEADERS`
+  and `UNAUTHORIZED_BODY` are read-only mapping proxies.
 
 #### Code-quality reflection, Phase 1 — guardrails (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
 - **Complexity ratchet (P1-1):** ruff `C901` and `PLR0911/0912/0913/0915` are now

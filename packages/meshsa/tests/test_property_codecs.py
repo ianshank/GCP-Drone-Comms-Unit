@@ -83,6 +83,11 @@ def test_compact_chat_preserves_text(text):
 # Course and speed are generated together because the ``<track>`` element is only
 # emitted when both are present (pinned by ``test_track_omitted_when_only_one_of_course_speed``).
 
+#: Non-empty identifiers for the CoT properties: an empty uid is pinned by an explicit
+#: example below, so the derandomised first example cannot hide the real cases.
+_name = st.text(
+    alphabet=st.characters(min_codepoint=32, max_codepoint=126), min_size=1, max_size=40
+)
 _pct = st.one_of(st.none(), st.integers(min_value=0, max_value=100))
 _volts = st.one_of(
     st.none(), st.floats(min_value=0, max_value=60, allow_nan=False, allow_infinity=False)
@@ -102,7 +107,7 @@ _track = st.one_of(
 )
 
 
-def _rich_pli(uid, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw):
+def _rich_pli(uid, callsign, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw):
     position = {"lat": lat, "lon": lon, "hae": 0.0, "ce": 10.0, "le": 10.0}
     if track is not None:
         position["course_deg"], position["speed_ms"] = track
@@ -122,7 +127,7 @@ def _rich_pli(uid, lat, lon, track, battery_pct, battery_v, current_a, roll, pit
     }
     if attitude:
         telemetry["attitude"] = attitude
-    payload = {"node": {"uid": uid, "callsign": uid, "tier": "user"}, "position": position}
+    payload = {"node": {"uid": uid, "callsign": callsign, "tier": "user"}, "position": position}
     if telemetry:
         payload["telemetry"] = telemetry
     return Envelope(
@@ -136,12 +141,12 @@ def _rich_pli(uid, lat, lon, track, battery_pct, battery_v, current_a, roll, pit
 
 
 @settings(max_examples=100)
-@given(_ident, _lat, _lon, _track, _pct, _volts, _amps, _angle, _angle, _angle)
+@given(_name, _name, _lat, _lon, _track, _pct, _volts, _amps, _angle, _angle, _angle)
 def test_cot_rich_pli_roundtrip_is_lossless(
-    uid, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
+    uid, callsign, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
 ):
     env = _rich_pli(
-        uid or "u", lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
+        uid, callsign, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
     )
     out = CotCodec().decode(CotCodec().encode(env))
     assert out.kind == MessageKind.PLI
@@ -152,14 +157,29 @@ def test_cot_rich_pli_roundtrip_is_lossless(
 
 
 @settings(max_examples=50)
-@given(_ident, _lat, _lon, _track, _pct, _volts, _amps, _angle, _angle, _angle)
+@given(_name, _name, _lat, _lon, _track, _pct, _volts, _amps, _angle, _angle, _angle)
 def test_cot_emit_detail_false_drops_every_richer_field(
-    uid, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
+    uid, callsign, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
 ):
     env = _rich_pli(
-        uid or "u", lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
+        uid, callsign, lat, lon, track, battery_pct, battery_v, current_a, roll, pitch, yaw
     )
     out = CotCodec(emit_detail=False).decode(CotCodec(emit_detail=False).encode(env))
     assert "telemetry" not in out.payload
     assert "course_deg" not in out.payload["position"]
     assert "speed_ms" not in out.payload["position"]
+    # Positive control: the plain track still round-trips, so an encoder emitting an empty
+    # position could not pass this test.
+    assert out.payload["position"]["lat"] == lat
+    assert out.payload["position"]["lon"] == lon
+    assert out.payload["node"]["callsign"] == callsign
+
+
+def test_cot_empty_uid_and_callsign_round_trip_verbatim():
+    # The derandomised strategies above never start from "", so the empty identifier is
+    # pinned explicitly: CoT carries it as an empty attribute and decode returns it as is.
+    env = _rich_pli("", "", 1.0, 2.0, None, None, None, None, None, None, None)
+    out = CotCodec().decode(CotCodec().encode(env))
+    assert out.source_uid == ""
+    assert out.payload["node"]["callsign"] == ""
+    assert out.payload["position"]["lat"] == 1.0

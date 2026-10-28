@@ -490,7 +490,11 @@ because they are non-mechanical), the two frozen sites wait for T-8.8. Two decla
 pinned behaviour deltas: `WWW-Authenticate: Bearer realm="<service>"` on every 401 and
 `Cache-Control: no-store` on every bearer-guarded response, house-wide (spec delta in
 `openspec/.../m2-bind-safety/spec.md`). The S4d deliverables scenario (`X-Snapshot-Age`)
-was **not** salvaged — no spec asks for the header. P2-4 … P2-7 are Phase 2b, after this
+was **not** salvaged — no spec asks for the header. The three reviews (security-reviewer,
+bind-auditor, test-engineer) independently caught one HIGH regression in the draft kit — a
+whitespace-only token normalised to "open" after the bind check had accepted it — fixed by
+carrying the token verbatim and pinned on all four factories; the characterization pins
+had not covered that case, which is itself recorded. P2-4 … P2-7 are Phase 2b, after this
 PR merges (the branch convention is one open PR at a time).
 
 ### Phase 3 — Config sweep, dead code, docs organization (≈1–2 weeks)
