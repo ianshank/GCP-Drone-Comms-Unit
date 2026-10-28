@@ -38,7 +38,10 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e "packages/meshsa[dev,inference]"
+          # -c: every transitive version comes from the committed lock
+          # (requirements/ci-constraints.txt, plan P1-6), so an upstream release cannot
+          # turn this job red on its own; dependabot proposes the lock's bumps as PRs.
+          pip install -e "packages/meshsa[dev,inference]" -c requirements/ci-constraints.txt
           # tools/claude_hooks (governance.py) depends on pyyaml, not a meshsa dependency.
           # Pinned: this job's verdict must not drift with an upstream release.
           pip install pyyaml==6.0.3 types-PyYAML==6.0.12.20260724
@@ -124,7 +127,8 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e "packages/jetson_yolo_gcs[dev]"
+          # -c: see the meshsa job — the lock covers both packages' [dev] extras.
+          pip install -e "packages/jetson_yolo_gcs[dev]" -c requirements/ci-constraints.txt
 
       - name: Lint
         run: ruff check packages/jetson_yolo_gcs
@@ -229,6 +233,40 @@ jobs:
 
       - name: Tool-pin sync
         run: python tools/check_tool_pins.py
+
+      - name: Dead-code scan (vulture, advisory)
+        # Advisory by design (plan P1-2): vulture's candidates are claims to verify, not
+        # findings — registry-decorated factories, pydantic validators and Protocol
+        # methods all read as unused at lower confidence. At 80 the only hit on the
+        # baseline was a pypubsub callback parameter, now in tools/vulture_whitelist.py.
+        # Each candidate becomes a run annotation; the step never fails the job. No pipe,
+        # so this step does not depend on pipefail.
+        run: |
+          pip install vulture==2.16
+          vulture packages/meshsa/src packages/jetson_yolo_gcs/src \
+            flightctl/run_gateway.py flightctl/run_commander.py flightctl/sim tools \
+            --exclude 'tools/claude_hooks/tests,tools/tests' --min-confidence 80 \
+            > /tmp/vulture.txt || true
+          while IFS= read -r line; do
+            echo "::warning title=vulture (advisory, plan P1-2)::${line}"
+          done < /tmp/vulture.txt
+          echo "**vulture (advisory, confidence >= 80)**: $(wc -l < /tmp/vulture.txt) candidate(s)" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pragma reasons (advisory)
+        # Convention (plan P1-4): every `# pragma: no cover` carries a reason after ` - `
+        # so a grep can audit the exclusions by kind. Bare pragmas are warnings, not
+        # failures; the count lands in the step summary next to the coverage numbers.
+        run: |
+          grep -rnE '# pragma: no cover\s*$' packages/meshsa/src packages/jetson_yolo_gcs/src \
+            flightctl tools --include='*.py' > /tmp/bare-pragmas.txt || true
+          while IFS= read -r line; do
+            echo "::warning title=bare pragma (advisory, plan P1-4)::${line}"
+          done < /tmp/bare-pragmas.txt
+          total=$(grep -rE '# pragma: no cover' packages/meshsa/src packages/jetson_yolo_gcs/src \
+            flightctl tools --include='*.py' | wc -l)
+          echo "**pragma: no cover**: ${total} total, $(wc -l < /tmp/bare-pragmas.txt) without a reason" \
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: Secret scan (gitleaks)
         # Pre-commit runs gitleaks locally but is bypassable (--no-verify); this is the

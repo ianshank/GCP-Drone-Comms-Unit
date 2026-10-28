@@ -37,11 +37,14 @@ updates:
       - "https://github.com/pre-commit/mirrors-mypy"
 
   # pip: ruff and mypy ride the python-tooling group; every other dependency in both
-  # packages still gets its own PR per directory.
+  # packages still gets its own PR per directory. /requirements holds the CI lock
+  # (ci-constraints.txt, plan P1-6): its ruff/mypy pins join the same group so a tool
+  # bump moves the lock too, and every other locked version gets its own PR.
   - package-ecosystem: pip
     directories:
       - /packages/meshsa
       - /packages/jetson_yolo_gcs
+      - /requirements
     multi-ecosystem-group: python-tooling
     patterns:
       - ruff
