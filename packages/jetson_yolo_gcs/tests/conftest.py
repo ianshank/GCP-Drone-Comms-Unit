@@ -10,6 +10,14 @@ from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.streaming.camera import Frame
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Taxonomy markers from the directory layout (plan P1-5): tests/integration/ is
+    ``integration``, everything else is ``unit``; select with ``-m``."""
+    for item in items:
+        is_integration = "integration" in item.path.parts
+        item.add_marker(pytest.mark.integration if is_integration else pytest.mark.unit)
+
+
 class FakeClock:
     """Deterministic clock: returns preset times or increments by 1.0 each call."""
 

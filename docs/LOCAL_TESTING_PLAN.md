@@ -32,6 +32,13 @@ This document outlines the comprehensive strategy for executing all test suites 
 | **Regression & Soak** | Radio Link Loss & Backoff | `python -m pytest packages/meshsa/tests/test_link_loss_soak.py packages/meshsa/tests/test_gap_fills.py packages/meshsa/tests/test_backoff.py` | Tests network loss recovery, backoff timers, pacing queues, and continuous radio disconnect/reconnect cycles. |
 | **Security & Governance** | Transport Auth, Pre-flight Safety, AI Agent Hooks | `python -m pytest packages/meshsa/tests/test_netauth.py packages/meshsa/tests/test_arm_guard.py tools/claude_hooks/tests` | Verifies mutual auth, token validation, `ArmGuard` pre-flight RC safety interlocks, bind guard loopback enforcement, and tool governance rules. |
 
+**Selecting by marker.** Both packages apply `unit` / `integration` markers at collection
+time (`tests/conftest.py`; by file name in meshsa, by directory in jetson_yolo_gcs), so the
+rows above are selectable without moving files: `python -m pytest -m integration --no-cov`
+runs the wiring/app/transport/e2e/soak files, `-m unit` the rest, and the existing `slow`
+and `e2e` markers still narrow further. Remember the package coverage floor applies to any
+partial run — add `--no-cov` when selecting a subset.
+
 ---
 
 ## 3. Dependency Management & Installation

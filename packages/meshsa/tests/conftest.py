@@ -28,6 +28,33 @@ settings.register_profile(
 )
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "ci"))
 
+# Test taxonomy markers (docs/CODE_QUALITY_TECH_DEBT_PLAN.md P1-5; taxonomy in
+# docs/LOCAL_TESTING_PLAN.md). The suite is one flat directory by design, so the
+# unit/integration split is derived from the file name rather than from a directory move:
+# anything exercising component wiring (an aiohttp app, a transport against a fake socket,
+# the router bridge, an e2e or soak file) is `integration`; everything else is `unit`.
+# `-m integration` / `-m unit` select by category without moving a single file.
+_INTEGRATION_FILE_STEMS: tuple[str, ...] = (
+    "_e2e",
+    "_soak",
+    "_integration",
+    "_app",  # test_ui_app, test_health_app, test_llm_server_app, test_run_commander_app
+    "test_tak",  # test_tak, test_tak_multicast, test_tak_tls
+    "test_mavlink_source",
+    "test_scout_station",
+    "test_scout_pipeline",
+    "test_scout_wiring",
+)
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        stem = item.path.stem
+        is_integration = "e2e" in item.path.parts or any(
+            marker in stem for marker in _INTEGRATION_FILE_STEMS
+        )
+        item.add_marker(pytest.mark.integration if is_integration else pytest.mark.unit)
+
 
 class FakeHttpTransport:
     """Scriptable :class:`meshsa.HttpTransport` for tests — no aiohttp, no sockets.
