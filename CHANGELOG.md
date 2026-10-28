@@ -9,6 +9,25 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+#### Code-quality reflection, Phase 2a — shared foundations (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- `meshsa/_web.py` (T-3.1 / P2-1) — the one aiohttp auth/response kit: `ServiceAuth`,
+  `bearer_guard`, `page_token_gate`, `guarded`, `unauthorized`, `api_json`/`text_body`/
+  `html_page` (all `no-store`), `read_json_or_none`, `healthz`, `upstream_error`,
+  `register_routes`. `ui/app.py`, `scout/station/app.py`, `llm/server.py` and `health.py`
+  keep only their route tables. Bind validation is deliberately not in the kit: each
+  factory keeps its six-line `validate_bind` adapter, the shape `bind_guard` recognises.
+- `meshsa/_envconfig.py` (T-3.2 / P2-2) — env keys and casters derived from the Pydantic
+  models (`caster_for`, `env_key`, `apply_overrides`, `load_sections`, `merge_config_json`,
+  `env_inventory`, `env_scalar`). `NodeConfig.from_env` is five statements over two
+  declarations (`NODE_ENV_SCALARS`, `NODE_ENV_SECTIONS`); `node_env_inventory()` lists the
+  78 honoured keys and `tests/test_env_inventory.py` pins them in both directions, with a
+  Hypothesis `from_env(to_env(cfg)) == cfg` property. `llm/agent.py`'s three env knobs are
+  the testable `resolve_agent_knobs`.
+- Characterization pins (design D-8): `tests/test_app_contracts.py` (every route of the
+  four app factories — status, `Cache-Control`, `Content-Type`, 401 body and challenge;
+  salvages the deliverables scenarios S5b/S5c/S6a/S6b), `tests/test_web_kit.py`,
+  `tests/test_envconfig.py`, and CoT richer-detail round-trip properties.
+
 #### Agent instruction files (openspec `agents-md-directory-guides`)
 - `tools/validate_agents_docs.py` — a stdlib-only linter for the files a coding-agent
   harness loads as trusted system context: the five `AGENTS.md` guides and the new
@@ -35,6 +54,26 @@ Versions follow [Semantic Versioning](https://semver.org/).
   heavy/hardware modules. The rule held in fact; now it is checked.
 
 ### Changed
+#### Code-quality reflection, Phase 2a — shared foundations (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- **Operator-visible (HTTP clients):** every 401 from the four aiohttp services now carries
+  `WWW-Authenticate: Bearer realm="<service>"` (RFC 7235 §3.1; realms `meshsa-ui`,
+  `meshsa-scout`, `meshsa-llm`, `meshsa-metrics`) and `Cache-Control: no-store`; every
+  bearer-guarded response — the station's data/export/status routes, `llm` `/chat`,
+  `/metrics` — and the token-bearing station page carry `Cache-Control: no-store`. Before,
+  only `/metrics` sent the challenge and only the operator console sent `no-store`. Bodies,
+  status codes and the open routes (`/healthz`, the llm widget) are unchanged. Spec delta:
+  `openspec/changes/code-hygiene-modularity/specs/m2-bind-safety/spec.md` ("Bearer Refusals
+  Carry a Challenge", "One Refusal Implementation").
+- `cot.py` (T-4.4 / P2-3): `CotCodec` is a facade over module-level `encode_*`/`decode_event`
+  functions and a frozen `_CotNaming`; the constructor, `stale_s`, `encode`, `decode` and the
+  wire output are unchanged (golden snapshots byte-identical). `decode` went from
+  complexity 17 to a module whose every function is ≤ 6.
+- Complexity ratchet lowered in the PR that earned it (`packages/meshsa/pyproject.toml`):
+  complexity 31 → 11, branches 20 → 10, statements 70 → 33, each anchored on the function
+  that now sets it.
+- `meshsa.config._parse_bool` is an alias of `meshsa._envconfig.parse_bool`, kept only
+  because the frozen `command/config.py` imports it (retired in T-8.8).
+
 #### Code-quality reflection, Phase 1 — guardrails (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
 - **Complexity ratchet (P1-1):** ruff `C901` and `PLR0911/0912/0913/0915` are now
   selected in both package pyprojects and `ruff.toml`, with every threshold set to the

@@ -475,6 +475,24 @@ Order matters: the foundations remove the duplication that *is* the complexity.
 | **P2-6** | `tools/agents_docs/` package split of `validate_agents_docs.py` (+ its tests) by check family; same CLI entry point | B5 | new | M | no file in `tools/` over 400 lines; checker output byte-identical on the current tree |
 | **P2-7** | jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies; `Pipeline` takes a `PipelineDeps` object | B6 | T-4.5 | M | body-FRD wire output byte-identical (existing pin); arity ≤ 6 |
 
+**Status (2026-10-28, Phase 2a):** P2-1, P2-2 and P2-3 landed (Phase 2a PR), pins first
+(design D-8: `tests/test_app_contracts.py`, `tests/test_env_inventory.py`), then the
+foundations. Measured after: `build_ui_app` complexity 31 → 9 and 70 → 25 statements;
+`NodeConfig.from_env` 22 → 1 (five statements; `config.py` 326 → 178 lines); every function
+in `cot.py` ≤ 6 (was 17); the meshsa ratchet is now complexity 11 / branches 10 /
+statements 33, anchored on `llm/tools.py::format_drone_state`, which is the "one named
+exception" of §4 — the repo-wide count of functions over McCabe 10 is 3 (the frozen
+`run_commander.build_app`, `literal_guard._iter_magic_bindings`, `format_drone_state`).
+App factories re-implementing auth: 4 → 0 (`_web.py`); `os.environ` parsing sites: the
+seven eligible ones sit on `_envconfig` (two of them — `fpv/config.py`'s `SESSIONS_ROOT`
+alias and `run_gateway.py`'s single `MESHSA_LOG_LEVEL` read — keep a one-line local read
+because they are non-mechanical), the two frozen sites wait for T-8.8. Two declared,
+pinned behaviour deltas: `WWW-Authenticate: Bearer realm="<service>"` on every 401 and
+`Cache-Control: no-store` on every bearer-guarded response, house-wide (spec delta in
+`openspec/.../m2-bind-safety/spec.md`). The S4d deliverables scenario (`X-Snapshot-Age`)
+was **not** salvaged — no spec asks for the header. P2-4 … P2-7 are Phase 2b, after this
+PR merges (the branch convention is one open PR at a time).
+
 ### Phase 3 — Config sweep, dead code, docs organization (≈1–2 weeks)
 
 | ID | Item | Theme | Size | Acceptance |
