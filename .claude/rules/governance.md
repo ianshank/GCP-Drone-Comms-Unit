@@ -29,14 +29,17 @@ failure mode is *silence* rather than a red build.
   the default runner shell lacks `pipefail`, so `pytest | tee` exits with `tee`'s
   status and a fully failing suite reports the job green.
 - Keep GitHub Actions SHA-pinned — why: a tag is mutable, so a tag-pinned action is an
-  unreviewed third party with write access to CI — control: all 18 `uses:` across the
-  four workflows are currently full 40-char SHAs; nothing enforces it mechanically, so
-  this is the check — advisory.
+  unreviewed third party with write access to CI — control: all 21 `uses:` across the
+  four workflows are currently full 40-char SHAs (the `ts` job's `pnpm/action-setup`
+  and `actions/setup-node` included); nothing enforces it mechanically, so this is the
+  check — advisory.
 - When changing a pinned tool version, change it in every place it appears — why:
-  `check_tool_pins.py::TOOLS` covers `ruff` and `mypy` only, so PyYAML, pydantic and
-  pytest drift between CI and pre-commit undetected; the gitleaks **version** matches
-  the pre-commit rev today but its CI **checksum** has no counterpart to compare
-  against — control: `tools/check_tool_pins.py`, for ruff and mypy only.
+  `check_tool_pins.py::TOOLS` covers `ruff`, `mypy` (two pyprojects + pre-commit) and
+  `gitleaks` (pre-commit rev + `ci.yml` `GITLEAKS_VERSION`) only, so PyYAML, pydantic
+  and pytest drift between CI and pre-commit undetected, and the gitleaks CI
+  **checksum** has no counterpart to compare against — a gitleaks bump means
+  downloading the release tarball and re-deriving `GITLEAKS_SHA256` by hand —
+  control: `tools/check_tool_pins.py`, for those three tools only.
 - Add an `archive/` exclusion to any new lint or type invocation you introduce — why:
   `ruff.toml` does **not** exclude `archive/`; every exclusion lives at the call site
   (CI args, pre-commit `exclude:`, `scripts/validate-pre-pr.sh`), so a new invocation
@@ -57,6 +60,11 @@ failure mode is *silence* rather than a red build.
   bolding the id makes **every** checkbox in the file invisible to it, with no error
   — control: `tools/check_task_sync.py`, which is advisory (exit 0) and so will not
   fail a build on your behalf.
-- Do not add a `--cov-fail-under` to the `tools/` suite without saying so — why:
-  coverage there is measured, not gated, deliberately and by a written measure-first
-  decision in CI; the package floors (97 meshsa, 96 jetson) are the gated ones.
+- The `tools/` suite's `--cov-fail-under=90` lives on the pytest command line in the
+  CI governance step, not in a config file — why: `tools/` has no pyproject, so a local
+  run without the flag measures and does not gate; the floor was set after two months
+  of report-only measurement at 95–96 % (P0-5 of `docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+  and rises to 95 once `scope_freeze.py` has in-process tests. Do not lower it
+  silently; the package floors (97 meshsa, 96 jetson) stay in their pyprojects —
+  control: the `--cov-fail-under=90` flag on the CI governance step itself; nothing
+  enforces the floor locally — advisory.

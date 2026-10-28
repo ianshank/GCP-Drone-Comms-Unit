@@ -15,7 +15,10 @@ ADS-B→CoT. The Jetson stays the AI/compute plane and rides the mesh as an IP h
 ## Software install
 ```bash
 chmod +x setup_pi5_node.sh mesh-up.sh
-# EDIT the CONFIG block at the top of setup_pi5_node.sh first, then:
+# EDIT the CONFIG block at the top of setup_pi5_node.sh first. AP_PSK is deliberately
+# NOT in that block: the script refuses to run without it, so the ATAK client AP can
+# never come up on a shipped passphrase. Export it (WPA2, 8-63 chars), then:
+read -rs -p 'AP_PSK: ' AP_PSK && export AP_PSK   # prompts; keeps the PSK out of shell history
 ./setup_pi5_node.sh
 sudo systemctl start mesh-up tak-gateway adsbcot
 ```

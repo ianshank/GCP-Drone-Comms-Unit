@@ -24,7 +24,12 @@ UPLINK_IF="eth0"            # interface that reaches the internet/LAN (gateway N
 LAN_IF="eth0"              # iface the Jetson plugs into (can equal UPLINK_IF w/ care)
 AP_IF="wlan0"              # Pi 5 built-in Wi-Fi as the ATAK client AP
 AP_SSID="gcs-mesh"
-AP_PSK="change-me-please"
+# No shipped passphrase: an unedited run must not bring the ATAK client AP up on a
+# published PSK. Export AP_PSK (WPA2 passphrase, 8-63 chars) before running.
+AP_PSK="${AP_PSK:?export AP_PSK (WPA2 passphrase for the ATAK client AP, 8-63 chars); no default ships}"
+if [ "${#AP_PSK}" -lt 8 ] || [ "${#AP_PSK}" -gt 63 ]; then
+  echo "AP_PSK must be 8-63 characters (WPA2-PSK); got ${#AP_PSK}" >&2; exit 1
+fi
 FTS_IP="${NODE_IP}"        # FreeTAKServer bind/host IP on the mesh
 COUNTRY="US"
 MESH_USER="$(whoami)"
@@ -92,7 +97,8 @@ dhcp-option=6,${NODE_IP}
 CONF
 
 echo "[*] hostapd: ATAK client AP on ${AP_IF}"
-sudo tee /etc/hostapd/hostapd.conf >/dev/null <<CONF
+# 0600: the file carries the AP passphrase; `tee` would leave it world-readable (umask 022).
+sudo install -m 0600 /dev/stdin /etc/hostapd/hostapd.conf <<CONF
 interface=${AP_IF}
 driver=nl80211
 ssid=${AP_SSID}
