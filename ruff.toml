@@ -7,10 +7,27 @@ target-version = "py310"
 extend-exclude = [".venv", "build", "dist"]
 
 [lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 ignore = [
     "E501", # line length handled by the formatter
 ]
+
+[lint.per-file-ignores]
+# PLR0913: a test's signature is its fixture list, not a design smell.
+"**/tests/**" = ["PLR0913"]
+
+# Complexity RATCHET (docs/CODE_QUALITY_TECH_DEBT_PLAN.md P1-1) for flightctl/, tools/ and
+# deliverables/: each threshold is today's maximum and names the function that sets it.
+# Lower a threshold in the same PR that fixes its function; never raise one. Measured
+# 2026-10-28.
+[lint.mccabe]
+max-complexity = 21   # flightctl/run_commander.py::build_app (frozen path; T-8.7)
+
+[lint.pylint]
+max-args = 5          # tools/validate_agents_docs.py::validate_file
+max-branches = 14     # tools/claude_hooks/literal_guard.py::_iter_magic_bindings
+max-returns = 8       # tools/validate_agents_docs.py (check dispatch)
+max-statements = 48   # flightctl/run_commander.py::build_app
 
 [format]
 quote-style = "double"
