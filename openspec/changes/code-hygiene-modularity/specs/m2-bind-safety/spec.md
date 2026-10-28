@@ -34,6 +34,28 @@ authorized payload for replay to an unauthenticated client.
   of the four `aiohttp` app factories) responds successfully
 - **THEN** the response includes `Cache-Control: no-store`
 
+### Requirement: Bearer Refusals Carry a Challenge
+Every 401 a bearer-guarded route returns SHALL carry `WWW-Authenticate: Bearer realm="<service>"`
+(RFC 7235 §3.1) and `Cache-Control: no-store`, with the fixed body `{"error": "unauthorized"}`
+and no partial data. The realm names the service (`meshsa-ui`, `meshsa-scout`, `meshsa-llm`,
+`meshsa-metrics`) and nothing else; it is a hint to a client, not a disclosure.
+
+#### Scenario: Refusal from any of the four factories
+- **WHEN** a request to a bearer-guarded route (or a `?token=`-gated page) on `ui/app.py`,
+  `scout/station/app.py`, `llm/server.py` or `health.py` presents no credential or the wrong one
+- **THEN** the response is a 401 whose headers include the service's `WWW-Authenticate`
+  challenge and `Cache-Control: no-store`, and whose body is exactly `{"error": "unauthorized"}`
+
+### Requirement: One Refusal Implementation
+The 401 response, the bearer check, the `?token=` page gate, the `no-store` policy and the
+JSON-body parse live in `meshsa/_web.py` only; a factory SHALL NOT re-implement any of them.
+Bind validation is explicitly excluded (the per-service `validate_bind` adapters stay, see the
+Single Bind-Guard Primitive requirement).
+
+#### Scenario: A factory inlines its own 401
+- **WHEN** an app factory module builds a 401 or checks `Authorization` without `meshsa._web`
+- **THEN** review rejects it (there is no mechanical check; `bind_guard` covers binds only)
+
 ### Requirement: Subresource Integrity on Operator Pages
 Every operator-facing HTML page that loads third-party JavaScript or CSS from a CDN SHALL pin
 the asset to an exact version with a Subresource Integrity hash and `crossorigin` attribute,

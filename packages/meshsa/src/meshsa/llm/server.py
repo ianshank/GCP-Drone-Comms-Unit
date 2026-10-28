@@ -21,6 +21,7 @@ import structlog
 from pydantic import BaseModel
 
 from .._parsing import parse_int
+from .._web import ServiceAuth, api_json, guarded, healthz, read_json_or_none, register_routes
 from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_LLM
 
 # ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
@@ -161,26 +162,21 @@ def build_app(
     """
     from aiohttp import web
 
+    auth = ServiceAuth("meshsa-llm", token)
+
     async def index(_request: Any) -> Any:
         return web.Response(text=CHAT_WIDGET_HTML, content_type="text/html")
 
     async def chat(request: Any) -> Any:
-        if not authorize(token, request.headers.get("Authorization")):
-            return web.json_response({"error": "unauthorized"}, status=401)
-        try:
-            payload = await request.json()
-        except Exception:
-            payload = None
+        payload = await read_json_or_none(request)
         body, status = await chat_reply(agent, payload, max_prompt_chars=max_prompt_chars)
-        return web.json_response(body, status=status)
-
-    async def healthz(_request: Any) -> Any:
-        return web.json_response({"status": "ok"})
+        return api_json(body, status=status)
 
     app = web.Application()
-    app.router.add_get("/", index)
-    app.router.add_post("/chat", chat)
-    app.router.add_get("/healthz", healthz)
+    register_routes(
+        app,
+        [("GET", "/", index), ("POST", "/chat", guarded(auth, chat)), ("GET", "/healthz", healthz)],
+    )
     return app
 
 

@@ -157,7 +157,8 @@ def _health_app(token: str | None = TOKEN, fmt: str = "prometheus") -> web.Appli
 # ── the pin tables ────────────────────────────────────────────────────────────
 #
 # (method, path, kwargs) → expected (status, Cache-Control, Content-Type prefix).
-# ``no_store`` is the Cache-Control value: ``"no-store"`` or ``None`` (header absent).
+# ``"no-store"`` on every credential-bearing response; ``None`` (absent) only on the open
+# routes — ``/healthz`` everywhere and the llm widget page, which embeds no token.
 
 _UI_AUTHED: list[tuple[str, str, dict[str, Any], int, str | None, str]] = [
     ("GET", "/", {"params": {"token": TOKEN}}, 200, "no-store", "text/html"),
@@ -178,18 +179,18 @@ _UI_AUTHED: list[tuple[str, str, dict[str, Any], int, str | None, str]] = [
 ]
 
 _STATION_AUTHED: list[tuple[str, str, dict[str, Any], int, str | None, str]] = [
-    ("GET", "/", {"params": {"token": TOKEN}}, 200, None, "text/html"),
+    ("GET", "/", {"params": {"token": TOKEN}}, 200, "no-store", "text/html"),
     ("GET", "/healthz", {}, 200, None, "application/json"),
-    ("GET", "/detections", {"headers": BEARER}, 200, None, "application/json"),
-    ("GET", "/export.geojson", {"headers": BEARER}, 200, None, "application/json"),
-    ("GET", "/export.csv", {"headers": BEARER}, 200, None, "text/csv"),
-    ("GET", "/block", {"headers": BEARER}, 200, None, "application/json"),
+    ("GET", "/detections", {"headers": BEARER}, 200, "no-store", "application/json"),
+    ("GET", "/export.geojson", {"headers": BEARER}, 200, "no-store", "application/json"),
+    ("GET", "/export.csv", {"headers": BEARER}, 200, "no-store", "text/csv"),
+    ("GET", "/block", {"headers": BEARER}, 200, "no-store", "application/json"),
     (
         "POST",
         "/detections/d1/status",
         {"headers": BEARER, "json": {"status": "tagged"}},
         200,
-        None,
+        "no-store",
         "application/json",
     ),
 ]
@@ -202,14 +203,14 @@ _LLM_AUTHED: list[tuple[str, str, dict[str, Any], int, str | None, str]] = [
         "/chat",
         {"headers": BEARER, "json": {"prompt": "hi"}},
         200,
-        None,
+        "no-store",
         "application/json",
     ),
 ]
 
 _HEALTH_AUTHED: list[tuple[str, str, dict[str, Any], int, str | None, str]] = [
     ("GET", "/healthz", {}, 200, None, "application/json"),
-    ("GET", "/metrics", {"headers": BEARER}, 200, None, "text/plain"),
+    ("GET", "/metrics", {"headers": BEARER}, 200, "no-store", "text/plain"),
 ]
 
 
@@ -282,7 +283,8 @@ async def test_health_route_pins(
 # ── the 401 contract, per factory ─────────────────────────────────────────────
 #
 # Each refusal is pinned by body, Cache-Control and the WWW-Authenticate challenge. Before
-# the shared kit, only health.py sent the challenge and only the console sent no-store.
+# the shared kit, only health.py sent the challenge and only the console sent no-store; now
+# every 401 carries both (the kit's single ``unauthorized``).
 
 _UI_DENIED: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/", {}),
@@ -336,19 +338,40 @@ async def _assert_denied(
 @pytest.mark.parametrize("method, path, kwargs", _UI_DENIED)
 async def test_ui_denied_pins(method: str, path: str, kwargs: dict[str, Any]) -> None:
     async with _serve(_ui_app()) as client:
-        await _assert_denied(client, method, path, kwargs, cache_control="no-store", challenge=None)
+        await _assert_denied(
+            client,
+            method,
+            path,
+            kwargs,
+            cache_control="no-store",
+            challenge='Bearer realm="meshsa-ui"',
+        )
 
 
 @pytest.mark.parametrize("method, path, kwargs", _STATION_DENIED)
 async def test_station_denied_pins(method: str, path: str, kwargs: dict[str, Any]) -> None:
     async with _serve(_station_app()) as client:
-        await _assert_denied(client, method, path, kwargs, cache_control=None, challenge=None)
+        await _assert_denied(
+            client,
+            method,
+            path,
+            kwargs,
+            cache_control="no-store",
+            challenge='Bearer realm="meshsa-scout"',
+        )
 
 
 @pytest.mark.parametrize("method, path, kwargs", _LLM_DENIED)
 async def test_llm_denied_pins(method: str, path: str, kwargs: dict[str, Any]) -> None:
     async with _serve(_llm_app()) as client:
-        await _assert_denied(client, method, path, kwargs, cache_control=None, challenge=None)
+        await _assert_denied(
+            client,
+            method,
+            path,
+            kwargs,
+            cache_control="no-store",
+            challenge='Bearer realm="meshsa-llm"',
+        )
 
 
 @pytest.mark.parametrize("method, path, kwargs", _HEALTH_DENIED)
@@ -359,7 +382,7 @@ async def test_health_denied_pins(method: str, path: str, kwargs: dict[str, Any]
             method,
             path,
             kwargs,
-            cache_control=None,
+            cache_control="no-store",
             challenge='Bearer realm="meshsa-metrics"',
         )
 

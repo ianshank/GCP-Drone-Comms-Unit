@@ -125,9 +125,13 @@
       vulnerability reporting, CONTRIBUTING paragraph on required checks.
 
 ## Phase 3 — Shared foundations
-- [ ] T-3.1 `meshsa/_web.py` (design D-5); migrate all four app factories; salvage the
+- [x] T-3.1 `meshsa/_web.py` (design D-5); migrate all four app factories; salvage the
       remaining deliverables scenarios (S4d, S5, S6); collapse `scout/station/app.py`'s
-      byte-identical `/detections` + `/export.geojson` handlers.
+      byte-identical `/detections` + `/export.geojson` handlers. (Landed as plan P2-1:
+      pins first (`tests/test_app_contracts.py`), then the kit; S5b/S5c/S6a/S6b salvaged,
+      S4d **not** — no spec asks for an `X-Snapshot-Age` header, so it is a feature with a
+      spec first, not a salvage. Two declared deltas: the `WWW-Authenticate` challenge and
+      `no-store` are now house-wide on every bearer-guarded response.)
 - [ ] T-3.2 `meshsa/_envconfig.py` (design D-11); migrate `NodeConfig`, `fpv/config.py`,
       `llm/server.resolve_config`, `cli.py`'s env helpers.
 - [ ] T-3.3 `meshsa/_frame_codec.py` + `SchemaGated` mixin; `telemetry.py`/`detection_codec.py`
