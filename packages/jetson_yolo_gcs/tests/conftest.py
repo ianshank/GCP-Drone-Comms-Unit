@@ -10,11 +10,15 @@ from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.streaming.camera import Frame
 
 
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Taxonomy markers from the directory layout (plan P1-5): tests/integration/ is
-    ``integration``, everything else is ``unit``; select with ``-m``."""
+    ``integration``, everything else is ``unit``; select with ``-m``. The path is taken
+    relative to the pytest rootdir, so a checkout under a directory named ``integration``
+    cannot relabel the whole suite (tests/unit/test_taxonomy_markers.py pins this)."""
     for item in items:
-        is_integration = "integration" in item.path.parts
+        path = item.path
+        rel = path.relative_to(config.rootpath) if path.is_relative_to(config.rootpath) else path
+        is_integration = "integration" in rel.parts
         item.add_marker(pytest.mark.integration if is_integration else pytest.mark.unit)
 
 

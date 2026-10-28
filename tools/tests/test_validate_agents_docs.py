@@ -604,13 +604,50 @@ def test_advisory_docs_citations_never_change_the_exit_code(
     assert out.rstrip().endswith("scanned for hidden code points)")
 
 
+def test_advisory_docs_citations_skip_tracked_paths_missing_from_the_work_tree(
+    repo: Path,
+) -> None:
+    write(repo, "README.md", "Dead: `docs/missing.md`.\n")
+    write(repo, "docs/CHARTER.md", "Also dead: `docs/missing.md`.\n")
+    git(repo, "add", ".")
+    (repo / "docs" / "CHARTER.md").unlink()  # still in the index, gone from the work tree
+    warnings = vad.advisory_docs_citations(repo, vad.tracked_files(repo))
+    assert warnings == ["README.md: cited path does not resolve: docs/missing.md"]
+
+
+@pytest.mark.parametrize("doc", ["docs/specs/x.md", "docs/architecture/x.md", "docs/adr/x.md"])
+def test_advisory_sweep_reaches_every_stable_docs_subtree(repo: Path, doc: str) -> None:
+    write(repo, doc, "Dead: `tools/gone.py`.\n")
+    git(repo, "add", ".")
+    assert vad.advisory_docs_citations(repo, vad.tracked_files(repo)) == [
+        f"{doc}: cited path does not resolve: tools/gone.py"
+    ]
+
+
+def test_advisory_warnings_precede_findings_and_are_not_counted(
+    repo: Path, one_guide_manifest: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(repo, "AGENTS.md", "# Guide\n\n## Rules\n\n- Unexplained rule.\n")
+    write(repo, "README.md", "Dead: `docs/missing.md`.\n")
+    git(repo, "add", ".")
+    assert main(["--root", str(repo)]) == 1
+    lines = capsys.readouterr().out.splitlines()
+    warning_idx = next(i for i, line in enumerate(lines) if line.startswith("::warning"))
+    finding_idx = next(i for i, line in enumerate(lines) if "missing required section" in line)
+    assert warning_idx < finding_idx
+    assert not any(line.startswith("FAIL: 3 ") for line in lines)
+    assert lines[-1].startswith("FAIL: ") and "docs/missing.md" not in lines[-1]
+
+
 @pytest.mark.parametrize(
     ("rel_path", "pattern", "expected"),
     [
         ("docs/a.md", "docs/*.md", True),
         ("docs/reviews/a.md", "docs/*.md", False),
+        ("docs/a.md", "docs/specs/*.md", False),
         ("README.md", "README.md", True),
         ("docs/specs/x.md", "docs/specs/*.md", True),
+        ("docs/adr/x.md", "docs/adr/*.md", True),
     ],
 )
 def test_single_level_glob(rel_path: str, pattern: str, expected: bool) -> None:
