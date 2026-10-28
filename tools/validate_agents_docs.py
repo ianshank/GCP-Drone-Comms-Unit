@@ -41,6 +41,7 @@ one finding per line on stdout otherwise. A non-zero exit from an operational pr
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import logging
 import re
 import subprocess
@@ -259,6 +260,21 @@ CITATION_EXCEPTIONS: dict[str, dict[str, str]] = {}
 
 #: Timeout for the single git invocation, matching tools/check_task_sync.py.
 GIT_TIMEOUT_S = 60
+
+#: Documents swept for dead path citations as an ADVISORY (plan P1-3): each finding is
+#: printed as a warning and never changes the exit code. These are not instruction files,
+#: so their checks are not the trusted-context obligation above — but a dead path in the
+#: README or the stable plan is the same reference rot, and it was invisible until now.
+#: Gating waits for the docs/ reorganization (plan H1 / P3-3); gating today would fail on
+#: historical review documents that cite paths which no longer exist by design.
+#: Patterns match one directory level: ``docs/*.md`` does not reach ``docs/reviews/``.
+DOCS_ADVISORY_GLOBS: tuple[str, ...] = (
+    "README.md",
+    "docs/*.md",
+    "docs/specs/*.md",
+    "docs/architecture/*.md",
+    "docs/adr/*.md",
+)
 
 _FENCE_PREFIX = "```"
 _HEADING_PREFIX = "## "
@@ -863,6 +879,30 @@ def validate_instruction_files(root: Path) -> list[str]:
     return findings
 
 
+def _matches_single_level_glob(rel_path: str, pattern: str) -> bool:
+    """``fnmatch`` where ``*`` stops at ``/``: ``docs/*.md`` matches ``docs/a.md`` only."""
+    return rel_path.count("/") == pattern.count("/") and fnmatch.fnmatch(rel_path, pattern)
+
+
+def advisory_docs_citations(root: Path, tracked: list[str]) -> list[str]:
+    """Advisory sweep — dead path citations in README.md and the stable docs/ tree.
+
+    Reuses :func:`check_cited_paths` unchanged, so a citation is judged exactly as it
+    would be in a guide; only the consequence differs (a warning, never a failure).
+    """
+    warnings: list[str] = []
+    for rel_path in sorted(
+        path
+        for path in tracked
+        if any(_matches_single_level_glob(path, pattern) for pattern in DOCS_ADVISORY_GLOBS)
+    ):
+        path = root / rel_path
+        if not path.is_file():
+            continue
+        warnings.extend(check_cited_paths(rel_path, path.read_text(encoding="utf-8"), root))
+    return warnings
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -883,6 +923,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     findings = validate_instruction_files(root)
+    # Advisory, printed before the verdict so it never reads as part of it. GitHub's
+    # `::warning` prefix turns each line into a run annotation and is harmless elsewhere.
+    for warning in advisory_docs_citations(root, tracked_files(root)):
+        print(f"::warning title=docs citation (advisory, plan P1-3)::{warning}")
     if findings:
         for finding in findings:
             print(finding)
