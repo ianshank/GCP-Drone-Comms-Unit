@@ -40,7 +40,9 @@ ConnectionFactory = Callable[[], Any]
 _log = structlog.get_logger("meshsa.mavlink_source")
 
 
-def _default_connection_factory(options: dict[str, Any]) -> ConnectionFactory:  # pragma: no cover
+def _default_connection_factory(
+    options: dict[str, Any],
+) -> ConnectionFactory:  # pragma: no cover - real hardware default factory
     def factory() -> Any:
         from pymavlink import mavutil
 

@@ -311,5 +311,5 @@ def main() -> None:  # pragma: no cover - process entry point
         audit.close()
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover - module entry point
     main()

@@ -34,7 +34,9 @@ BoardFactory = Callable[[], Any]
 PollFn = Callable[[Any], "dict[str, Any] | None"]
 
 
-def _default_board_factory(options: dict[str, Any]) -> BoardFactory:  # pragma: no cover
+def _default_board_factory(
+    options: dict[str, Any],
+) -> BoardFactory:  # pragma: no cover - real hardware default factory
     def factory() -> Any:
         from yamspy import MSPy
 

@@ -72,7 +72,9 @@ def compute_angles(
     return (norm_x * fov_x_rad, norm_y * fov_y_rad)
 
 
-def _default_connection_factory(settings: MavlinkSettings) -> ConnectionFactory:  # pragma: no cover
+def _default_connection_factory(
+    settings: MavlinkSettings,
+) -> ConnectionFactory:  # pragma: no cover - real hardware default factory
     def factory() -> Any:
         from pymavlink import mavutil
 

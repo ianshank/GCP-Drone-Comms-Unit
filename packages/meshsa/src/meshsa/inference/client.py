@@ -133,7 +133,9 @@ class NemotronClient:
                 summary_field=self.config.guided_json_summary_field,
             )
 
-        raise InferenceError("inference failed after max retries")  # pragma: no cover
+        raise InferenceError(
+            "inference failed after max retries"
+        )  # pragma: no cover - unreachable: every iteration returns or raises
 
     def _backoff_delay(self, attempt: int) -> float:
         """Exponential backoff for ``attempt``, capped at ``backoff_max_s``."""
