@@ -447,7 +447,9 @@ go).
 | **P1-6** | Python lockfile: `requirements/ci-constraints.txt` compiled from both `[dev]` extras; CI installs with `-c`; dependabot `pip` entry for `/requirements` | E5 | M | a CI run installs identical versions twice in a row |
 
 **Status (2026-10-28):** P1-1 … P1-6 landed (Phase 1 PR). Measured ratchet anchors are in
-the three ruff configs; `vulture` at 80 had one false positive (whitelisted); the docs
+the three ruff configs; `vulture` at 80 had one false positive (whitelisted); the bare
+pragma count is 1, the `__main__` guard in the frozen `run_commander.py`, which stays
+until T-8 so the freeze is honored; the docs
 citation sweep reports three dead paths in `docs/specs/` and none in README (the README's
 stale tree block sits in a code fence, which the token extractor skips by design — fix the
 block in P3-3 regardless); the `deptry`-style unused-extras check was **not** added (the

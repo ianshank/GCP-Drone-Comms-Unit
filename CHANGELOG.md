@@ -51,9 +51,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
   `specs/`, `architecture/`, `adr/`) and prints each dead one as a `::warning`; the exit
   code is unchanged. Gating waits for the `docs/` reorganization. Three dead citations
   surface today, all in `docs/specs/`.
-- **Pragma reasons (P1-4):** every `# pragma: no cover` in `src/`, `flightctl/` and
-  `tools/` now carries a reason after ` - ` (16 bare ones had none); the governance job
-  reports the total and the bare count. Coverage is byte-identical (99.30 % / 99.35 %).
+- **Pragma reasons (P1-4):** every `# pragma: no cover` in both `src/` trees now carries
+  a reason after ` - ` (15 bare ones had none); the governance job reports the total and
+  the bare count. The one remaining bare pragma is the `__main__` guard in the frozen
+  `flightctl/run_commander.py`, left untouched because the command path is write-frozen
+  while `c_gate_met` is false — the advisory step will report exactly that one until
+  T-8. Coverage is byte-identical (99.30 % / 99.35 %).
 - **Test taxonomy markers (P1-5):** `unit` and `integration` markers are applied at
   collection time — by file name in meshsa (`-m integration` selects 174 of 1124), by
   directory in jetson_yolo_gcs (44 of 224) — so `docs/LOCAL_TESTING_PLAN.md`'s categories
