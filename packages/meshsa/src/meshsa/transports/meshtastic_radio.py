@@ -40,7 +40,9 @@ SubscribeFn = Callable[[Callable[..., None], str], None]
 Provisioner = Callable[[Any, dict[str, Any]], None]
 
 
-def _default_interface_factory(options: dict[str, Any]) -> InterfaceFactory:  # pragma: no cover
+def _default_interface_factory(
+    options: dict[str, Any],
+) -> InterfaceFactory:  # pragma: no cover - real hardware default factory
     def factory() -> Any:
         connection = options.get("connection", "serial")
         if connection == "serial":

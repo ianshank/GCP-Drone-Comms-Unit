@@ -39,7 +39,9 @@ _log = structlog.get_logger("meshsa.fpv.crsf.link")
 SerialFactory = Callable[[], CrsfSerial]
 
 
-def _default_serial_factory(settings: CrsfLinkSettings) -> SerialFactory:  # pragma: no cover
+def _default_serial_factory(
+    settings: CrsfLinkSettings,
+) -> SerialFactory:  # pragma: no cover - real hardware default factory
     """Build a pyserial-backed :class:`CrsfSerial` (real hardware; not unit-tested)."""
 
     def factory() -> CrsfSerial:

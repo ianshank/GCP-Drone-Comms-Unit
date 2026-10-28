@@ -77,7 +77,9 @@ def build_capture_pipeline(settings: CameraSettings) -> str:
     )
 
 
-def _default_camera_factory(settings: CameraSettings) -> CameraFactory:  # pragma: no cover
+def _default_camera_factory(
+    settings: CameraSettings,
+) -> CameraFactory:  # pragma: no cover - real hardware default factory
     """Build an OpenCV/GStreamer-backed :class:`CameraSource` (real hardware)."""
 
     def factory() -> CameraSource:

@@ -76,6 +76,10 @@ jetson_yolo_gcs = ["py.typed"]
 [tool.pytest.ini_options]
 addopts = "--cov=jetson_yolo_gcs --cov-report=term-missing --cov-fail-under=96 --strict-markers"
 testpaths = ["tests"]
+markers = [
+    "unit: tests under tests/unit/ (applied by tests/conftest.py from the directory; select with -m unit)",
+    "integration: tests under tests/integration/ (applied by tests/conftest.py from the directory; select with -m integration)",
+]
 
 [tool.coverage.run]
 source = ["jetson_yolo_gcs"]
@@ -87,13 +91,26 @@ target-version = "py310"
 extend-exclude = [".venv", "build", "dist"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 ignore = [
     "E501",   # line length handled by formatter
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011"]
+# PLR0913: a test's signature is its fixture list, not a design smell.
+"tests/**" = ["B011", "PLR0913"]
+
+# Complexity RATCHET (docs/CODE_QUALITY_TECH_DEBT_PLAN.md P1-1): each threshold is today's
+# maximum, and each names the function that sets it. Lower a threshold in the same PR that
+# fixes its function; never raise one. Measured 2026-10-28.
+[tool.ruff.lint.mccabe]
+max-complexity = 10   # pipeline.py::Pipeline.step
+
+[tool.ruff.lint.pylint]
+max-args = 13         # pipeline.py::Pipeline.__init__ (P2-7 PipelineDeps)
+max-branches = 9      # pipeline.py
+max-returns = 4
+max-statements = 34   # pipeline.py
 
 [tool.ruff.format]
 quote-style = "double"

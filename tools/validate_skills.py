@@ -112,6 +112,9 @@ _EXTRAS_SUFFIX_RE = re.compile(r"\[[^\]]*\]$")
 #: A symbol or anchor suffix (`module.py::SYMBOL`, `docs/C4.md#level-2`): the
 #: path is everything before it.
 _SYMBOL_SUFFIX_RE = re.compile(r"(?:::|#).*$")
+#: A trailing line citation — ``config.py:188``, ``ci.yml:81-91``, ``vite.config.ts:60,68`` —
+#: names a place inside a file, not a different file; strip it so the file resolves.
+_LINE_SUFFIX_RE = re.compile(r":\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$")
 #: A bare file extension (`.pt`, `.onnx`, `.hef`) cited to name a *format*.
 #: Without this it reads as a dotfile path and is reported missing.
 _BARE_EXTENSION_RE = re.compile(r"^\.[A-Za-z0-9]{1,6}$")
@@ -122,13 +125,14 @@ _NON_PATH_PREFIXES: tuple[str, ...] = ("http://", "https://", "@")
 def normalize_path_token(raw: str) -> str:
     """Reduce a cited token to the bare path it refers to.
 
-    Strips prose punctuation, a trailing symbol/anchor suffix, and a trailing
-    pip-extras group. Each removal is subtractive — it can only turn a token
+    Strips prose punctuation, a trailing symbol/anchor suffix, a trailing line
+    citation (``:188``, ``:81-91``, ``:60,68``), and a trailing pip-extras group. Each removal is subtractive — it can only turn a token
     that would have been reported missing into one that resolves — so callers
     that were green stay green.
     """
     token = raw.strip().strip(_TOKEN_STRIP).rstrip(".")
     token = _SYMBOL_SUFFIX_RE.sub("", token)
+    token = _LINE_SUFFIX_RE.sub("", token)
     return _EXTRAS_SUFFIX_RE.sub("", token)
 
 

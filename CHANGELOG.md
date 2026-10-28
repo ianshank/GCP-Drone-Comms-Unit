@@ -35,6 +35,45 @@ Versions follow [Semantic Versioning](https://semver.org/).
   heavy/hardware modules. The rule held in fact; now it is checked.
 
 ### Changed
+#### Code-quality reflection, Phase 1 — guardrails (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- **Complexity ratchet (P1-1):** ruff `C901` and `PLR0911/0912/0913/0915` are now
+  selected in both package pyprojects and `ruff.toml`, with every threshold set to the
+  measured maximum of the tree it governs and a comment naming the function that sets it
+  (`build_ui_app` 31 / 70 statements, `TakTcpTransport.__init__` 23 arguments,
+  `NodeConfig.from_env` 20 branches, …). Lower a threshold in the PR that fixes its
+  function; never raise one. Test signatures are exempt from the argument count.
+- **Advisory dead-code scan (P1-2):** the governance job runs `vulture` at confidence 80
+  over both `src` trees, `flightctl/` and `tools/`; candidates become run annotations and
+  a step-summary count, never a failure. `tools/vulture_whitelist.py` holds the one
+  baseline false positive (a pypubsub callback parameter) with its reason.
+- **Advisory docs citation sweep (P1-3):** `tools/validate_agents_docs.py` now also
+  resolves every cited path in `README.md` and the stable `docs/` tree (`docs/*.md`,
+  `specs/`, `architecture/`, `adr/`) and prints each dead one as a `::warning`; the exit
+  code is unchanged. Gating waits for the `docs/` reorganization. On today's tree the
+  sweep reports 45 dead citations: 38 in `docs/*.md` (10 of them in the historical
+  `BRANCHES.md`, 8 in the plan itself), 6 in `docs/specs/`, one in
+  `docs/architecture/C4.md` and one in `README.md`. A trailing line citation
+  (`config.py:188`, `ci.yml:81-91`) is now stripped by `validate_skills.py`'s
+  normalizer before resolution, which both linters share; it was a quarter of the noise.
+- **Pragma reasons (P1-4):** every `# pragma: no cover` in both `src/` trees now carries
+  a reason after ` - ` (15 bare ones had none); the governance job reports the total and
+  the bare count. The one remaining bare pragma is the `__main__` guard in the frozen
+  `flightctl/run_commander.py`, left untouched because the command path is write-frozen
+  while `c_gate_met` is false — the advisory step will report exactly that one until
+  T-8. Coverage is byte-identical (99.30 % / 99.35 %).
+- **Test taxonomy markers (P1-5):** `unit` and `integration` markers are applied at
+  collection time — by file name in meshsa (`-m integration` collects 184 of 1124), by
+  directory in jetson_yolo_gcs (44 of 224) — so `docs/LOCAL_TESTING_PLAN.md`'s categories
+  are selectable without moving a file.
+- **CI dependency lock (P1-6):** `requirements/ci-constraints.txt`, compiled universally
+  with `uv pip compile` from both packages' `[dev]` extras, is applied with `pip install
+  -c` in the `test` and `perception` jobs; for those two jobs an upstream release now
+  arrives as a dependabot PR (the `/requirements` directory joins the pip ecosystem and
+  the `python-tooling` group, whose two entries now use `patterns: ["*"]` so that every
+  pip and pre-commit update still arrives — a grouped entry updates only what its
+  patterns match) instead of a red build. `nightly.yml` and `fts-e2e.yml`
+  stay unconstrained on purpose. Package requirement ranges are unchanged.
+
 #### Code-quality reflection, Phase 0 (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
 - **Operator-visible — two shipped credential defaults removed (P0-8).**
   `ops/pi5-node/setup_pi5_node.sh` no longer carries `AP_PSK="change-me-please"`; the

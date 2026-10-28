@@ -580,6 +580,80 @@ def test_main_reports_findings_and_exits_one(
     assert out.rstrip().endswith("finding(s) across the instruction files under " + str(repo))
 
 
+def test_advisory_docs_citations_report_dead_paths_in_stable_docs_only(repo: Path) -> None:
+    write(repo, "README.md", "See `docs/CHARTER.md` and `docs/missing.md`.\n")
+    write(repo, "docs/CHARTER.md", "Cites [NEXTSTEPS.md](NEXTSTEPS.md) relative to docs/.\n")
+    write(repo, "docs/NEXTSTEPS.md", "Backlog.\n")
+    write(repo, "docs/reviews/OLD.md", "Historical: `tools/gone.py`.\n")
+    git(repo, "add", ".")
+    warnings = vad.advisory_docs_citations(repo, vad.tracked_files(repo))
+    # README's dead citation is reported; the live one is not; docs/CHARTER.md's link
+    # resolves relative to its own directory; docs/reviews/ is outside the sweep.
+    assert warnings == ["README.md: cited path does not resolve: docs/missing.md"]
+
+
+def test_advisory_docs_citations_never_change_the_exit_code(
+    repo: Path, one_guide_manifest: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(repo, "AGENTS.md", CLEAN_GUIDE)
+    write(repo, "README.md", "Dead: `docs/missing.md`.\n")
+    git(repo, "add", ".")
+    assert main(["--root", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "::warning title=docs citation advisory (plan P1-3)::README.md: cited path" in out
+    assert out.rstrip().endswith("scanned for hidden code points)")
+
+
+def test_advisory_docs_citations_skip_tracked_paths_missing_from_the_work_tree(
+    repo: Path,
+) -> None:
+    write(repo, "README.md", "Dead: `docs/missing.md`.\n")
+    write(repo, "docs/CHARTER.md", "Also dead: `docs/missing.md`.\n")
+    git(repo, "add", ".")
+    (repo / "docs" / "CHARTER.md").unlink()  # still in the index, gone from the work tree
+    warnings = vad.advisory_docs_citations(repo, vad.tracked_files(repo))
+    assert warnings == ["README.md: cited path does not resolve: docs/missing.md"]
+
+
+@pytest.mark.parametrize("doc", ["docs/specs/x.md", "docs/architecture/x.md", "docs/adr/x.md"])
+def test_advisory_sweep_reaches_every_stable_docs_subtree(repo: Path, doc: str) -> None:
+    write(repo, doc, "Dead: `tools/gone.py`.\n")
+    git(repo, "add", ".")
+    assert vad.advisory_docs_citations(repo, vad.tracked_files(repo)) == [
+        f"{doc}: cited path does not resolve: tools/gone.py"
+    ]
+
+
+def test_advisory_warnings_precede_findings_and_are_not_counted(
+    repo: Path, one_guide_manifest: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(repo, "AGENTS.md", "# Guide\n\n## Rules\n\n- Unexplained rule.\n")
+    write(repo, "README.md", "Dead: `docs/missing.md`.\n")
+    git(repo, "add", ".")
+    assert main(["--root", str(repo)]) == 1
+    lines = capsys.readouterr().out.splitlines()
+    warning_idx = next(i for i, line in enumerate(lines) if line.startswith("::warning"))
+    finding_idx = next(i for i, line in enumerate(lines) if "missing required section" in line)
+    assert warning_idx < finding_idx
+    assert not any(line.startswith("FAIL: 3 ") for line in lines)
+    assert lines[-1].startswith("FAIL: ") and "docs/missing.md" not in lines[-1]
+
+
+@pytest.mark.parametrize(
+    ("rel_path", "pattern", "expected"),
+    [
+        ("docs/a.md", "docs/*.md", True),
+        ("docs/reviews/a.md", "docs/*.md", False),
+        ("docs/a.md", "docs/specs/*.md", False),
+        ("README.md", "README.md", True),
+        ("docs/specs/x.md", "docs/specs/*.md", True),
+        ("docs/adr/x.md", "docs/adr/*.md", True),
+    ],
+)
+def test_single_level_glob(rel_path: str, pattern: str, expected: bool) -> None:
+    assert vad._matches_single_level_glob(rel_path, pattern) is expected
+
+
 def test_main_exits_two_outside_a_git_work_tree(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -646,7 +720,11 @@ def test_cli_runs_clean_against_the_real_repo() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     expected_count = len(vad.GUIDE_MANIFEST) + len(vad.discovered_rules(REPO_ROOT))
-    assert result.stdout.startswith(f"OK: {expected_count} instruction file(s)")
+    # The advisory docs sweep (plan P1-3) may precede the verdict with `::warning` lines;
+    # they are not findings, so the verdict must still be the only non-advisory output.
+    verdict = [line for line in result.stdout.splitlines() if not line.startswith("::warning")]
+    assert verdict and verdict[0].startswith(f"OK: {expected_count} instruction file(s)")
+    assert len(verdict) == 1
 
 
 def test_context_files_are_scanned_for_hidden_code_points() -> None:

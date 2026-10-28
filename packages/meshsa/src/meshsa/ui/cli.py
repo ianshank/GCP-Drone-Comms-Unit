@@ -154,5 +154,5 @@ def _build_chat_agent() -> object | None:  # pragma: no cover - optional [llm] w
         return None
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover - module entry point
     main()

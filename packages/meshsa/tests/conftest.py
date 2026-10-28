@@ -1,6 +1,7 @@
 import itertools
 import os
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -27,6 +28,52 @@ settings.register_profile(
     "nightly", derandomize=False, print_blob=True, deadline=None, max_examples=300
 )
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "ci"))
+
+# Test taxonomy markers (docs/CODE_QUALITY_TECH_DEBT_PLAN.md P1-5; taxonomy in
+# docs/LOCAL_TESTING_PLAN.md). The suite is one flat directory by design, so the
+# unit/integration split is derived from the file name rather than from a directory move:
+# anything exercising component wiring (an aiohttp app, a transport against a loopback
+# socket, the router bridge, an e2e or soak file) is `integration`; everything else is
+# `unit`. `-m integration` / `-m unit` select by category without moving a single file.
+# Matching is exact (suffix or whole stem), never substring, so a future test_append.py
+# does not become integration by accident; tests/test_taxonomy_markers.py pins the lists.
+_INTEGRATION_STEM_SUFFIXES: tuple[str, ...] = ("_e2e", "_soak", "_integration", "_app")
+_INTEGRATION_STEMS: frozenset[str] = frozenset(
+    {
+        "test_tak",
+        "test_tak_multicast",
+        "test_tak_tls",
+        "test_mavlink_source",
+        "test_scout_station",
+        "test_scout_pipeline",
+        "test_scout_wiring",
+        "test_detection_ingest",  # binds a real loopback UDP socket
+    }
+)
+
+#: This conftest's own directory; the hook marks only items collected from under it, so a
+#: combined session that also collects a sibling package cannot be mislabelled from here.
+_TESTS_DIR = Path(__file__).resolve().parent
+
+
+def is_integration_test_path(path: Path, rootpath: Path) -> bool:
+    """Classify a collected test file; the path is taken relative to the pytest rootdir
+    so a checkout living under a directory named ``e2e`` cannot relabel the suite."""
+    rel = path.relative_to(rootpath) if path.is_relative_to(rootpath) else path
+    stem = path.stem
+    return (
+        "e2e" in rel.parts
+        or stem.endswith(_INTEGRATION_STEM_SUFFIXES)
+        or stem in _INTEGRATION_STEMS
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        if not item.path.resolve().is_relative_to(_TESTS_DIR):
+            continue
+        is_integration = is_integration_test_path(item.path, config.rootpath)
+        item.add_marker(pytest.mark.integration if is_integration else pytest.mark.unit)
 
 
 class FakeHttpTransport:

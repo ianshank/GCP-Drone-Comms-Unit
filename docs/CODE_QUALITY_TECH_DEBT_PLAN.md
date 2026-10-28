@@ -426,7 +426,11 @@ delta. Every code item carries the standing rules: security-reviewer on anything
 (PR #73). P0-3 also moved gitleaks to 8.30.1 in both places, which supersedes PR #43.
 P0-2 (merging the remaining green dependabot PRs #37/#38/#39/#40/#48/#41/#45 and closing
 #43 as superseded) and P0-7 (tagging `v0.3.0`) are maintainer actions on `main`.
-**P0-1 needs one post-merge check:** the `multi-ecosystem-groups` semantics (that pip
+**P0-1, amended in the Phase 1 PR:** both grouped entries now use `patterns: ["*"]`,
+because an entry that joins a multi-ecosystem group updates only the dependencies its
+patterns match — the ruff/mypy-only patterns would have silently stopped every other
+pip and pre-commit update. One weekly PR now carries all Python-side bumps. The
+post-merge check still applies: the `multi-ecosystem-groups` semantics (that pip
 dependencies outside the `patterns:` still get their own PRs, and that `directories:` is
 accepted beside `multi-ecosystem-group:`) could not be confirmed against docs.github.com
 from this environment. A dependabot config error never fails a build — it shows only under
@@ -445,6 +449,17 @@ go).
 | **P1-4** | `pragma: no cover` reason convention (`# pragma: no cover - hardware`) + a grep-based advisory count by reason in the coverage summary | G1 | S | every pragma in `src/` carries a reason |
 | **P1-5** | Pytest markers `unit`/`integration` registered (`--strict-markers` already on) and applied by directory for jetson and by filename convention for meshsa; LOCAL_TESTING_PLAN cites the selector | H5 | S | `pytest -m integration` selects the e2e/bridge/soak files |
 | **P1-6** | Python lockfile: `requirements/ci-constraints.txt` compiled from both `[dev]` extras; CI installs with `-c`; dependabot `pip` entry for `/requirements` | E5 | M | a CI run installs identical versions twice in a row |
+
+**Status (2026-10-28):** P1-1 … P1-6 landed (Phase 1 PR). Measured ratchet anchors are in
+the three ruff configs; `vulture` at 80 had one false positive (whitelisted); the bare
+pragma count is 1, the `__main__` guard in the frozen `run_commander.py`, which stays
+until T-8 so the freeze is honored; the docs
+citation sweep reports 45 dead paths on this tree (38 in `docs/*.md`, 6 in `docs/specs/`,
+1 in `docs/architecture/`, 1 in README — the first measurement here said three, a misread
+of a truncated output that the security review caught), which is the P3-3 worklist; the `deptry`-style unused-extras check was **not** added (the
+two empty extras, `meshsa[tak]` and `jetson_yolo_gcs[hailo]`, are already on P3-2's list
+and nothing else in the extras is unused). The lock was verified with `pip --dry-run`
+against both packages on 3.13 and with uv on a 3.10 interpreter.
 
 ### Phase 2 — Shared foundations, then the god functions (≈3 weeks; this is T-3 + the residue of T-4)
 

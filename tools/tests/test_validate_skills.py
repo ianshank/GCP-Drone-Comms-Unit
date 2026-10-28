@@ -251,3 +251,27 @@ def test_real_skills_pass_via_cli() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     expected = len(list((REPO_ROOT / ".agents" / "skills").glob("*/SKILL.md")))
     assert result.stdout.startswith(f"OK: {expected} skill file(s)")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("`packages/meshsa/src/meshsa/config.py:188`", "packages/meshsa/src/meshsa/config.py"),
+        (".github/workflows/ci.yml:81-91", ".github/workflows/ci.yml"),
+        (
+            "artifacts/mockup-sandbox/vite.config.ts:60,68",
+            "artifacts/mockup-sandbox/vite.config.ts",
+        ),
+        ("tools/check_task_sync.py:50-99,120", "tools/check_task_sync.py"),
+        (
+            "flightctl/udev/99-flightctl-serial.rules.example",
+            "flightctl/udev/99-flightctl-serial.rules.example",
+        ),
+        ("ops/pi5-node/setup_pi5_node.sh::main", "ops/pi5-node/setup_pi5_node.sh"),
+    ],
+)
+def test_normalize_path_token_strips_a_trailing_line_citation(raw: str, expected: str) -> None:
+    # A line citation names a place inside a file, not another file; stripping it is
+    # subtractive (a token that resolved before still resolves), and a digit-bearing file
+    # name with no colon is untouched.
+    assert vs.normalize_path_token(raw) == expected

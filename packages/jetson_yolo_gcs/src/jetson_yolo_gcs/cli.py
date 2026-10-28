@@ -117,14 +117,14 @@ def main(argv: list[str] | None = None) -> int:
     # Default: run the real pipeline.
     from .pipeline import build_pipeline  # pragma: no cover - real hardware wiring
 
-    pipeline = build_pipeline(settings)  # pragma: no cover
-    _install_signal_handlers(pipeline)  # pragma: no cover
-    try:  # pragma: no cover
+    pipeline = build_pipeline(settings)  # pragma: no cover - process entry point (live pipeline)
+    _install_signal_handlers(pipeline)  # pragma: no cover - process entry point
+    try:  # pragma: no cover - process entry point
         pipeline.run(
             max_consecutive_empty=settings.pipeline.max_consecutive_empty,
             idle_poll_s=settings.pipeline.idle_poll_s,
         )
-    finally:  # pragma: no cover
+    finally:  # pragma: no cover - process entry point
         pipeline.close()
     return 0
 
@@ -140,5 +140,5 @@ def _install_signal_handlers(pipeline: Pipeline) -> None:  # pragma: no cover - 
         signal.signal(sig, _handler)
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover - module entry point
     sys.exit(main())

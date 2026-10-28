@@ -119,6 +119,8 @@ testpaths = ["tests"]
 # glue tests without per-file sys.path mutation. Relative to this rootdir.
 pythonpath = ["../../flightctl"]
 markers = [
+    "unit: isolated, fakes-only tests (applied by tests/conftest.py from the file name; select with -m unit)",
+    "integration: component wiring, aiohttp apps, transports, e2e and soak files (applied by tests/conftest.py from the file name; select with -m integration)",
     "slow: long-running soak/fuzz tests; exercised by the nightly workflow",
     "e2e: end-to-end tests needing a live FreeTAKServer; the live parts are opt-in via MESHSA_FTS_E2E=1 and run with --no-cov in fts-e2e.yml (the file's non-live checks still run in the normal gate)",
 ]
@@ -134,14 +136,27 @@ target-version = "py310"
 extend-exclude = [".venv", "build", "dist"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 ignore = [
     "E501",   # line length handled by formatter
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011"]
+# PLR0913: a test's signature is its fixture list, not a design smell.
+"tests/**" = ["B011", "PLR0913"]
 "examples/**" = ["B008"]
+
+# Complexity RATCHET (docs/CODE_QUALITY_TECH_DEBT_PLAN.md P1-1): each threshold is today's
+# maximum, and each names the function that sets it. Lower a threshold in the same PR that
+# fixes its function; never raise one. Measured 2026-10-28.
+[tool.ruff.lint.mccabe]
+max-complexity = 31   # ui/app.py::build_ui_app (P2-1 brings it to <= 12)
+
+[tool.ruff.lint.pylint]
+max-args = 23         # transports/tak.py::TakTcpTransport.__init__ (P2-4 *Options models)
+max-branches = 20     # config.py::NodeConfig.from_env (P2-2 _envconfig)
+max-returns = 7       # fpv/crsf/telemetry.py (parser dispatch)
+max-statements = 70   # ui/app.py::build_ui_app (P2-1)
 
 [tool.ruff.format]
 quote-style = "double"
