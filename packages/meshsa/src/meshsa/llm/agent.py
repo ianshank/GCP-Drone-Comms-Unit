@@ -14,10 +14,13 @@ Build a real agent with :func:`build_agent`, which lazy-imports ``anthropic``.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from typing import Any, Protocol, cast
 
 from pydantic import BaseModel
 
+from .._envconfig import apply_overrides
+from .._parsing import parse_int
 from .sources import TelemetrySource, TrackSource
 from .tools import ToolDispatcher, tool_specs
 
@@ -25,6 +28,35 @@ from .tools import ToolDispatcher, tool_specs
 DEFAULT_MODEL = "claude-opus-4-8"
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_MAX_ITERATIONS = 6
+
+#: Prefix of the agent's env-only knobs (``MESHSA_LLM_MODEL`` / ``_MAX_TOKENS`` /
+#: ``_MAX_ITERATIONS``). Folding them into ``ServerConfig`` is T-6.5.
+ENV_PREFIX = "MESHSA_LLM_"
+
+
+class AgentKnobs(BaseModel):
+    """The model/budget knobs ``build_agent`` reads from the environment."""
+
+    model: str = DEFAULT_MODEL
+    max_tokens: int = DEFAULT_MAX_TOKENS
+    max_iterations: int = DEFAULT_MAX_ITERATIONS
+
+
+def _positive_int(name: str, raw: str) -> int:
+    return parse_int(name, raw, lo=1)
+
+
+def resolve_agent_knobs(env: Mapping[str, str]) -> AgentKnobs:
+    """Resolve :class:`AgentKnobs` from an environment mapping (pure/testable).
+
+    ``MESHSA_LLM_MAX_TOKENS`` and ``MESHSA_LLM_MAX_ITERATIONS`` must be positive integers;
+    a bad value names the variable.
+    """
+    casters = {"max_tokens": _positive_int, "max_iterations": _positive_int}
+    return AgentKnobs.model_validate(
+        apply_overrides(AgentKnobs, {}, env, prefix=ENV_PREFIX, casters=casters)
+    )
+
 
 SYSTEM_PROMPT = (
     "You are a situational-awareness assistant embedded in a field drone "
@@ -152,24 +184,9 @@ def build_agent(
     """
     from anthropic import AsyncAnthropic
 
-    from .._parsing import parse_int
-
     client = AsyncAnthropic(api_key=api_key) if api_key else AsyncAnthropic()
-    resolved_model = model or os.environ.get("MESHSA_LLM_MODEL", DEFAULT_MODEL)
-
-    max_tokens_str = os.environ.get("MESHSA_LLM_MAX_TOKENS")
-    resolved_max_tokens = (
-        parse_int("MESHSA_LLM_MAX_TOKENS", max_tokens_str, lo=1)
-        if max_tokens_str is not None
-        else DEFAULT_MAX_TOKENS
-    )
-
-    max_iterations_str = os.environ.get("MESHSA_LLM_MAX_ITERATIONS")
-    resolved_max_iterations = (
-        parse_int("MESHSA_LLM_MAX_ITERATIONS", max_iterations_str, lo=1)
-        if max_iterations_str is not None
-        else DEFAULT_MAX_ITERATIONS
-    )
+    knobs = resolve_agent_knobs(os.environ)
+    resolved_model = model or knobs.model
 
     # The SDK's overloaded create() is narrower than our **kwargs protocol; the
     # call sites in ``ask`` use only the subset every overload accepts.
@@ -178,6 +195,6 @@ def build_agent(
         messages,
         ToolDispatcher(telemetry, tracks),
         model=resolved_model,
-        max_tokens=resolved_max_tokens,
-        max_iterations=resolved_max_iterations,
+        max_tokens=knobs.max_tokens,
+        max_iterations=knobs.max_iterations,
     )

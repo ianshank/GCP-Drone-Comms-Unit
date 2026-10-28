@@ -132,8 +132,16 @@
       S4d **not** — no spec asks for an `X-Snapshot-Age` header, so it is a feature with a
       spec first, not a salvage. Two declared deltas: the `WWW-Authenticate` challenge and
       `no-store` are now house-wide on every bearer-guarded response.)
-- [ ] T-3.2 `meshsa/_envconfig.py` (design D-11); migrate `NodeConfig`, `fpv/config.py`,
-      `llm/server.resolve_config`, `cli.py`'s env helpers.
+- [x] T-3.2 `meshsa/_envconfig.py` (design D-11); migrate `NodeConfig`, `fpv/config.py`,
+      `llm/server.resolve_config`, `cli.py`'s env helpers. (Landed as plan P2-2: keys and
+      casters derived from the models — `NodeConfig.from_env` is 5 statements, the 78-key
+      inventory is pinned both ways by `tests/test_env_inventory.py` with a Hypothesis
+      `from_env(to_env(cfg)) == cfg` property; `llm/agent.py`'s three env knobs became the
+      testable `resolve_agent_knobs` (folding them into `ServerConfig` stays T-6.5);
+      `fpv/config.py` keeps its one non-mechanical `SESSIONS_ROOT` alias verbatim because
+      its empty-means-unset semantics differ from every other binding. `command/config.py`
+      and `run_commander.py` are frozen and migrate under T-8.8; `meshsa.config._parse_bool`
+      stays as an alias until then because the frozen file imports it.)
 - [ ] T-3.3 `meshsa/_frame_codec.py` + `SchemaGated` mixin; `telemetry.py`/`detection_codec.py`
       adopt; extract an envelope-builder from `DetectionCodec` so `scout/pipeline.py` stops
       JSON-round-tripping detections through the codec.

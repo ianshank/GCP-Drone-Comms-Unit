@@ -22,6 +22,7 @@ import signal
 
 import structlog
 
+from ._envconfig import env_scalar
 from ._parsing import parse_float, parse_int
 from .config import NodeConfig
 from .defaults import (
@@ -39,16 +40,18 @@ from .node import build_node
 log = structlog.get_logger("meshsa.cli")
 
 
+# Flag defaults read ``MESHSA_<KEY>`` through the shared env primitive, so a bad value
+# names the variable (``MESHSA_FTS_PORT: expected an integer, got 'tcp'``).
 def _env(key: str, default: str) -> str:
-    return os.environ.get(f"MESHSA_{key}", default)
+    return str(env_scalar(os.environ, f"MESHSA_{key}", default))
 
 
 def _env_int(key: str, default: int) -> int:
-    return parse_int(f"MESHSA_{key}", _env(key, str(default)))
+    return int(env_scalar(os.environ, f"MESHSA_{key}", default, parse_int))
 
 
 def _env_float(key: str, default: float) -> float:
-    return parse_float(f"MESHSA_{key}", _env(key, str(default)))
+    return float(env_scalar(os.environ, f"MESHSA_{key}", default, parse_float))
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

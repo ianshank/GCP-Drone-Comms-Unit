@@ -19,6 +19,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from .._envconfig import merge_config_json
+
 
 class ParserSettings(BaseModel):
     """Unit scaling and markers applied by the telemetry parser (§5.1)."""
@@ -177,10 +179,9 @@ class FpvSettings(BaseModel):
         the most commonly tuned deployment value.
         """
         env = dict(os.environ if environ is None else environ)
-        data: dict[str, Any] = {}
-        blob = env.get(f"{prefix}CONFIG_JSON")
-        if blob:
-            data.update(json.loads(blob))
+        data = merge_config_json({}, env, prefix=prefix)
+        # A non-mechanical alias (``logger.sessions_root`` without the section), and the one
+        # binding where an *empty* value means unset rather than the empty path — kept as is.
         sessions_root = env.get(f"{prefix}SESSIONS_ROOT")
         if sessions_root:
             logger = dict(data.get("logger", {}))

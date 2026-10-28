@@ -12,20 +12,35 @@ removing one is a breaking change for deployed units.
 
 from __future__ import annotations
 
+import enum
 import types
 import typing
 from collections.abc import Callable, Mapping
 from typing import Any
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from pydantic import BaseModel
 
-from meshsa.config import MeshConfig, NodeConfig, RouterConfig, ScoutConfig
+from meshsa._envconfig import env_key
+from meshsa.config import (
+    NODE_ENV_SCALARS,
+    NODE_ENV_SECTIONS,
+    MeshConfig,
+    NodeConfig,
+    RouterConfig,
+    ScoutConfig,
+    node_env_inventory,
+)
 from meshsa.fpv.config import FpvSettings
 from meshsa.health import HealthConfig
 from meshsa.inference.config import NemotronConfig
+from meshsa.llm.agent import AgentKnobs, resolve_agent_knobs
 from meshsa.llm.server import ServerConfig, resolve_config
+from meshsa.models import NodeTier
 from meshsa.ui.config import UIConfig
+from meshsa.ui.logring import VALID_LEVELS
 
 # ── NodeConfig.from_env ───────────────────────────────────────────────────────
 
@@ -64,6 +79,16 @@ def test_inventory_size_is_pinned() -> None:
     assert len(node_env_keys()) == 78
     for section, (_, model, count) in NODE_SECTIONS.items():
         assert len(model.model_fields) == count, section
+
+
+def test_loader_inventory_equals_the_pinned_list_exactly() -> None:
+    """Both directions: the loader honours every pinned key and no key outside the pin."""
+    assert node_env_inventory() == node_env_keys()
+    assert tuple(NODE_ENV_SCALARS) == tuple(
+        k.removeprefix("MESHSA_").lower() for k in NODE_TOP_LEVEL[1:]
+    )
+    assert {s: m for s, (_, m, _) in NODE_SECTIONS.items()} == NODE_ENV_SECTIONS
+    assert node_env_inventory("X_") == [k.replace("MESHSA_", "X_", 1) for k in node_env_keys()]
 
 
 _LITERAL_ALTERNATIVES = {"prometheus": "json", "json": "prometheus", "text": "json"}
@@ -238,6 +263,27 @@ def test_llm_server_bounds_name_the_variable() -> None:
         resolve_config({"MESHSA_LLM_MAX_PROMPT_CHARS": "0"})
 
 
+# ── llm/agent.resolve_agent_knobs ─────────────────────────────────────────────
+
+AGENT_ENV_KEYS = ("MESHSA_LLM_MODEL", "MESHSA_LLM_MAX_TOKENS", "MESHSA_LLM_MAX_ITERATIONS")
+
+
+def test_agent_knob_keys_are_honoured() -> None:
+    assert resolve_agent_knobs({}) == AgentKnobs()
+    knobs = resolve_agent_knobs(
+        {
+            "MESHSA_LLM_MODEL": "claude-custom",
+            "MESHSA_LLM_MAX_TOKENS": "1000",
+            "MESHSA_LLM_MAX_ITERATIONS": "5",
+        }
+    )
+    assert knobs == AgentKnobs(model="claude-custom", max_tokens=1000, max_iterations=5)
+    with pytest.raises(ValueError, match="MESHSA_LLM_MAX_TOKENS: 0 is below the minimum 1"):
+        resolve_agent_knobs({"MESHSA_LLM_MAX_TOKENS": "0"})
+    with pytest.raises(ValueError, match="MESHSA_LLM_MAX_ITERATIONS: expected an integer"):
+        resolve_agent_knobs({"MESHSA_LLM_MAX_ITERATIONS": "lots"})
+
+
 # ── fpv/config.FpvSettings.from_env ───────────────────────────────────────────
 
 FPV_ENV_KEYS = ("MESHSA_FPV_CONFIG_JSON", "MESHSA_FPV_SESSIONS_ROOT")
@@ -303,3 +349,127 @@ def test_cli_health_flag_env_is_presence_based(monkeypatch: pytest.MonkeyPatch) 
     assert parse_args([]).health is True
     monkeypatch.setenv("MESHSA_HEALTH", "")
     assert parse_args([]).health is False
+
+
+# ── property: from_env(to_env(cfg)) == cfg (design D-11) ─────────────────────
+#
+# ``to_env`` is the inverse the loader implies: one key per bound field, rendered the way an
+# operator would write it in a unit file. If the loader ever stops honouring a key, or parses
+# it differently from how the model renders it, the round trip breaks.
+
+_text = st.text(alphabet=st.characters(min_codepoint=32, max_codepoint=126), max_size=20)
+_token = st.from_regex(r"[A-Za-z0-9._-]{1,24}", fullmatch=True)
+_ident = st.from_regex(r"[a-z0-9][a-z0-9/._-]{0,15}", fullmatch=True)
+_port = st.integers(min_value=1, max_value=65535)
+_pos_float = st.floats(min_value=0.01, max_value=1e4, allow_nan=False, allow_infinity=False)
+_unit = st.floats(min_value=0.0, max_value=0.99, allow_nan=False, allow_infinity=False)
+
+
+def _render(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, enum.Enum):
+        return str(value.value)
+    if isinstance(value, (tuple, frozenset)):
+        return ",".join(sorted(value) if isinstance(value, frozenset) else value)
+    if isinstance(value, float):
+        return repr(value)
+    return str(value)
+
+
+def to_env(cfg: NodeConfig, prefix: str = "MESHSA_") -> dict[str, str]:
+    env = {env_key(prefix, None, name): _render(getattr(cfg, name)) for name in NODE_ENV_SCALARS}
+    for section, model in NODE_ENV_SECTIONS.items():
+        sub = getattr(cfg, section)
+        for field in model.model_fields:
+            value = getattr(sub, field)
+            if value is not None:
+                env[env_key(prefix, section, field)] = _render(value)
+    return env
+
+
+def _node_configs() -> st.SearchStrategy[NodeConfig]:
+    mesh = st.builds(
+        MeshConfig,
+        channel=_text,
+        psk=st.one_of(st.none(), _token),
+        region=_text,
+        freq_khz=st.one_of(st.none(), st.integers(min_value=0, max_value=10**9)),
+    )
+    router = st.builds(
+        RouterConfig,
+        dedupe_cache_size=st.integers(min_value=1, max_value=10**6),
+        queue_maxsize=st.integers(min_value=0, max_value=10**6),
+    )
+    health = st.builds(
+        HealthConfig,
+        enabled=st.booleans(),
+        host=_text,
+        port=_port,
+        token=st.one_of(st.none(), _text),
+        metrics_enabled=st.booleans(),
+        metrics_path=_text,
+        metrics_format=st.sampled_from(["prometheus", "json"]),
+    )
+    inference = st.builds(
+        NemotronConfig,
+        enabled=st.booleans(),
+        temperature=_unit,
+        max_tokens=st.integers(min_value=1, max_value=10**5),
+        models=st.lists(_ident, max_size=3).map(
+            lambda more: ("nvidia/nemotron-3-ultra-550b-a55b", *more)
+        ),
+        response_format=st.sampled_from(["text", "json"]),
+        insight_prefix=st.from_regex(r"[A-Za-z\[\] ]{1,12}", fullmatch=True),
+        min_interval_s=_unit,
+        guided_json_schema=st.sampled_from(["", '{"type": "object"}']),
+    )
+    scout = st.builds(
+        ScoutConfig,
+        enabled=st.booleans(),
+        rtk_enabled=st.booleans(),
+        vine_spacing_m=_pos_float,
+        forward_overlap=_unit,
+        camera_img_w=st.integers(min_value=1, max_value=8192),
+        dem_path=st.one_of(st.none(), _text),
+        station_token=_text,
+        station_port=_port,
+    )
+    ui = st.builds(
+        UIConfig,
+        enabled=st.booleans(),
+        host=_text,
+        port=_port,
+        token=st.one_of(st.none(), _token),
+        poll_interval_s=_pos_float,
+        max_tracks=st.integers(min_value=1, max_value=10**4),
+        log_ring_level=st.sampled_from(sorted(VALID_LEVELS)),
+        metrics_format=st.sampled_from(["prometheus", "json"]),
+        title=_text,
+    )
+    return st.builds(
+        NodeConfig,
+        uid=_token,
+        callsign=_text,
+        tier=st.sampled_from(list(NodeTier)),
+        pli_interval_s=_pos_float,
+        default_stale_s=_pos_float,
+        mesh=mesh,
+        router=router,
+        health=health,
+        inference=inference,
+        scout=scout,
+        ui=ui,
+    )
+
+
+@settings(max_examples=60)
+@given(_node_configs())
+def test_from_env_inverts_to_env(cfg: NodeConfig) -> None:
+    assert NodeConfig.from_env(to_env(cfg)) == cfg
+
+
+@settings(max_examples=30)
+@given(_node_configs())
+def test_from_env_inverts_to_env_under_another_prefix(cfg: NodeConfig) -> None:
+    assert NodeConfig.from_env(to_env(cfg, "X_"), prefix="X_") == cfg
