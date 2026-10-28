@@ -44,6 +44,7 @@
       and P0-7 (tag `v0.3.0`) remain as maintainer actions.
 - [ ] **Phase 1 — guardrails** (P1-1…P1-6: ruff `C90`/`PLR09xx` ratchet, advisory vulture,
       docs path check, pragma reasons, pytest markers, Python constraints file).
+      **2026-10-28:** all six landed (Phase 1 PR); the unused-extras check was folded into P3-2.
 - [ ] **Phase 2 — foundations, then the god functions** (= T-3.1/T-3.2/T-3.5/T-4.4/T-4.5 plus
       transport `*Options` models and the `validate_agents_docs.py` split).
 - [ ] **Phase 3 — config sweep, dead code, docs organization** (incl. T-2.3b).

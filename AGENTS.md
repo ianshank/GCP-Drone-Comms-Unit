@@ -235,6 +235,15 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
 - Use the `compact` codec for Meshtastic/LoRa examples; JSON PLIs are too large
   for reliable single-packet LoRa transport — why: a PLI that does not fit one packet
   is fragmented and effectively lost on a lossy link.
+- Give every `# pragma: no cover` a reason after ` - ` (`# pragma: no cover - real hardware
+  default factory`) — why: the exclusions are what the 97/96 floors do not see, and a
+  reason is what lets a grep audit them by kind instead of a human re-deriving each one —
+  advisory: the CI governance job counts bare pragmas as warnings; nothing fails.
+- Never raise a complexity ratchet threshold (`[tool.ruff.lint.mccabe]` /
+  `[tool.ruff.lint.pylint]` in the pyprojects and `ruff.toml`); lower one only in the PR
+  that fixes the function named beside it — why: each threshold is today's measured
+  maximum, so raising one is how a second god function gets in unnoticed — control:
+  `ruff check` in CI fails on any function that exceeds its config's threshold.
 - Do not hand-edit generated or binary artifacts (`*.stl`, screenshots, ZIPs).
   Change generator scripts or source docs, then regenerate — why: the generator is the
   reviewable artifact, and the next regeneration silently discards a hand edit.

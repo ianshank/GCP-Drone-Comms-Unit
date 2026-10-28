@@ -446,6 +446,15 @@ go).
 | **P1-5** | Pytest markers `unit`/`integration` registered (`--strict-markers` already on) and applied by directory for jetson and by filename convention for meshsa; LOCAL_TESTING_PLAN cites the selector | H5 | S | `pytest -m integration` selects the e2e/bridge/soak files |
 | **P1-6** | Python lockfile: `requirements/ci-constraints.txt` compiled from both `[dev]` extras; CI installs with `-c`; dependabot `pip` entry for `/requirements` | E5 | M | a CI run installs identical versions twice in a row |
 
+**Status (2026-10-28):** P1-1 … P1-6 landed (Phase 1 PR). Measured ratchet anchors are in
+the three ruff configs; `vulture` at 80 had one false positive (whitelisted); the docs
+citation sweep reports three dead paths in `docs/specs/` and none in README (the README's
+stale tree block sits in a code fence, which the token extractor skips by design — fix the
+block in P3-3 regardless); the `deptry`-style unused-extras check was **not** added (the
+two empty extras, `meshsa[tak]` and `jetson_yolo_gcs[hailo]`, are already on P3-2's list
+and nothing else in the extras is unused). The lock was verified with `pip --dry-run`
+against both packages on 3.13 and with uv on a 3.10 interpreter.
+
 ### Phase 2 — Shared foundations, then the god functions (≈3 weeks; this is T-3 + the residue of T-4)
 
 Order matters: the foundations remove the duplication that *is* the complexity.
