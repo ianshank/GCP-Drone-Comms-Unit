@@ -25,27 +25,23 @@ updates:
     schedule:
       interval: weekly
 
-  # pre-commit: the ruff/mypy mirrors ride the python-tooling group; every other hook
-  # (gitleaks, pre-commit-hooks) still gets its own PR. A gitleaks bump is red until the
-  # CI GITLEAKS_VERSION/GITLEAKS_SHA256 pair is bumped to match — that is the signal
-  # check_tool_pins.py exists to give, and the checksum has to be hand-verified anyway.
+  # Both entries use `patterns: ["*"]` deliberately: an update entry that joins a
+  # multi-ecosystem group updates ONLY the dependencies matching its patterns, so a narrow
+  # pattern list would silently stop every other pip and pre-commit update (the first
+  # version of this file listed ruff/mypy only; a review caught it). The price is one
+  # weekly PR carrying every Python-side bump — pyproject ranges, the CI lock in
+  # /requirements (plan P1-6), and every pre-commit rev — instead of one PR per
+  # dependency. A gitleaks bump in that PR is red until the CI GITLEAKS_VERSION/SHA256
+  # pair is hand-bumped to match; that is the signal check_tool_pins.py exists to give.
   - package-ecosystem: pre-commit
     directory: /
     multi-ecosystem-group: python-tooling
-    patterns:
-      - "https://github.com/astral-sh/ruff-pre-commit"
-      - "https://github.com/pre-commit/mirrors-mypy"
+    patterns: ["*"]
 
-  # pip: ruff and mypy ride the python-tooling group; every other dependency in both
-  # packages still gets its own PR per directory. /requirements holds the CI lock
-  # (ci-constraints.txt, plan P1-6): its ruff/mypy pins join the same group so a tool
-  # bump moves the lock too, and every other locked version gets its own PR.
   - package-ecosystem: pip
     directories:
       - /packages/meshsa
       - /packages/jetson_yolo_gcs
       - /requirements
     multi-ecosystem-group: python-tooling
-    patterns:
-      - ruff
-      - mypy
+    patterns: ["*"]

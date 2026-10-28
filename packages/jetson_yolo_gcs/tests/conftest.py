@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
 from jetson_yolo_gcs.streaming.camera import Frame
+
+#: Only items collected from under this directory are marked here, so a combined session
+#: that also collects a sibling package cannot be mislabelled from this conftest.
+_TESTS_DIR = Path(__file__).resolve().parent
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -17,6 +22,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     cannot relabel the whole suite (tests/unit/test_taxonomy_markers.py pins this)."""
     for item in items:
         path = item.path
+        if not path.resolve().is_relative_to(_TESTS_DIR):
+            continue
         rel = path.relative_to(config.rootpath) if path.is_relative_to(config.rootpath) else path
         is_integration = "integration" in rel.parts
         item.add_marker(pytest.mark.integration if is_integration else pytest.mark.unit)

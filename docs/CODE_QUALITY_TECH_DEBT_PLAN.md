@@ -426,7 +426,11 @@ delta. Every code item carries the standing rules: security-reviewer on anything
 (PR #73). P0-3 also moved gitleaks to 8.30.1 in both places, which supersedes PR #43.
 P0-2 (merging the remaining green dependabot PRs #37/#38/#39/#40/#48/#41/#45 and closing
 #43 as superseded) and P0-7 (tagging `v0.3.0`) are maintainer actions on `main`.
-**P0-1 needs one post-merge check:** the `multi-ecosystem-groups` semantics (that pip
+**P0-1, amended in the Phase 1 PR:** both grouped entries now use `patterns: ["*"]`,
+because an entry that joins a multi-ecosystem group updates only the dependencies its
+patterns match — the ruff/mypy-only patterns would have silently stopped every other
+pip and pre-commit update. One weekly PR now carries all Python-side bumps. The
+post-merge check still applies: the `multi-ecosystem-groups` semantics (that pip
 dependencies outside the `patterns:` still get their own PRs, and that `directories:` is
 accepted beside `multi-ecosystem-group:`) could not be confirmed against docs.github.com
 from this environment. A dependabot config error never fails a build — it shows only under

@@ -62,14 +62,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
   while `c_gate_met` is false — the advisory step will report exactly that one until
   T-8. Coverage is byte-identical (99.30 % / 99.35 %).
 - **Test taxonomy markers (P1-5):** `unit` and `integration` markers are applied at
-  collection time — by file name in meshsa (`-m integration` collects 176 of 1124), by
+  collection time — by file name in meshsa (`-m integration` collects 184 of 1124), by
   directory in jetson_yolo_gcs (44 of 224) — so `docs/LOCAL_TESTING_PLAN.md`'s categories
   are selectable without moving a file.
 - **CI dependency lock (P1-6):** `requirements/ci-constraints.txt`, compiled universally
   with `uv pip compile` from both packages' `[dev]` extras, is applied with `pip install
   -c` in the `test` and `perception` jobs; for those two jobs an upstream release now
   arrives as a dependabot PR (the `/requirements` directory joins the pip ecosystem and
-  the `python-tooling` group) instead of a red build. `nightly.yml` and `fts-e2e.yml`
+  the `python-tooling` group, whose two entries now use `patterns: ["*"]` so that every
+  pip and pre-commit update still arrives — a grouped entry updates only what its
+  patterns match) instead of a red build. `nightly.yml` and `fts-e2e.yml`
   stay unconstrained on purpose. Package requirement ranges are unchanged.
 
 #### Code-quality reflection, Phase 0 (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)

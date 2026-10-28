@@ -47,8 +47,13 @@ _INTEGRATION_STEMS: frozenset[str] = frozenset(
         "test_scout_station",
         "test_scout_pipeline",
         "test_scout_wiring",
+        "test_detection_ingest",  # binds a real loopback UDP socket
     }
 )
+
+#: This conftest's own directory; the hook marks only items collected from under it, so a
+#: combined session that also collects a sibling package cannot be mislabelled from here.
+_TESTS_DIR = Path(__file__).resolve().parent
 
 
 def is_integration_test_path(path: Path, rootpath: Path) -> bool:
@@ -65,6 +70,8 @@ def is_integration_test_path(path: Path, rootpath: Path) -> bool:
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     for item in items:
+        if not item.path.resolve().is_relative_to(_TESTS_DIR):
+            continue
         is_integration = is_integration_test_path(item.path, config.rootpath)
         item.add_marker(pytest.mark.integration if is_integration else pytest.mark.unit)
 
