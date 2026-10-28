@@ -208,8 +208,12 @@
 - [ ] T-4.3 `fpv/flight_logger.py` → `_SessionPaths`, `_ParquetSink`, `GitHeadProvider`
       protocol (moves the `subprocess` call out of the logger class); stale "Phase 1/2 stub"
       comments removed.
-- [ ] T-4.4 `cot.py`'s `CotCodec` → `_CotNaming` + module-level encode/decode functions behind
-      the unchanged facade.
+- [x] T-4.4 `cot.py`'s `CotCodec` → `_CotNaming` + module-level encode/decode functions behind
+      the unchanged facade. (Landed as plan P2-3: `encode_envelope`/`encode_pli`/
+      `encode_marker`/`encode_chat` and `decode_event` over a frozen `_CotNaming`; `decode`
+      complexity 17 → every function in the module ≤ 6; the golden snapshots are
+      byte-identical; the Hypothesis round-trip now covers the richer detail —
+      course/speed, battery, current, attitude.)
 - [ ] T-4.5 jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies;
       `Pipeline` → `PipelineMetrics` + `_PublishPolicy`; `idle_poll_s` sourced from
       `PipelineSettings.model_fields` instead of a re-hardcoded literal.
