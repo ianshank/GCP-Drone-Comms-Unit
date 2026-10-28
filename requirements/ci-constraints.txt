@@ -116,7 +116,7 @@ multidict==7.2.1 ; python_full_version >= '3.11'
     # via
     #   aiohttp
     #   yarl
-mypy==2.3.0
+mypy==2.4.0
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
@@ -208,7 +208,7 @@ rfc3986==2.0.0
     # via twine
 rich==15.0.0
     # via twine
-ruff==0.16.3
+ruff==0.17.2
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
@@ -216,7 +216,7 @@ secretstorage==3.5.0 ; platform_machine != 'ppc64le' and platform_machine != 's3
     # via keyring
 sortedcontainers==2.4.0
     # via hypothesis
-structlog==25.5.0
+structlog==26.1.0
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
