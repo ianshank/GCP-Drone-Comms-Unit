@@ -9,14 +9,14 @@ from collections.abc import AsyncIterator
 import structlog
 
 from .._queues import DropCounter
-from ..defaults import DEFAULT_QUEUE_MAXSIZE
+from ..defaults import DEFAULT_LOG_EVERY_N, DEFAULT_QUEUE_MAXSIZE
 
 _log = structlog.get_logger("meshsa.transport")
 
 #: Throttle for the inbox-full warning: log the first drop, then every Nth
 #: drop after that, rather than one line per frame under sustained
 #: backpressure (a stuck consumer can drop thousands of frames a second).
-_DROP_LOG_INTERVAL = 100
+_DROP_LOG_INTERVAL = DEFAULT_LOG_EVERY_N
 
 
 class AbstractTransport(abc.ABC):

@@ -25,7 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ..defaults import DEFAULT_QUEUE_MAXSIZE
+from ..defaults import DEFAULT_LINK_LOG_INTERVAL_S, DEFAULT_LOG_EVERY_N, DEFAULT_QUEUE_MAXSIZE
 from ..protocols import Clock
 from ..registry import transport_registry
 from ._options import resolve_options
@@ -83,8 +83,8 @@ class MspOptions:
     poll_interval_s: float = 1.0
     clock: Clock | None = None
     queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
-    log_every_n: int = 100
-    log_interval_s: float = 30.0
+    log_every_n: int = DEFAULT_LOG_EVERY_N
+    log_interval_s: float = DEFAULT_LINK_LOG_INTERVAL_S
 
 
 class MspSourceTransport(PollingSourceTransport):

@@ -77,6 +77,8 @@ def test_pinned_literal_values_are_preserved():
     assert defaults.DEFAULT_MULTICAST_IFACE == "0.0.0.0"
     assert defaults.DEFAULT_COT_STALE_S == 120.0
     assert defaults.DEFAULT_PLI_INTERVAL_S == 30.0
+    assert defaults.DEFAULT_LOG_EVERY_N == 100
+    assert defaults.DEFAULT_LINK_LOG_INTERVAL_S == 30.0
     assert defaults.DEFAULT_INFERENCE_BACKOFF_MAX_S == 30.0
     assert defaults.DEFAULT_INFERENCE_BACKOFF_BASE == 2.0
 
