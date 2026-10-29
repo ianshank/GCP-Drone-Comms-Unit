@@ -45,11 +45,12 @@
 - [ ] **Phase 1 — guardrails** (P1-1…P1-6: ruff `C90`/`PLR09xx` ratchet, advisory vulture,
       docs path check, pragma reasons, pytest markers, Python constraints file).
       **2026-10-28:** all six landed (Phase 1 PR); the unused-extras check was folded into P3-2.
-- [ ] **Phase 2 — foundations, then the god functions** (= T-3.1/T-3.2/T-3.5/T-4.4/T-4.5 plus
+- [x] **Phase 2 — foundations, then the god functions** (= T-3.1/T-3.2/T-3.5/T-4.4/T-4.5 plus
       transport `*Options` models and the `validate_agents_docs.py` split).
       **2026-10-28:** Phase 2a landed T-3.1 (`_web.py`), T-3.2 (`_envconfig.py`) and T-4.4
-      (`cot.py` split); 2b (transport `*Options`, `_queues.py`, the `validate_agents_docs`
-      split, jetson T-4.5) follows the merge.
+      (`cot.py` split). **2026-10-29:** Phase 2b landed the transport `*Options` models,
+      `_queues.py` (T-3.5b, scope narrowed to shared *accounting* — see the plan's status
+      note), the `tools/agents_docs/` split + `tools/_git.py`, and jetson T-4.5.
 - [ ] **Phase 3 — config sweep, dead code, docs organization** (incl. T-2.3b).
 - [ ] **Phase 4 — `meshsa_core`** (T-7) once a release exists.
 - [ ] **Maintainer decisions** — that plan's §7 (six items; the A1 option and the `v0.3.0`

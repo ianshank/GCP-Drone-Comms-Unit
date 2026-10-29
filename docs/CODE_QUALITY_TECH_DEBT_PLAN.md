@@ -299,7 +299,7 @@ carve-out set (`ArmGuard.update_health`/`latched`, `crsf/rc.py` `ticks_to_us`/`u
 | `llm/server.py:103`, `ui/app.py:51`, `scout/station/app.py:35` | three near-identical 2-arg `validate_bind(host, token)` wrappers differing only in `service`/`remedy` strings | **Keep.** This is the shape `bind_guard` recognizes (design D-4): a `def validate_bind` outside `netauth` must delegate to the canonical symbol, and a listener file must call an imported `validate_bind` alias. A factory-produced callable would fail the checker. Only the `service`/`remedy` strings are candidates for `_web.py`'s `ServiceAuth` (D-5) |
 | `cv/geo.py:27` ↔ `scout/survey.py:24` | `_EARTH_R_M` twice **inside meshsa** | `defaults.py` (C7) |
 | `.github/workflows/ci.yml:81-91` ↔ `:149-159` (+ an awk variant at `:207`) | coverage-summary heredoc duplicated per job | `tools/coverage_summary.py <name> <gate>`; the `tools/` floor (P0-5) then uses it too |
-| `tools/check_task_sync.py:50-99` ↔ `tools/validate_agents_docs.py:284-328` | same `subprocess.run(["git", …])` boilerplate ×5 with repeated `# noqa: S603` | `tools/_git.py::git_lines(root, *args)`; lands with P2-6 |
+| `tools/check_task_sync.py:50-99` ↔ `tools/validate_agents_docs.py:284-328` | same `subprocess.run(["git", …])` boilerplate ×5 with repeated `# noqa: S603` | `tools/_git.py::git_ok`/`git_lines(root, *args)` — **landed with P2-6** |
 | `FakeClock` ×8 | `packages/meshsa/tests/conftest.py` provides the auto-increment variant; `test_ui_logring.py`, `test_ui_snapshot.py`, `test_command_lifecycle.py`, `test_command_service.py` each re-declare the *settable* variant; jetson and deliverables have their own | add a settable `FakeClock` fixture to the meshsa conftest and delete the four in-file copies (deliverables' copy is inline-by-design) |
 | `meshsa/registry.py` ↔ `jetson_yolo_gcs/core/registry.py`; `meshsa/protocols.py` `Clock`/`SystemClock`/`MonotonicClock` ↔ `jetson_yolo_gcs/core/clock.py`; the two `errors.py` bases; `cv/geo.py` ↔ `geometry/ned.py` off-axis/depression math | line-for-line mirrors across the two distributions | **deliberate** under the no-`meshsa`-dependency rule; this is exactly the `meshsa_core` case (P4-1). Until then, cross-cite each from the other so a fix lands in both |
 | seven checker `main(argv)` + repo-root scaffolds under `tools/` | near-identical argparse/root-resolution boilerplate | low value; mention only |
@@ -496,6 +496,37 @@ whitespace-only token normalised to "open" after the bind check had accepted it 
 carrying the token verbatim and pinned on all four factories; the characterization pins
 had not covered that case, which is itself recorded. P2-4 … P2-7 are Phase 2b, after this
 PR merges (the branch convention is one open PR at a time).
+
+**Status (2026-10-29, Phase 2b):** P2-4 … P2-7 landed (Phase 2b PR), pins first again
+(`tests/test_transport_options.py` pins the four transport constructors' keyword
+defaults before the models exist; the jetson body-FRD/local-NED wire pins predate the
+encoder split). **P2-4:** `TakTcpOptions` (22 fields), `MeshtasticOptions`, `MspOptions`,
+`MavlinkSourceOptions` are frozen `kw_only` dataclasses; every constructor is
+`(name, options=None, **overrides)` and `transports/_options.py::resolve_options` splits
+overrides into model fields and pass-through extras (the interface/board factories,
+and `endpoint`/`token` on the MAVLink source, which the bind check must keep seeing
+verbatim). Keyword call sites are untouched; `tests/test_defaults.py` reads defaults from
+the models. The meshsa `max-args` ratchet drops 23 → 13 (`cot.py::CotCodec.__init__` is
+the new anchor). **P2-5:** `meshsa/_queues.py` — `DropCounter` (count, warn on the 1st
+drop and every Nth) and `BoundedDropQueue` (deque-backed, `newest`/`oldest` policy).
+Adopted by the transport inbox (counter only; the inbox stays an `asyncio.Queue`) and
+the inference offline queue (the full queue, `oldest`). Scope narrowed from the table
+above and recorded as such: `flight_logger.py` keeps its thread-drained `queue.Queue`
+and `ui/snapshot.py` is a bounded *map*, not a queue — what the three sites share is
+the accounting, and re-implementing blocking/async semantics to share a class would be
+risk for aesthetics. **P2-6:** `tools/agents_docs/` — `policy`, `repo`, `markdown`,
+`checks`, `cli`; `tools/validate_agents_docs.py` stays as the entry point and its output
+on the tree is byte-identical (46 lines diffed). `tools/_git.py` (`git_ok`, `git_lines`)
+is the one git wrapper, adopted by `check_task_sync.py` too (§3's `_git.py` row). No
+file under `tools/` exceeds 235 lines; the two `ruff.toml` anchors that named the old
+file now name `agents_docs/cli.py::validate_file` and `checks.py::check_rule_frontmatter`.
+**P2-7:** jetson `mavlink/suppression.py::SuppressionCounter`, `mavlink/frames.py`
+(`encode_body_frd`, `encode_local_ned`, the MAVLink frame/type constants beside them),
+`core/options.py` (the jetson mirror of `resolve_options`, no extras: unknown keyword →
+`TypeError`), `Pipeline(deps=None, policy=None, **overrides)` over `PipelineDeps` /
+`PipelinePolicy` (`from_settings`). Jetson `max-args` drops 13 → 8
+(`LandingTargetBridge.__init__` is the anchor). Every other ratchet in the three configs
+was re-measured and is unchanged at its anchor. Phase 2 is complete; Phase 3 follows.
 
 ### Phase 3 — Config sweep, dead code, docs organization (≈1–2 weeks)
 

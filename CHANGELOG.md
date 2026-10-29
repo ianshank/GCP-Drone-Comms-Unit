@@ -9,6 +9,27 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+#### Code-quality reflection, Phase 2b — options models, shared queues, the tools split (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- Transport `*Options` models (P2-4): `TakTcpOptions`, `MeshtasticOptions`, `MspOptions`,
+  `MavlinkSourceOptions` (frozen, keyword-only; exported from `meshsa.transports`) and
+  `transports/_options.py::resolve_options`. Every constructor is
+  `(name, options=None, **overrides)`; keyword call sites and config files are unchanged,
+  and `tests/test_transport_options.py` pins every default both ways.
+- `meshsa/_queues.py` (T-3.5b / P2-5): `DropCounter` (monotonic count, warning on the
+  first drop and every Nth) and `BoundedDropQueue` (deque-backed, `newest`/`oldest`
+  policy, `put()` reports whether the arriving item was kept). The transport inbox and the
+  inference offline queue share the accounting; `tests/test_queues.py` pins the contract.
+- `tools/agents_docs/` (P2-6): the instruction-file linter as a package split by check
+  family (`policy`, `repo`, `markdown`, `checks`, `cli`); `tools/validate_agents_docs.py`
+  remains the entry point every invocation uses, with byte-identical output.
+  `tools/_git.py` (`git_ok`, `git_lines`) is the one git wrapper, shared with
+  `check_task_sync.py`.
+- jetson (T-4.5 / P2-7): `mavlink/suppression.py::SuppressionCounter`,
+  `mavlink/frames.py` (`encode_body_frd`, `encode_local_ned`, `compute_angles`),
+  `core/options.py`, and `PipelineDeps` / `PipelinePolicy` (`Pipeline(deps, policy)`,
+  `PipelinePolicy.from_settings`). Wire output is pinned byte-identical.
+
+### Added
 #### Code-quality reflection, Phase 2a — shared foundations (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
 - `meshsa/_web.py` (T-3.1 / P2-1) — the one aiohttp auth/response kit: `ServiceAuth`,
   `bearer_guard`, `page_token_gate`, `guarded`, `unauthorized`, `api_json`/`text_body`/
@@ -52,6 +73,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
   — the "no runtime dependency on `meshsa`" invariant was documented as a hard
   architectural gate but nothing enforced it; that test file checked only the six
   heavy/hardware modules. The rule held in fact; now it is checked.
+
+### Changed
+#### Code-quality reflection, Phase 2b (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- Ruff complexity ratchets lowered at the functions the phase fixed, never raised:
+  meshsa `max-args` 23 → 13 (anchor now `cot.py::CotCodec.__init__`), jetson `max-args`
+  13 → 8 (anchor `mavlink/bridge.py::LandingTargetBridge.__init__`); the two `ruff.toml`
+  anchors that named `validate_agents_docs.py` now name the split modules.
 
 ### Changed
 #### Code-quality reflection, Phase 2a — shared foundations (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
