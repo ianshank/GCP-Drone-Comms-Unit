@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 import structlog
@@ -120,7 +120,8 @@ class MeshtasticOptions:
     backoff_factor: float = DEFAULT_BACKOFF_FACTOR
     sleep: SleepFn | None = None
     queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
-    mesh: dict[str, Any] | None = None
+    #: ``repr=False``: ``build_node`` injects ``MeshConfig.model_dump()`` here, PSK included.
+    mesh: dict[str, Any] | None = field(default=None, repr=False)
     provision: Provisioner | None = None
 
 

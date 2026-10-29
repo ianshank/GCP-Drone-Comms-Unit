@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 import structlog
 
 from jetson_yolo_gcs.detection.base import Detection, DetectionResult
@@ -26,17 +27,17 @@ def _result(width: int = 100, height: int = 50) -> tuple[Detection, DetectionRes
 def test_body_frd_frame_layout_is_pinned() -> None:
     det, result = _result()
     frame = encode_body_frd(det, result, fov_x_rad=1.0, fov_y_rad=2.0, time_usec=123)
-    angle_x, angle_y = compute_angles(det, result, fov_x_rad=1.0, fov_y_rad=2.0)
-    assert frame == (
-        123,
-        0,
-        MAV_FRAME_BODY_FRD,
-        angle_x,
-        angle_y,
+    # Angles pinned as literals, not via compute_angles(): bbox centre (70, 15) in a
+    # 100x50 image is +0.2 of the width right of centre and 0.2 of the height *above*
+    # centre, so angle_x = +0.2 * fov_x and angle_y = -0.2 * fov_y (image y grows down).
+    assert frame[:3] == (123, 0, MAV_FRAME_BODY_FRD)
+    assert frame[3:5] == pytest.approx((0.2, -0.4))
+    assert frame[5:] == (
         0.0,
         (20.0 / 100) * 1.0,  # size_x = bbox width / image width * fov_x
         (10.0 / 50) * 2.0,  # size_y = bbox height / image height * fov_y
     )
+    assert frame[3:5] == compute_angles(det, result, fov_x_rad=1.0, fov_y_rad=2.0)
     assert all(isinstance(v, float) for v in frame[3:])
 
 

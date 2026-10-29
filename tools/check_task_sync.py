@@ -75,12 +75,14 @@ def baseline_reachable(repo_root: Path, baseline: str) -> bool:
     nonzero as a failed step, which would turn this advisory check into a hard
     red for every contributor after this branch merges.
     """
-    return git_ok(repo_root, "cat-file", "-e", f"{baseline}^{{commit}}")
+    # --end-of-options: ``baseline`` is the one value in this tool that comes from argv,
+    # so a ``-``-prefixed string must read as a revision, never as a git option.
+    return git_ok(repo_root, "cat-file", "-e", "--end-of-options", f"{baseline}^{{commit}}")
 
 
 def commit_subjects(repo_root: Path, baseline: str) -> list[str]:
     """Subjects of commits after ``baseline`` up to HEAD (empty list if none)."""
-    lines = git_lines(repo_root, "log", "--format=%s", f"{baseline}..HEAD")
+    lines = git_lines(repo_root, "log", "--format=%s", "--end-of-options", f"{baseline}..HEAD")
     return [line for line in lines if line.strip()]
 
 

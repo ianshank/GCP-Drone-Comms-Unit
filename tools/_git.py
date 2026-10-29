@@ -3,8 +3,10 @@
 ``check_task_sync`` and ``agents_docs`` each ran git with the same fixed-argv boilerplate
 (capture, timeout, the ``# noqa: S603`` justification) five times between them. Two
 shapes cover every call: a yes/no probe (:func:`git_ok`) and a line-list query
-(:func:`git_lines`). ``argv`` is always a literal list built from constants, never from
-user input, which is what the single ``S603`` waiver below asserts.
+(:func:`git_lines`). The subcommand and its flags are always literals; the one
+caller-supplied value anywhere (``check_task_sync``'s ``--baseline`` revision) is passed
+after ``--end-of-options`` so it can never be parsed as a flag. That, plus list argv (no
+shell), is what the single ``S603`` waiver below asserts.
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ def git_lines(root: Path, *args: str, timeout: float = GIT_TIMEOUT_S) -> list[st
 def _run(
     root: Path, args: tuple[str, ...], *, timeout: float, check: bool
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603 (fixed argv: a literal git subcommand, no user input)
+    return subprocess.run(  # noqa: S603 (list argv, literal subcommand; see module docstring)
         ["git", *args],
         cwd=root,
         capture_output=True,

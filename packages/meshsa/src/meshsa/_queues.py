@@ -62,8 +62,11 @@ class DropCounter:
         """
         self.count += 1
         if not quiet and (self.count == 1 or self.count % self._log_every == 0):
+            # One merged mapping, later keys winning: a per-call field that repeats a
+            # construction field (or the counter's own name) must not turn a counted drop
+            # into a TypeError raised from the very path the counter exists to observe.
             self._log.warning(
-                self._event, **self._fields, **fields, **{self._counter_field: self.count}
+                self._event, **{**self._fields, **fields, self._counter_field: self.count}
             )
         return self.count
 

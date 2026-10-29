@@ -22,7 +22,7 @@ from meshsa import (
     SystemClock,
     UuidFactory,
 )
-from meshsa.inference.service import _DEFAULT_INSIGHT_PREFIX, _is_ai_insight
+from meshsa.inference.service import _DEFAULT_INSIGHT_PREFIX, _is_ai_insight, _OfflineQueue
 
 
 def _ok(content: str) -> HttpResponse:
@@ -441,21 +441,38 @@ async def test_service_offline_queue_replays_on_recovery(make_transport, mock_ro
     assert not svc._offline_queue  # queue drained
 
 
-async def test_service_offline_queue_drops_oldest_when_full(make_transport, mock_router, env):
-    """Overflow drops the oldest and increments the drop counter (drop-and-count)."""
+async def test_service_offline_queue_drops_oldest_when_full(make_transport, mock_router):
+    """Overflow drops the *oldest* and increments the drop counter (drop-and-count).
+
+    Two distinct envelopes, so the survivor identifies the policy: a drop-newest queue
+    would keep "first" and this assertion would fail.
+    """
     cfg = NemotronConfig(enabled=True, api_key="k", max_retries=0, offline_queue_max=1)
     transport = make_transport([InferenceTransportError("x")], repeat_last=True)
     svc = _service(cfg, mock_router, transport)
     svc.start()
 
-    await mock_router.handlers[0](env)
+    await mock_router.handlers[0](_chat_envelope("first", source_uid="a"))
     await _await_idle(svc)
-    await mock_router.handlers[0](env)
+    await mock_router.handlers[0](_chat_envelope("second", source_uid="a"))
     await _await_idle(svc)
     await svc.stop()
 
     assert svc._offline_queue._queue is not None and len(svc._offline_queue._queue) == 1
     assert svc._offline_queue._dropped == 1
+    assert svc._offline_queue.pop().payload["text"] == "second"
+
+
+def test_offline_queue_requeue_on_a_full_queue_evicts_the_tail_not_itself():
+    """A replay requeued at the head of a full queue displaces the oldest unreplayed item."""
+    q = _OfflineQueue(1)
+    first, second = _chat_envelope("a", source_uid="x"), _chat_envelope("b", source_uid="x")
+    q.put(first, front=False)
+    q.put(second, front=True)  # the requeue path (``drain`` on a replay failure)
+    assert q.depth == 1 and q.dropped == 1
+    assert q.pop() is second
+    disabled = _OfflineQueue(0)
+    assert not disabled and not disabled.enabled and disabled.dropped == 0 and disabled.depth == 0
 
 
 async def test_service_offline_replay_requeues_on_repeat_failure(make_transport, mock_router, env):

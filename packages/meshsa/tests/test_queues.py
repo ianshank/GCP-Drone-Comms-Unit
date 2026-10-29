@@ -127,3 +127,11 @@ def test_front_put_on_a_full_newest_queue_is_refused() -> None:
 def test_queue_rejects_a_zero_bound() -> None:
     with pytest.raises(ValueError, match="maxlen must be >= 1"):
         BoundedDropQueue(0, DropCounter(_Log(), "dropped"))
+
+
+def test_counter_fields_that_repeat_a_bound_name_do_not_raise() -> None:
+    """The drop path must never raise: a repeated key is resolved, later value winning."""
+    log = _Log()
+    counter = DropCounter(log, "dropped", transport="a")
+    assert counter.record(transport="b", dropped=99) == 1
+    assert log.calls == [("dropped", {"transport": "b", "dropped": 1})]

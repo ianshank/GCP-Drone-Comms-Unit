@@ -526,7 +526,16 @@ file now name `agents_docs/cli.py::validate_file` and `checks.py::check_rule_fro
 `TypeError`), `Pipeline(deps=None, policy=None, **overrides)` over `PipelineDeps` /
 `PipelinePolicy` (`from_settings`). Jetson `max-args` drops 13 → 8
 (`LandingTargetBridge.__init__` is the anchor). Every other ratchet in the three configs
-was re-measured and is unchanged at its anchor. Phase 2 is complete; Phase 3 follows.
+was re-measured and is unchanged at its anchor. The three reviews (security-reviewer,
+test-engineer, config-guardian) found no M2 invariant change and four Low items, all
+fixed on the PR: a config dict carrying an `options` key would have aborted `build_node()`
+(now dropped with a warning, or adopted when it is the model itself); `MeshtasticOptions.mesh`
+carries the PSK and printed it in `repr` (`repr=False`); `DropCounter.record(**fields)`
+raised on a repeated key (merged, later key wins); `check_task_sync`'s `--baseline` is the
+one argv value reaching git and now follows `--end-of-options`. Test gaps closed: the
+BODY_FRD angles are pinned as literals, the offline-queue overflow test distinguishes
+drop-oldest from drop-newest, and the two re-typed log-cadence literals got a home
+(`DEFAULT_LOG_EVERY_N`, `DEFAULT_LINK_LOG_INTERVAL_S`). Phase 2 is complete; Phase 3 follows.
 
 ### Phase 3 — Config sweep, dead code, docs organization (≈1–2 weeks)
 

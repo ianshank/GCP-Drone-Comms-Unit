@@ -337,9 +337,10 @@ def test_mavlink_options_model_resolves_like_the_keywords() -> None:
 
 
 def test_registry_factories_build_the_model_and_forward_extras() -> None:
-    t = transport_registry.create("msp_source", board=object(), alt_scale=0.5, device="/dev/x")
+    board = object()
+    t = transport_registry.create("msp_source", board=board, alt_scale=0.5, device="/dev/x")
     assert isinstance(t, MspSourceTransport)
-    assert t.options == MspOptions(board=t._resource, alt_scale=0.5)  # ``device`` is an extra
+    assert t.options == MspOptions(board=board, alt_scale=0.5)  # ``device`` is an extra
 
 
 # ── resolve_options ───────────────────────────────────────────────────────────
@@ -362,3 +363,30 @@ def test_options_models_are_frozen() -> None:
     options = TakTcpOptions()
     with pytest.raises(AttributeError):
         options.host = "x"  # type: ignore[misc]
+
+
+def test_a_stray_options_key_in_overrides_is_dropped_not_fatal(caplog: Any) -> None:
+    """A config dict carrying an ``options`` key must degrade, not abort build_node()."""
+    resolved, extras = resolve_options(MspOptions, None, {"options": {"x": 1}, "device": "/dev/x"})
+    assert resolved == MspOptions()
+    assert extras == {"device": "/dev/x"}
+    # The registry path is where a config-file key lands.
+    transport = transport_registry.create("msp_source", name="fc", options={"alt_scale": 2.0})
+    assert isinstance(transport, MspSourceTransport)
+    assert transport.options == MspOptions()  # the dict is not a model: dropped
+
+
+def test_a_model_under_the_options_key_is_adopted_when_no_model_was_given() -> None:
+    model = MspOptions(alt_scale=5.0)
+    resolved, extras = resolve_options(MspOptions, None, {"options": model, "alt_scale": 6.0})
+    assert resolved == MspOptions(alt_scale=6.0)  # adopted as the base; override still wins
+    assert extras == {}
+    other = MspOptions(alt_scale=1.0)
+    resolved, _ = resolve_options(MspOptions, other, {"options": model})
+    assert resolved == other  # an explicit model is never displaced
+
+
+def test_meshtastic_options_repr_does_not_print_the_mesh_psk() -> None:
+    options = MeshtasticOptions(mesh={"psk": "SECRETPSK", "channel": 7})
+    assert "SECRETPSK" not in repr(options)
+    assert options.mesh == {"psk": "SECRETPSK", "channel": 7}  # the value itself is intact
