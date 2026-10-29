@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 
 import structlog
 
+from .._queues import DropCounter
 from ..defaults import DEFAULT_QUEUE_MAXSIZE
 
 _log = structlog.get_logger("meshsa.transport")
@@ -23,8 +24,19 @@ class AbstractTransport(abc.ABC):
         self.name = name
         self._inbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=queue_maxsize)
         self._running = False
-        #: Frames dropped because the inbox was full (slow consumer / backpressure).
-        self.dropped_inbox_full = 0
+        #: Drop-and-count accounting for the inbox (the shared ``_queues`` primitive).
+        self._inbox_drops = DropCounter(
+            _log,
+            "inbox full; dropping frame",
+            log_every=_DROP_LOG_INTERVAL,
+            counter_field="dropped_inbox_full",
+            transport=name,
+        )
+
+    @property
+    def dropped_inbox_full(self) -> int:
+        """Frames dropped because the inbox was full (slow consumer / backpressure)."""
+        return self._inbox_drops.count
 
     async def start(self) -> None:
         self._running = True
@@ -46,13 +58,7 @@ class AbstractTransport(abc.ABC):
         try:
             self._inbox.put_nowait(data)
         except asyncio.QueueFull:
-            self.dropped_inbox_full += 1
-            if self.dropped_inbox_full == 1 or self.dropped_inbox_full % _DROP_LOG_INTERVAL == 0:
-                _log.warning(
-                    "inbox full; dropping frame",
-                    transport=self.name,
-                    dropped_inbox_full=self.dropped_inbox_full,
-                )
+            self._inbox_drops.record()
 
     async def _ingest(self, data: bytes) -> None:
         """Async ingest for in-loop callers (e.g. the TAK read loop)."""

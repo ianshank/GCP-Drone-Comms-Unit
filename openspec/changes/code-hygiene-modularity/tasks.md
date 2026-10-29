@@ -155,8 +155,13 @@
       `docs/AUDIT_M2_AUTH.md` citations refreshed to `module::symbol` form in the same
       commit. jetson stays out (separate distribution; its `udpout` endpoint is the other
       end of the rendezvous, and its literals already live in pydantic-settings fields).
-- [ ] T-3.5b `meshsa/_queues.py` (`BoundedDropQueue`); adopt in `flight_logger.py`,
-      `fpv/camera.py` (fixes its unguarded cross-thread counter).
+- [x] T-3.5b `meshsa/_queues.py` (`DropCounter` + `BoundedDropQueue`), adopted by the
+      transport inbox (`transports/base.py`, counter only — the inbox stays an
+      `asyncio.Queue`) and the inference offline queue (`inference/service.py`, the full
+      queue with the `oldest` policy). Scope narrowed honestly: `flight_logger.py` keeps
+      its thread-drained `queue.Queue` (its cross-thread counter is T-4.3's concern) and
+      `fpv/camera.py` was already fixed under T-4.3; sharing the *accounting* rather than
+      the backend is the deliberate call, recorded in the module docstring.
 - [ ] T-3.6 Geodesy consolidation into `cv/geo.py`: `scout/survey.py`'s `_LocalFrame` gains the
       pole guard `cv/geo.py` already has; `scout/replay.py`'s hand-rolled inverse projector
       moves beside the forward one with a round-trip property test.

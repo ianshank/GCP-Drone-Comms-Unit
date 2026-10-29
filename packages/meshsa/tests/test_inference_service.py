@@ -734,10 +734,11 @@ async def test_handle_message_unbounded_when_cap_zero(make_transport, mock_route
 def test_as_dict_reports_counters(mock_router, make_transport):
     cfg = NemotronConfig(enabled=True, api_key="k", offline_queue_max=4, max_pending_tasks=2)
     svc = _service(cfg, mock_router, make_transport([]))
-    svc._offline_queue._dropped = 3
+    for _ in range(3):
+        svc._offline_queue.record_drop()
     svc._intake_dropped = 5
     assert svc._offline_queue._queue is not None
-    svc._offline_queue._queue.append(_chat_envelope("q", source_uid="x"))  # depth 1
+    svc._offline_queue.put(_chat_envelope("q", source_uid="x"), front=False)  # depth 1
     d = svc.as_dict()
     assert d == {
         "offline_dropped": 3,
