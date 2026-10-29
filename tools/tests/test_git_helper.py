@@ -32,17 +32,17 @@ def test_git_lines_raises_on_a_failing_command(repo: Path) -> None:
 
 
 def test_timeout_is_passed_through(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    seen: dict[str, object] = {}
+    calls: list[dict[str, object]] = []
 
     def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        seen["argv"] = argv
-        seen.update(kwargs)
+        calls.append({"argv": argv, **kwargs})
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert git_ok(tmp_path, "status", timeout=5) is True
-    assert seen["argv"] == ["git", "status"]
-    assert seen["timeout"] == 5
-    assert seen["cwd"] == tmp_path
     git_lines(tmp_path, "status")
-    assert seen["timeout"] == GIT_TIMEOUT_S
+    explicit, defaulted = calls
+    assert explicit["argv"] == ["git", "status"]
+    assert explicit["cwd"] == tmp_path
+    assert explicit["timeout"] == 5
+    assert defaulted["timeout"] == GIT_TIMEOUT_S
