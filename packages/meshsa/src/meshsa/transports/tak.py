@@ -22,6 +22,7 @@ import contextlib
 import os
 import ssl
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,7 @@ from ..defaults import (
 )
 from ..protocols import Clock
 from ..registry import transport_registry
+from ._options import resolve_options
 from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
 from .pacing import Pacer
@@ -176,37 +178,52 @@ def _default_connector(  # pragma: no cover - real network
     return connect
 
 
+@dataclass(frozen=True, kw_only=True)
+class TakTcpOptions:
+    """Every ``TakTcpTransport`` tunable, with its default (plan P2-4; see ``_options``).
+
+    ``connector``/``ssl_context_factory``/``clock``/``sleep`` are the injectable seams the
+    tests use; everything else is deployment config a node's transport ``options`` carry.
+    """
+
+    connector: Connector | None = None
+    host: str = DEFAULT_LOCAL_TARGET_HOST
+    port: int | None = None
+    tls: bool = False
+    tls_ca_cert: str | None = None
+    tls_client_cert: str | None = None
+    tls_client_key: str | None = None
+    tls_verify: bool = True
+    tls_server_hostname: str | None = None
+    ssl_context_factory: Callable[[], ssl.SSLContext] | None = None
+    clock: Clock | None = None
+    pacing: bool = False
+    pacing_rate_hz: float = 10.0
+    pacing_burst: int = 1
+    read_size: int = 4096
+    delimiter: bytes = b""
+    reconnect: bool = True
+    backoff_initial_s: float = DEFAULT_BACKOFF_INITIAL_S
+    backoff_max_s: float = DEFAULT_BACKOFF_MAX_S
+    backoff_factor: float = DEFAULT_BACKOFF_FACTOR
+    sleep: SleepFn | None = None
+    queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
+
+
 class TakTcpTransport(AbstractTransport):
     def __init__(
-        self,
-        name: str = "tak_tcp",
-        *,
-        connector: Connector | None = None,
-        host: str = DEFAULT_LOCAL_TARGET_HOST,
-        port: int | None = None,
-        tls: bool = False,
-        tls_ca_cert: str | None = None,
-        tls_client_cert: str | None = None,
-        tls_client_key: str | None = None,
-        tls_verify: bool = True,
-        tls_server_hostname: str | None = None,
-        ssl_context_factory: Callable[[], ssl.SSLContext] | None = None,
-        clock: Clock | None = None,
-        pacing: bool = False,
-        pacing_rate_hz: float = 10.0,
-        pacing_burst: int = 1,
-        read_size: int = 4096,
-        delimiter: bytes = b"",
-        reconnect: bool = True,
-        backoff_initial_s: float = DEFAULT_BACKOFF_INITIAL_S,
-        backoff_max_s: float = DEFAULT_BACKOFF_MAX_S,
-        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
-        sleep: SleepFn | None = None,
-        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
-        **_: Any,
+        self, name: str = "tak_tcp", options: TakTcpOptions | None = None, **overrides: Any
     ) -> None:
-        super().__init__(name, queue_maxsize)
-        host, resolved_port, use_tls = _resolve_tak_endpoint(host, port, tls)
+        """Build the transport from a :class:`TakTcpOptions` and/or its fields as keywords.
+
+        A keyword overrides the model's field; a keyword that is not a field is ignored
+        (the registry passes a transport's whole ``options`` dict through).
+        """
+        opts, _ = resolve_options(TakTcpOptions, options, overrides)
+        #: The resolved options (exposed for observability/tests).
+        self.options = opts
+        super().__init__(name, opts.queue_maxsize)
+        host, resolved_port, use_tls = _resolve_tak_endpoint(opts.host, opts.port, opts.tls)
         #: Resolved endpoint (exposed for observability/tests). Plaintext stays the
         #: default (8087); TLS targets 8089 unless an explicit port is given.
         self.host = host
@@ -214,36 +231,44 @@ class TakTcpTransport(AbstractTransport):
         self.tls = use_tls
         #: The TLS context in use, or None for plaintext (exposed for tests).
         self._ssl_context: ssl.SSLContext | None = None
-        if connector is not None:
-            self._connector = connector
+        if opts.connector is not None:
+            self._connector = opts.connector
         else:
             if use_tls:
-                if ssl_context_factory is not None:
-                    self._ssl_context = ssl_context_factory()
+                if opts.ssl_context_factory is not None:
+                    self._ssl_context = opts.ssl_context_factory()
                 else:  # pragma: no cover - real TLS context (needs certs on deploy)
                     self._ssl_context = _build_ssl_context(
-                        ca_cert=tls_ca_cert,
-                        client_cert=tls_client_cert,
-                        client_key=tls_client_key,
-                        verify=tls_verify,
+                        ca_cert=opts.tls_ca_cert,
+                        client_cert=opts.tls_client_cert,
+                        client_key=opts.tls_client_key,
+                        verify=opts.tls_verify,
                     )
             self._connector = _default_connector(
                 host,
                 resolved_port,
                 ssl_context=self._ssl_context,
-                server_hostname=tls_server_hostname,
+                server_hostname=opts.tls_server_hostname,
             )
-        self._read_size = read_size
-        self._delimiter = delimiter
-        self._reconnect = reconnect
+        self._read_size = opts.read_size
+        self._delimiter = opts.delimiter
+        self._reconnect = opts.reconnect
         self._backoff = Backoff(
-            initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+            initial_s=opts.backoff_initial_s,
+            max_s=opts.backoff_max_s,
+            factor=opts.backoff_factor,
+            sleep=opts.sleep,
         )
         #: Optional outbound pacer (token bucket) so a fast track stream cannot
         #: overrun a rate-sensitive sink like FreeTAKServer. Off unless configured.
         self._pacer = (
-            Pacer(rate_hz=pacing_rate_hz, burst=pacing_burst, clock=clock, sleep=sleep)
-            if pacing
+            Pacer(
+                rate_hz=opts.pacing_rate_hz,
+                burst=opts.pacing_burst,
+                clock=opts.clock,
+                sleep=opts.sleep,
+            )
+            if opts.pacing
             else None
         )
         self._reader: asyncio.StreamReader | None = None
@@ -341,4 +366,5 @@ class TakTcpTransport(AbstractTransport):
 
 @transport_registry.register("tak_tcp")
 def _make_tak_tcp(name: str = "tak_tcp", **options: Any) -> TakTcpTransport:
-    return TakTcpTransport(name=name, **options)
+    opts, extras = resolve_options(TakTcpOptions, None, options)
+    return TakTcpTransport(name, opts, **extras)

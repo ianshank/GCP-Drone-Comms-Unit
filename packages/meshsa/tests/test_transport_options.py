@@ -25,10 +25,11 @@ from meshsa.defaults import (
     PORT_FTS_TCP,
     PORT_TAK_TLS,
 )
-from meshsa.transports.mavlink_source import MavlinkSourceTransport
-from meshsa.transports.meshtastic_radio import MeshtasticTransport
-from meshsa.transports.msp_source import MspSourceTransport
-from meshsa.transports.tak import TakTcpTransport
+from meshsa.transports._options import resolve_options
+from meshsa.transports.mavlink_source import MavlinkSourceOptions, MavlinkSourceTransport
+from meshsa.transports.meshtastic_radio import MeshtasticOptions, MeshtasticTransport
+from meshsa.transports.msp_source import MspOptions, MspSourceTransport
+from meshsa.transports.tak import TakTcpOptions, TakTcpTransport
 
 
 async def _never_connect() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
@@ -268,3 +269,96 @@ def test_mavlink_registry_factory_passes_keywords_through() -> None:
     t = transport_registry.create("mavlink_source", name="mav", connection=object(), alt_scale=2.0)
     assert isinstance(t, MavlinkSourceTransport)
     assert (t.name, t._alt_scale) == ("mav", 2.0)
+
+
+# ── the *Options form (plan P2-4): one model, same resolution as the keywords ─
+
+
+def test_tak_tcp_options_model_resolves_like_the_keywords() -> None:
+    options = TakTcpOptions(
+        connector=_never_connect,
+        host="tls://tak.example:9000",
+        pacing=True,
+        pacing_rate_hz=5.0,
+        pacing_burst=2,
+        read_size=1024,
+        delimiter=b"\n",
+        reconnect=False,
+        backoff_initial_s=0.5,
+        backoff_max_s=4.0,
+        backoff_factor=3.0,
+        queue_maxsize=7,
+    )
+    t = TakTcpTransport("tak-9", options)
+    assert t.options == options
+    assert (t.host, t.port, t.tls) == ("tak.example", 9000, True)
+    assert (t._read_size, t._delimiter, t._reconnect) == (1024, b"\n", False)
+    assert _backoff(t) == (0.5, 4.0, 3.0)
+    assert t._pacer is not None and t._pacer._capacity == 2.0
+    assert t._inbox.maxsize == 7
+    # A keyword beside the model overrides that one field and leaves the rest.
+    tweaked = TakTcpTransport("tak-9", options, read_size=1)
+    assert tweaked._read_size == 1
+    assert tweaked.options == TakTcpOptions(**{**options.__dict__, "read_size": 1})
+    assert TakTcpTransport(connector=_never_connect).options == TakTcpOptions(
+        connector=_never_connect
+    )
+
+
+def test_meshtastic_options_model_resolves_like_the_keywords() -> None:
+    factory = object
+    options = MeshtasticOptions(
+        interface_factory=factory, portnum=42, want_ack=True, mesh={"region": "EU_868"}
+    )
+    t = MeshtasticTransport("lora", options)
+    assert t.options == options
+    assert (t.portnum, t.want_ack, t._mesh) == (42, True, {"region": "EU_868"})
+    assert t._factory is factory
+
+
+def test_msp_options_model_resolves_like_the_keywords() -> None:
+    board = object()
+    options = MspOptions(board=board, source_uid="fc-9", alt_scale=2.0, poll_interval_s=0.25)
+    t = MspSourceTransport("fc", options)
+    assert t.options == options
+    assert t._resource is board
+    assert (t._source_uid, t._alt_scale, t._poll_wait_s) == ("fc-9", 2.0, 0.25)
+
+
+def test_mavlink_options_model_resolves_like_the_keywords() -> None:
+    conn = object()
+    options = MavlinkSourceOptions(connection=conn, message_type="GPS_RAW_INT", recv_timeout_s=0.5)
+    t = MavlinkSourceTransport("mav", options, endpoint="udpin:127.0.0.1:14550")
+    assert t.options == options
+    assert t._resource is conn
+    assert (t._message_type, t._recv_timeout) == ("GPS_RAW_INT", 0.5)
+    with pytest.raises(ValueError, match="without a token"):
+        MavlinkSourceTransport("mav", options, endpoint="udpin:0.0.0.0:14550")
+
+
+def test_registry_factories_build_the_model_and_forward_extras() -> None:
+    t = transport_registry.create("msp_source", board=object(), alt_scale=0.5, device="/dev/x")
+    assert isinstance(t, MspSourceTransport)
+    assert t.options == MspOptions(board=t._resource, alt_scale=0.5)  # ``device`` is an extra
+
+
+# ── resolve_options ───────────────────────────────────────────────────────────
+
+
+def test_resolve_options_splits_fields_from_extras_and_applies_overrides() -> None:
+    resolved, extras = resolve_options(
+        MspOptions, None, {"alt_scale": 2.0, "device": "/dev/x", "baudrate": 9600}
+    )
+    assert resolved == MspOptions(alt_scale=2.0)
+    assert extras == {"device": "/dev/x", "baudrate": 9600}
+    base = MspOptions(alt_scale=3.0, source_uid="fc-3")
+    resolved, extras = resolve_options(MspOptions, base, {"alt_scale": 4.0})
+    assert resolved == MspOptions(alt_scale=4.0, source_uid="fc-3")  # override wins, rest kept
+    assert extras == {}
+    assert resolve_options(MspOptions, base, {}) == (base, {})  # no override: the model itself
+
+
+def test_options_models_are_frozen() -> None:
+    options = TakTcpOptions()
+    with pytest.raises(AttributeError):
+        options.host = "x"  # type: ignore[misc]
