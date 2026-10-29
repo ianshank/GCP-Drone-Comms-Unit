@@ -214,9 +214,16 @@
       complexity 17 → every function in the module ≤ 6; the golden snapshots are
       byte-identical; the Hypothesis round-trip now covers the richer detail —
       course/speed, battery, current, attitude.)
-- [ ] T-4.5 jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies;
+- [x] T-4.5 jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies;
       `Pipeline` → `PipelineMetrics` + `_PublishPolicy`; `idle_poll_s` sourced from
-      `PipelineSettings.model_fields` instead of a re-hardcoded literal.
+      `PipelineSettings.model_fields` instead of a re-hardcoded literal. (Landed as plan
+      P2-7: `mavlink/suppression.py::SuppressionCounter` and the pure
+      `mavlink/frames.py::encode_body_frd`/`encode_local_ned` encoders behind the unchanged
+      bridge; `Pipeline` takes `PipelineDeps` + `PipelinePolicy` (the policy carries the
+      validated tunables — the `_PublishPolicy` half — while the counters stay plain
+      attributes the tests read, so no `PipelineMetrics` object was introduced);
+      `idle_poll_s` was already sourced from `model_fields`. `Pipeline.__init__` 13 → 3
+      args; every keyword call site unchanged.)
 
 ## Phase 5 — `fpv/` prune and decouple
 - [x] T-5.1a Safe deletions (design D-1): `AddressProber`/`ProbeResult`/`ProberSettings`,
