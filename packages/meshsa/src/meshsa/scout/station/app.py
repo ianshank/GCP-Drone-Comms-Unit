@@ -2,9 +2,9 @@
 
 Pure helpers (``authorize``/``is_loopback``/``validate_bind``/``detections_geojson``/
 ``set_status_body``) are unit-tested without a web framework; ``build_app`` wires them into
-aiohttp routes. Data + mutation endpoints require ``Authorization: Bearer <token>`` when a
-token is set; a non-loopback bind without a token is refused (fail-closed), mirroring
-``meshsa.llm.server``.
+aiohttp routes through the shared :mod:`meshsa._web` kit. Data + mutation endpoints require
+``Authorization: Bearer <token>`` when a token is set; a non-loopback bind without a token is
+refused (fail-closed), mirroring ``meshsa.llm.server``.
 """
 
 from __future__ import annotations
@@ -13,6 +13,18 @@ from typing import Any
 
 import structlog
 
+from ..._web import (
+    Handler,
+    ServiceAuth,
+    api_json,
+    guarded,
+    healthz,
+    html_page,
+    page_token_gate,
+    read_json_or_none,
+    register_routes,
+    text_body,
+)
 from ...netauth import authorize, is_loopback
 from ...netauth import validate_bind as _validate_bind
 from ..protocols import Store
@@ -82,64 +94,40 @@ def build_app(
         validate_bind(host, token)
     from aiohttp import web
 
-    def _guard(request: Any) -> Any | None:
-        if not authorize(token, request.headers.get("Authorization")):
-            return web.json_response({"error": "unauthorized"}, status=401)
-        return None
+    auth = ServiceAuth("meshsa-scout", token)
 
     async def index(request: Any) -> Any:
-        # Browsers can't set an Authorization header on navigation, so the page is gated on a
-        # ``?token=`` query when a token is configured; the token is then injected for its fetches.
-        if token and not authorize(token, "Bearer " + (request.query.get("token") or "")):
-            return web.json_response({"error": "unauthorized"}, status=401)
-        return web.Response(text=render_page(token), content_type="text/html")
-
-    async def healthz(_request: Any) -> Any:
-        return web.json_response({"status": "ok"})
-
-    async def detections(request: Any) -> Any:
-        denied = _guard(request)
+        denied = page_token_gate(auth, request)
         if denied is not None:
             return denied
-        return web.json_response(detections_geojson(store))
+        return html_page(render_page(token))
 
-    async def export_geojson(request: Any) -> Any:
-        denied = _guard(request)
-        if denied is not None:
-            return denied
-        return web.json_response(detections_geojson(store))
+    async def detections(_request: Any) -> Any:
+        return api_json(detections_geojson(store))
 
-    async def export_csv(request: Any) -> Any:
-        denied = _guard(request)
-        if denied is not None:
-            return denied
-        return web.Response(text=to_csv(store.all()), content_type="text/csv")
+    async def export_csv(_request: Any) -> Any:
+        return text_body(to_csv(store.all()), content_type="text/csv")
 
-    async def block(request: Any) -> Any:
-        denied = _guard(request)
-        if denied is not None:
-            return denied
+    async def block(_request: Any) -> Any:
         if block_geojson is None:
-            return web.json_response({"error": "no block loaded"}, status=404)
-        return web.json_response(block_geojson)
+            return api_json({"error": "no block loaded"}, status=404)
+        return api_json(block_geojson)
 
     async def set_status(request: Any) -> Any:
-        denied = _guard(request)
-        if denied is not None:
-            return denied
-        try:
-            payload = await request.json()
-        except Exception:
-            payload = None
+        payload = await read_json_or_none(request)
         body, status = set_status_body(store, request.match_info["det_id"], payload)
-        return web.json_response(body, status=status)
+        return api_json(body, status=status)
 
+    # ``/detections`` and ``/export.geojson`` were byte-identical handlers; one serves both.
+    routes: list[tuple[str, str, Handler]] = [
+        ("GET", "/", index),
+        ("GET", "/healthz", healthz),
+        ("GET", "/detections", guarded(auth, detections)),
+        ("GET", "/export.geojson", guarded(auth, detections)),
+        ("GET", "/export.csv", guarded(auth, export_csv)),
+        ("GET", "/block", guarded(auth, block)),
+        ("POST", "/detections/{det_id}/status", guarded(auth, set_status)),
+    ]
     app = web.Application()
-    app.router.add_get("/", index)
-    app.router.add_get("/healthz", healthz)
-    app.router.add_get("/detections", detections)
-    app.router.add_get("/export.geojson", export_geojson)
-    app.router.add_get("/export.csv", export_csv)
-    app.router.add_get("/block", block)
-    app.router.add_post("/detections/{det_id}/status", set_status)
+    register_routes(app, routes)
     return app

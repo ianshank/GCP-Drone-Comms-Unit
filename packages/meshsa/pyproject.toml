@@ -142,21 +142,25 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# PLR0913: a test's signature is its fixture list, not a design smell.
-"tests/**" = ["B011", "PLR0913"]
+# PLR0913: a test's signature is its fixture list, not a design smell. PLR0915: an
+# end-to-end scenario is a long *linear* body by nature (37 statements in
+# test_fpv_integration.py); the statement ratchet below is anchored on src/, where a long
+# body is a god function, and must not be held up by a test.
+"tests/**" = ["B011", "PLR0913", "PLR0915"]
 "examples/**" = ["B008"]
 
 # Complexity RATCHET (docs/CODE_QUALITY_TECH_DEBT_PLAN.md P1-1): each threshold is today's
 # maximum, and each names the function that sets it. Lower a threshold in the same PR that
 # fixes its function; never raise one. Measured 2026-10-28.
 [tool.ruff.lint.mccabe]
-max-complexity = 31   # ui/app.py::build_ui_app (P2-1 brings it to <= 12)
+max-complexity = 11   # llm/tools.py::format_drone_state (was 31: ui/app.py::build_ui_app, P2-1 -> 9)
 
 [tool.ruff.lint.pylint]
 max-args = 23         # transports/tak.py::TakTcpTransport.__init__ (P2-4 *Options models)
-max-branches = 20     # config.py::NodeConfig.from_env (P2-2 _envconfig)
+max-branches = 10     # llm/tools.py::format_drone_state, llm/sources.py::parse_fts_tracks,
+                      # ui/snapshot.py::_render_feature (was 20: NodeConfig.from_env, P2-2 -> 1)
 max-returns = 7       # fpv/crsf/telemetry.py (parser dispatch)
-max-statements = 70   # ui/app.py::build_ui_app (P2-1)
+max-statements = 33   # compact.py::CompactCodec.decode (was 70: build_ui_app, P2-1 -> 25)
 
 [tool.ruff.format]
 quote-style = "double"

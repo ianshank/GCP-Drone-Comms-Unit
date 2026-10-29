@@ -48,6 +48,7 @@ _INTEGRATION_STEMS: frozenset[str] = frozenset(
         "test_scout_pipeline",
         "test_scout_wiring",
         "test_detection_ingest",  # binds a real loopback UDP socket
+        "test_app_contracts",  # aiohttp TestServer binds a loopback TCP socket per app
     }
 )
 

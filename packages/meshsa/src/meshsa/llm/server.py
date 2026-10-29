@@ -20,7 +20,9 @@ from typing import Any, Protocol
 import structlog
 from pydantic import BaseModel
 
+from .._envconfig import apply_overrides, env_key, parse_token
 from .._parsing import parse_int
+from .._web import ServiceAuth, api_json, guarded, healthz, read_json_or_none, register_routes
 from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_LLM
 
 # ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
@@ -45,7 +47,9 @@ _UPSTREAM_ERROR = "assistant unavailable; check the server logs"
 #: token) and each prompt spends model tokens, so an unbounded prompt is a cost/latency
 #: DoS. Generous for real SA questions; oversized prompts get a 400, not a model call.
 DEFAULT_MAX_PROMPT_CHARS = 8000
-ENV_MAX_PROMPT_CHARS = "MESHSA_LLM_MAX_PROMPT_CHARS"
+ENV_MAX_PROMPT_CHARS = (
+    "MESHSA_LLM_MAX_PROMPT_CHARS"  # == env_key(ENV_PREFIX, None, "max_prompt_chars")
+)
 
 # Server bind defaults + the environment-variable names that override every
 # setting. Centralized so there are no scattered magic strings/ports.
@@ -54,9 +58,12 @@ ENV_MAX_PROMPT_CHARS = "MESHSA_LLM_MAX_PROMPT_CHARS"
 # unless the operator opts in *and* sets ``MESHSA_LLM_TOKEN`` (see validate_bind).
 DEFAULT_HOST = DEFAULT_LOOPBACK_HOST
 DEFAULT_PORT = PORT_LLM
-ENV_HOST = "MESHSA_LLM_HOST"
-ENV_PORT = "MESHSA_LLM_PORT"
-ENV_TOKEN = "MESHSA_LLM_TOKEN"
+ENV_PREFIX = "MESHSA_LLM_"
+ENV_HOST = env_key(ENV_PREFIX, None, "host")
+ENV_PORT = env_key(ENV_PREFIX, None, "port")
+ENV_TOKEN = env_key(ENV_PREFIX, None, "token")
+# The three source URLs predate the prefix and are shared with the console wiring, so they
+# stay as absolute (non-mechanical) keys — declared as aliases, not re-derived.
 ENV_MAVLINK2REST_URL = "MESHSA_MAVLINK2REST_URL"
 ENV_DRONE_UID = "MESHSA_DRONE_UID"
 ENV_FTS_TRACKS_URL = "MESHSA_FTS_TRACKS_URL"
@@ -74,30 +81,35 @@ class ServerConfig(BaseModel):
     max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
 
 
+def _port(name: str, raw: str) -> int:
+    return parse_int(name, raw, lo=1, hi=65535)
+
+
+def _positive_int(name: str, raw: str) -> int:
+    return parse_int(name, raw, lo=1)
+
+
+_ENV_CASTERS = {"port": _port, "max_prompt_chars": _positive_int, "token": parse_token}
+_ENV_ALIASES = {
+    "mavlink2rest_url": ENV_MAVLINK2REST_URL,
+    "drone_uid": ENV_DRONE_UID,
+    "fts_tracks_url": ENV_FTS_TRACKS_URL,
+}
+
+
 def resolve_config(env: Mapping[str, str]) -> ServerConfig:
     """Build a :class:`ServerConfig` from an environment mapping (pure/testable).
 
-    Every field falls back to its module-level default when the corresponding
-    ``MESHSA_*`` variable is unset; ``port`` is parsed to ``int``. An empty,
-    whitespace-only, or unset ``MESHSA_LLM_TOKEN`` resolves to ``None`` (no
-    token). Surrounding whitespace is stripped so a secret sourced from a file
-    or here-doc with a trailing newline still matches the bearer presented by a
-    client (which :func:`authorize` strips symmetrically).
+    Every field falls back to its model default when the corresponding ``MESHSA_*``
+    variable is unset; ``port`` is parsed to a bounded ``int``. An empty, whitespace-only,
+    or unset ``MESHSA_LLM_TOKEN`` resolves to ``None`` (no token). Surrounding whitespace
+    is stripped so a secret sourced from a file or here-doc with a trailing newline still
+    matches the bearer presented by a client (which :func:`authorize` strips symmetrically).
     """
-    token = (env.get(ENV_TOKEN) or "").strip() or None
-    return ServerConfig(
-        host=env.get(ENV_HOST, DEFAULT_HOST),
-        port=parse_int(ENV_PORT, env.get(ENV_PORT, str(DEFAULT_PORT)), lo=1, hi=65535),
-        token=token,
-        mavlink2rest_url=env.get(ENV_MAVLINK2REST_URL, DEFAULT_MAVLINK2REST_URL),
-        drone_uid=env.get(ENV_DRONE_UID, DEFAULT_DRONE_UID),
-        fts_tracks_url=env.get(ENV_FTS_TRACKS_URL, DEFAULT_FTS_TRACKS_URL),
-        max_prompt_chars=parse_int(
-            ENV_MAX_PROMPT_CHARS,
-            env.get(ENV_MAX_PROMPT_CHARS, str(DEFAULT_MAX_PROMPT_CHARS)),
-            lo=1,
-        ),
+    data = apply_overrides(
+        ServerConfig, {}, env, prefix=ENV_PREFIX, casters=_ENV_CASTERS, aliases=_ENV_ALIASES
     )
+    return ServerConfig.model_validate(data)
 
 
 def validate_bind(host: str, token: str | None) -> None:
@@ -161,26 +173,21 @@ def build_app(
     """
     from aiohttp import web
 
+    auth = ServiceAuth("meshsa-llm", token)
+
     async def index(_request: Any) -> Any:
         return web.Response(text=CHAT_WIDGET_HTML, content_type="text/html")
 
     async def chat(request: Any) -> Any:
-        if not authorize(token, request.headers.get("Authorization")):
-            return web.json_response({"error": "unauthorized"}, status=401)
-        try:
-            payload = await request.json()
-        except Exception:
-            payload = None
+        payload = await read_json_or_none(request)
         body, status = await chat_reply(agent, payload, max_prompt_chars=max_prompt_chars)
-        return web.json_response(body, status=status)
-
-    async def healthz(_request: Any) -> Any:
-        return web.json_response({"status": "ok"})
+        return api_json(body, status=status)
 
     app = web.Application()
-    app.router.add_get("/", index)
-    app.router.add_post("/chat", chat)
-    app.router.add_get("/healthz", healthz)
+    register_routes(
+        app,
+        [("GET", "/", index), ("POST", "/chat", guarded(auth, chat)), ("GET", "/healthz", healthz)],
+    )
     return app
 
 

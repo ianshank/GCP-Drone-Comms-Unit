@@ -5,19 +5,35 @@ framework; ``build_ui_app`` wires them into routes. The read-only contract (I-2)
 route is GET except ``POST /api/chat``, which answers questions and mutates nothing —
 asserted mechanically by the route-table test.
 
-Auth (the audited station pattern): when a token is configured, ``/api/*`` requires
-``Authorization: Bearer <token>``; ``/`` is gated by a ``?token=`` query (browsers cannot
-set headers on navigation) and served with the token JSON-injected for its fetches;
-``/healthz`` stays open (liveness; discloses nothing — house norm). A raising source
+Auth (the audited station pattern, via :mod:`meshsa._web`): when a token is configured,
+``/api/*`` requires ``Authorization: Bearer <token>``; ``/`` is gated by a ``?token=`` query
+(browsers cannot set headers on navigation) and served with the token JSON-injected for its
+fetches; ``/healthz`` stays open (liveness; discloses nothing — house norm). A raising source
 yields a **generic** 502 with the detail logged server-side only (the llm policy),
 per-path — no blanket catch.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import structlog
+
+from .._web import (
+    UNAUTHORIZED_BODY,
+    Handler,
+    ServiceAuth,
+    api_json,
+    guarded,
+    healthz,
+    html_page,
+    normalize_token,
+    page_token_gate,
+    read_json_or_none,
+    register_routes,
+    upstream_error,
+)
 
 # Re-exported for callers/tests; the explicit ``as`` alias satisfies no_implicit_reexport.
 from ..netauth import authorize as authorize
@@ -25,7 +41,7 @@ from ..netauth import is_loopback as is_loopback
 from ..netauth import validate_bind as _validate_bind
 from ._html import render_page
 from .config import UIConfig
-from .sources import UISources
+from .sources import ChatBackend, UISources
 
 _log = structlog.get_logger("meshsa.ui.app")
 
@@ -41,11 +57,6 @@ __all__ = [
 
 #: Stable, non-sensitive body returned to the browser when a data source raises.
 UPSTREAM_ERROR = "source unavailable; check the server logs"
-
-#: Every bearer-guarded JSON response carries this: an intermediary proxy must never
-#: persist an authorized payload for replay to an unauthenticated client (spec delta
-#: m2-bind-safety "Authenticated JSON Responses Are Non-Cacheable").
-_NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 
 
 def validate_bind(host: str, token: str | None) -> None:
@@ -65,7 +76,7 @@ def guard(token: str | None, auth_header: str | None) -> tuple[dict[str, Any], i
     """Bearer check for the data routes (pure): ``None`` = allowed, else ``(body, 401)``."""
     if authorize(token, auth_header):
         return None
-    return {"error": "unauthorized"}, 401
+    return dict(UNAUTHORIZED_BODY), 401
 
 
 def panel_manifest(sources: UISources) -> list[str]:
@@ -84,6 +95,36 @@ def panel_manifest(sources: UISources) -> list[str]:
     return manifest
 
 
+def _json_route(auth: ServiceAuth, route: str, read: Callable[[], Any]) -> Handler:
+    """A bearer-guarded GET that serves ``read()`` as JSON, or the generic 502 if it raises."""
+
+    async def handler(_request: Any) -> Any:
+        try:
+            return api_json(read())
+        except Exception as exc:
+            return upstream_error(_log, route, exc, message=UPSTREAM_ERROR, event="ui_source_error")
+
+    return guarded(auth, handler)
+
+
+def _chat_route(auth: ServiceAuth, backend: ChatBackend) -> Handler:
+    """``POST /api/chat``: the one non-GET route; it answers questions and mutates nothing."""
+
+    async def handler(request: Any) -> Any:
+        payload = await read_json_or_none(
+            request, log=_log, route="/api/chat", event="ui_chat_payload_parse_error"
+        )
+        try:
+            body, status = await backend.reply(payload)
+        except Exception as exc:  # a raising backend still yields the generic 502
+            return upstream_error(
+                _log, "/api/chat", exc, message=UPSTREAM_ERROR, event="ui_source_error"
+            )
+        return api_json(body, status=status)
+
+    return guarded(auth, handler)
+
+
 def build_ui_app(
     sources: UISources,
     config: UIConfig,
@@ -100,35 +141,18 @@ def build_ui_app(
     way — a whitespace credential must not satisfy the fail-closed bind check). Routes for
     absent optional sources are not registered at all — 404 by absence, not an error state.
     """
-    # Mirror UIConfig._empty_token_is_none: an empty credential is no credential.
-    effective_token = (token.strip() or None) if token is not None else config.token
+    effective_token = normalize_token(token) if token is not None else config.token
     if host is not None:
         validate_bind(host, effective_token)
     from aiohttp import web
 
+    auth = ServiceAuth("meshsa-ui", effective_token)
     manifest = panel_manifest(sources)
 
-    def _denied(request: Any) -> Any | None:
-        result = guard(effective_token, request.headers.get("Authorization"))
-        if result is None:
-            return None
-        body, status = result
-        return web.json_response(body, status=status, headers=_NO_STORE_HEADERS)
-
-    def _upstream_error(route: str, exc: Exception) -> Any:
-        # Generic body to the browser; the detail is logged server-side only (llm policy).
-        _log.warning("ui_source_error", route=route, error=str(exc), error_type=type(exc).__name__)
-        return web.json_response({"error": UPSTREAM_ERROR}, status=502, headers=_NO_STORE_HEADERS)
-
     async def index(request: Any) -> Any:
-        # Browsers can't set an Authorization header on navigation: gate the page on a
-        # ``?token=`` query, then inject the token for its fetch calls (station pattern).
-        if effective_token and not authorize(
-            effective_token, "Bearer " + (request.query.get("token") or "")
-        ):
-            return web.json_response(
-                {"error": "unauthorized"}, status=401, headers=_NO_STORE_HEADERS
-            )
+        denied = page_token_gate(auth, request)
+        if denied is not None:
+            return denied
         page = render_page(
             effective_token,
             manifest,
@@ -138,103 +162,39 @@ def build_ui_app(
         )
         # The page embeds the bearer token and is reached via ``?token=``: keep it out of
         # the browser's disk cache (history retention is inherent to the station pattern).
-        return web.Response(text=page, content_type="text/html", headers=_NO_STORE_HEADERS)
+        return html_page(page)
 
-    async def healthz(_request: Any) -> Any:
-        return web.json_response({"status": "ok"})
+    def health_body() -> dict[str, Any]:
+        body: dict[str, Any] = {"snapshot": sources.snapshot.counters()}
+        if sources.health is not None:
+            body.update(sources.health.snapshot())
+        return body
 
-    async def tracks(request: Any) -> Any:
-        denied = _denied(request)
-        if denied is not None:
-            return denied
-        try:
-            return web.json_response(sources.snapshot.tracks_geojson(), headers=_NO_STORE_HEADERS)
-        except Exception as exc:
-            return _upstream_error("/api/tracks", exc)
-
-    async def detections(request: Any) -> Any:
-        denied = _denied(request)
-        if denied is not None:
-            return denied
-        try:
-            return web.json_response(
-                sources.snapshot.detections_geojson(), headers=_NO_STORE_HEADERS
-            )
-        except Exception as exc:
-            return _upstream_error("/api/detections", exc)
-
-    async def health(request: Any) -> Any:
-        denied = _denied(request)
-        if denied is not None:
-            return denied
-        try:
-            body: dict[str, Any] = {"snapshot": sources.snapshot.counters()}
-            if sources.health is not None:
-                body.update(sources.health.snapshot())
-            return web.json_response(body, headers=_NO_STORE_HEADERS)
-        except Exception as exc:
-            return _upstream_error("/api/health", exc)
-
-    app = web.Application()
-    app.router.add_get("/", index)
-    app.router.add_get("/healthz", healthz)
-    app.router.add_get("/api/tracks", tracks)
-    app.router.add_get("/api/detections", detections)
-    app.router.add_get("/api/health", health)
-
+    routes: list[tuple[str, str, Handler]] = [
+        ("GET", "/", index),
+        ("GET", "/healthz", healthz),
+        ("GET", "/api/tracks", _json_route(auth, "/api/tracks", sources.snapshot.tracks_geojson)),
+        (
+            "GET",
+            "/api/detections",
+            _json_route(auth, "/api/detections", sources.snapshot.detections_geojson),
+        ),
+        ("GET", "/api/health", _json_route(auth, "/api/health", health_body)),
+    ]
     if sources.fpv is not None:
-        fpv_source = sources.fpv
-
-        async def fpv(request: Any) -> Any:
-            denied = _denied(request)
-            if denied is not None:
-                return denied
-            try:
-                return web.json_response(fpv_source.report(), headers=_NO_STORE_HEADERS)
-            except Exception as exc:
-                return _upstream_error("/api/fpv", exc)
-
-        app.router.add_get("/api/fpv", fpv)
-
+        routes.append(("GET", "/api/fpv", _json_route(auth, "/api/fpv", sources.fpv.report)))
     if sources.chat is not None:
-        chat_backend = sources.chat
-
-        async def chat(request: Any) -> Any:
-            denied = _denied(request)
-            if denied is not None:
-                return denied
-            try:
-                payload = await request.json()
-            except Exception as exc:
-                _log.warning(
-                    "ui_chat_payload_parse_error",
-                    route="/api/chat",
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
-                payload = None
-            try:
-                body, status = await chat_backend.reply(payload)
-            except Exception as exc:  # a raising backend still yields the generic 502
-                return _upstream_error("/api/chat", exc)
-            return web.json_response(body, status=status, headers=_NO_STORE_HEADERS)
-
-        app.router.add_post("/api/chat", chat)
-
+        routes.append(("POST", "/api/chat", _chat_route(auth, sources.chat)))
     if sources.logs is not None:
         log_source = sources.logs
+        routes.append(
+            (
+                "GET",
+                "/api/logs",
+                _json_route(auth, "/api/logs", lambda: {"entries": log_source.entries()}),
+            )
+        )
 
-        async def logs(request: Any) -> Any:
-            denied = _denied(request)
-            if denied is not None:
-                return denied
-            try:
-                return web.json_response(
-                    {"entries": log_source.entries()}, headers=_NO_STORE_HEADERS
-                )
-            except Exception as exc:
-                return _upstream_error("/api/logs", exc)
-
-        app.router.add_get("/api/logs", logs)
-
+    app = web.Application()
+    register_routes(app, routes)
     return app

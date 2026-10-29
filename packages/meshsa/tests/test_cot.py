@@ -404,3 +404,12 @@ def test_marker_uid_falls_back_without_track_id():
     env.payload["detection"].pop("track_id")
     xml = CotCodec().encode(env).decode()
     assert 'uid="yolo-cam1"' in xml
+
+
+def test_marker_bearing_round_trips_through_the_vendor_element():
+    env = _marker()
+    env.payload["detection"]["bearing_deg"] = 137.0
+    back = CotCodec().decode(CotCodec().encode(env))
+    assert back.payload["detection"]["bearing_deg"] == 137.0
+    assert back.payload["detection"]["track_id"] == 7
+    assert back.payload["detection"]["confidence"] == 0.91

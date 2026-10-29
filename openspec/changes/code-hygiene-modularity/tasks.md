@@ -125,11 +125,23 @@
       vulnerability reporting, CONTRIBUTING paragraph on required checks.
 
 ## Phase 3 — Shared foundations
-- [ ] T-3.1 `meshsa/_web.py` (design D-5); migrate all four app factories; salvage the
+- [x] T-3.1 `meshsa/_web.py` (design D-5); migrate all four app factories; salvage the
       remaining deliverables scenarios (S4d, S5, S6); collapse `scout/station/app.py`'s
-      byte-identical `/detections` + `/export.geojson` handlers.
-- [ ] T-3.2 `meshsa/_envconfig.py` (design D-11); migrate `NodeConfig`, `fpv/config.py`,
-      `llm/server.resolve_config`, `cli.py`'s env helpers.
+      byte-identical `/detections` + `/export.geojson` handlers. (Landed as plan P2-1:
+      pins first (`tests/test_app_contracts.py`), then the kit; S5b/S5c/S6a/S6b salvaged,
+      S4d **not** — no spec asks for an `X-Snapshot-Age` header, so it is a feature with a
+      spec first, not a salvage. Two declared deltas: the `WWW-Authenticate` challenge and
+      `no-store` are now house-wide on every bearer-guarded response.)
+- [x] T-3.2 `meshsa/_envconfig.py` (design D-11); migrate `NodeConfig`, `fpv/config.py`,
+      `llm/server.resolve_config`, `cli.py`'s env helpers. (Landed as plan P2-2: keys and
+      casters derived from the models — `NodeConfig.from_env` is 5 statements, the 78-key
+      inventory is pinned both ways by `tests/test_env_inventory.py` with a Hypothesis
+      `from_env(to_env(cfg)) == cfg` property; `llm/agent.py`'s three env knobs became the
+      testable `resolve_agent_knobs` (folding them into `ServerConfig` stays T-6.5);
+      `fpv/config.py` keeps its one non-mechanical `SESSIONS_ROOT` alias verbatim because
+      its empty-means-unset semantics differ from every other binding. `command/config.py`
+      and `run_commander.py` are frozen and migrate under T-8.8; `meshsa.config._parse_bool`
+      stays as an alias until then because the frozen file imports it.)
 - [ ] T-3.3 `meshsa/_frame_codec.py` + `SchemaGated` mixin; `telemetry.py`/`detection_codec.py`
       adopt; extract an envelope-builder from `DetectionCodec` so `scout/pipeline.py` stops
       JSON-round-tripping detections through the codec.
@@ -196,8 +208,12 @@
 - [ ] T-4.3 `fpv/flight_logger.py` → `_SessionPaths`, `_ParquetSink`, `GitHeadProvider`
       protocol (moves the `subprocess` call out of the logger class); stale "Phase 1/2 stub"
       comments removed.
-- [ ] T-4.4 `cot.py`'s `CotCodec` → `_CotNaming` + module-level encode/decode functions behind
-      the unchanged facade.
+- [x] T-4.4 `cot.py`'s `CotCodec` → `_CotNaming` + module-level encode/decode functions behind
+      the unchanged facade. (Landed as plan P2-3: `encode_envelope`/`encode_pli`/
+      `encode_marker`/`encode_chat` and `decode_event` over a frozen `_CotNaming`; `decode`
+      complexity 17 → every function in the module ≤ 6; the golden snapshots are
+      byte-identical; the Hypothesis round-trip now covers the richer detail —
+      course/speed, battery, current, attitude.)
 - [ ] T-4.5 jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies;
       `Pipeline` → `PipelineMetrics` + `_PublishPolicy`; `idle_poll_s` sourced from
       `PipelineSettings.model_fields` instead of a re-hardcoded literal.

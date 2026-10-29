@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel
 
+from ._web import ServiceAuth, api_json, guarded, text_body
 from .defaults import DEFAULT_LOOPBACK_HOST, PORT_HEALTH
 from .metrics import render_prometheus
-from .netauth import authorize
 from .netauth import validate_bind as _validate_bind
 
 if TYPE_CHECKING:
@@ -145,8 +145,9 @@ def build_healthz_app(
     ``/healthz`` is open (liveness), matching the other services. ``/metrics`` requires
     ``Authorization: Bearer <token>`` when a ``token`` is set (it discloses router/transport/
     inference counters); with no token it stays open (loopback-default). The auth branch lives
-    **here**, in this testable factory, not in the pragma-excluded ``serve_healthz`` wiring — so a
-    real request exercises it (mirrors ``scout.station.build_app`` / ``meshsa.llm.server.build_app``).
+    **here**, in this testable factory (through the shared :mod:`meshsa._web` guard), not in
+    the pragma-excluded ``serve_healthz`` wiring — so a real request exercises it (mirrors
+    ``scout.station.build_app`` / ``meshsa.llm.server.build_app``).
     """
     from aiohttp import web
 
@@ -157,24 +158,18 @@ def build_healthz_app(
     app.router.add_get("/healthz", healthz)
 
     if metrics_enabled:
+        auth = ServiceAuth("meshsa-metrics", token)
 
-        async def metrics_handler(request: Any) -> Any:
-            if not authorize(token, request.headers.get("Authorization")):
-                # RFC 7235 §3.1: a 401 must carry a WWW-Authenticate challenge.
-                return web.json_response(
-                    {"error": "unauthorized"},
-                    status=401,
-                    headers={"WWW-Authenticate": 'Bearer realm="meshsa-metrics"'},
-                )
+        async def metrics_handler(_request: Any) -> Any:
             body = render_metrics(node, metrics_format)
             if isinstance(body, str):
-                return web.Response(text=body, content_type="text/plain")
-            return web.json_response(body)
+                return text_body(body, content_type="text/plain")
+            return api_json(body)
 
         # aiohttp requires a leading slash; normalise a misconfigured metrics_path
         # ("metrics" -> "/metrics") so an operator typo can't crash the listener at startup.
         path = metrics_path if metrics_path.startswith("/") else f"/{metrics_path}"
-        app.router.add_get(path, metrics_handler)
+        app.router.add_get(path, guarded(auth, metrics_handler))
 
     return app
 
