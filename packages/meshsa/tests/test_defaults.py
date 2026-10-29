@@ -11,7 +11,7 @@ from meshsa import defaults, netauth
 from meshsa.cli import parse_args
 from meshsa.config import HealthConfig, NemotronConfig, NodeConfig, RouterConfig, ScoutConfig
 from meshsa.transports.detection_ingest import DetectionIngestTransport
-from meshsa.transports.tak import TakMulticastTransport, TakTcpTransport
+from meshsa.transports.tak import TakMulticastTransport
 from meshsa.ui.config import UIConfig
 
 
@@ -77,6 +77,8 @@ def test_pinned_literal_values_are_preserved():
     assert defaults.DEFAULT_MULTICAST_IFACE == "0.0.0.0"
     assert defaults.DEFAULT_COT_STALE_S == 120.0
     assert defaults.DEFAULT_PLI_INTERVAL_S == 30.0
+    assert defaults.DEFAULT_LOG_EVERY_N == 100
+    assert defaults.DEFAULT_LINK_LOG_INTERVAL_S == 30.0
     assert defaults.DEFAULT_INFERENCE_BACKOFF_MAX_S == 30.0
     assert defaults.DEFAULT_INFERENCE_BACKOFF_BASE == 2.0
 
@@ -146,8 +148,22 @@ def test_transport_constructor_defaults_adopt_the_table():
     assert _default_of(DetectionIngestTransport, "host") == defaults.DEFAULT_LOOPBACK_HOST
     assert _default_of(DetectionIngestTransport, "port") == defaults.PORT_DETECTION_INGEST
     assert _default_of(DetectionIngestTransport, "queue_maxsize") == defaults.DEFAULT_QUEUE_MAXSIZE
-    assert _default_of(TakTcpTransport, "host") == defaults.DEFAULT_LOCAL_TARGET_HOST
-    assert _default_of(TakTcpTransport, "backoff_max_s") == defaults.DEFAULT_BACKOFF_MAX_S
+    # The four P2-4 transports carry their defaults on frozen *Options models, which are
+    # the constructor surface now; a re-typed literal there is the same class of drift.
+    from meshsa.transports import (
+        MavlinkSourceOptions,
+        MeshtasticOptions,
+        MspOptions,
+        TakTcpOptions,
+    )
+
+    assert TakTcpOptions().host == defaults.DEFAULT_LOCAL_TARGET_HOST
+    assert TakTcpOptions().backoff_max_s == defaults.DEFAULT_BACKOFF_MAX_S
+    for options in (TakTcpOptions(), MeshtasticOptions(), MspOptions(), MavlinkSourceOptions()):
+        assert options.queue_maxsize == defaults.DEFAULT_QUEUE_MAXSIZE
+    for options in (TakTcpOptions(), MeshtasticOptions()):
+        assert options.backoff_initial_s == defaults.DEFAULT_BACKOFF_INITIAL_S
+        assert options.backoff_factor == defaults.DEFAULT_BACKOFF_FACTOR
     assert _default_of(TakMulticastTransport, "group") == defaults.DEFAULT_TAK_MULTICAST_GROUP
     assert _default_of(TakMulticastTransport, "port") == defaults.PORT_TAK_MULTICAST
     assert _default_of(TakMulticastTransport, "iface") == defaults.DEFAULT_MULTICAST_IFACE

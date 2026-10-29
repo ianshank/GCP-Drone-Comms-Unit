@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tools.check_task_sync import (
+    baseline_reachable,
     bundle_checkbox_states,
     main,
     reconcile,
@@ -171,3 +172,11 @@ def test_indented_checkbox_is_seen(tmp_path: Path) -> None:
     repo, _ = _repo_with_bundle(tmp_path, "- [x] T-1.1 top\n  - [ ] T-1.2 indented sub-item\n")
     states = bundle_checkbox_states(repo)
     assert list(states["T-1.2"].values()) == [False]
+
+
+def test_dash_prefixed_baseline_is_a_revision_not_a_git_option(tmp_path: Path) -> None:
+    """``--baseline`` is the one argv value reaching git; it must never parse as a flag."""
+    repo, _ = _repo_with_bundle(tmp_path, "- [ ] T-1.1 open\n")
+    assert baseline_reachable(repo, "--output=injected") is False
+    assert main(["--repo-root", str(repo), "--baseline=--output=injected"]) == 0
+    assert not (repo / "injected").exists()

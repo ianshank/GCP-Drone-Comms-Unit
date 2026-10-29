@@ -156,7 +156,7 @@ ignore = [
 max-complexity = 11   # llm/tools.py::format_drone_state (was 31: ui/app.py::build_ui_app, P2-1 -> 9)
 
 [tool.ruff.lint.pylint]
-max-args = 23         # transports/tak.py::TakTcpTransport.__init__ (P2-4 *Options models)
+max-args = 13         # cot.py::CotCodec.__init__ (was 23: TakTcpTransport.__init__, P2-4 -> 3)
 max-branches = 10     # llm/tools.py::format_drone_state, llm/sources.py::parse_fts_tracks,
                       # ui/snapshot.py::_render_feature (was 20: NodeConfig.from_env, P2-2 -> 1)
 max-returns = 7       # fpv/crsf/telemetry.py (parser dispatch)

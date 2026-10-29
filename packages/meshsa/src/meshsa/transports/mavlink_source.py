@@ -26,6 +26,7 @@ supplies only the MAVLink specifics:
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -33,6 +34,7 @@ import structlog
 from ..defaults import DEFAULT_MAVLINK_ENDPOINT, DEFAULT_QUEUE_MAXSIZE
 from ..protocols import Clock
 from ..registry import transport_registry
+from ._options import resolve_options
 from .polling_source import PollingSourceTransport
 
 ConnectionFactory = Callable[[], Any]
@@ -68,27 +70,43 @@ def _extract_endpoint_host(endpoint: str) -> str | None:
     return None
 
 
+@dataclass(frozen=True, kw_only=True)
+class MavlinkSourceOptions:
+    """Every ``MavlinkSourceTransport`` tunable, with its default (plan P2-4; see ``_options``).
+
+    ``endpoint`` and ``token`` are deliberately *not* fields: they are the connection
+    factory's keys and the bind-check inputs, read from the extras exactly as before so
+    the fail-closed check in the constructor sees the same values the factory does.
+    """
+
+    connection: Any | None = None
+    connection_factory: ConnectionFactory | None = None
+    message_type: str = "GLOBAL_POSITION_INT"
+    source_uid: str = "mav-1"
+    callsign: str | None = None
+    coord_scale: float = 1e7
+    alt_scale: float = 1e-3
+    recv_timeout_s: float = 1.0
+    clock: Clock | None = None
+    queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
+
+
 class MavlinkSourceTransport(PollingSourceTransport):
     _thread_prefix = "mavlink"
 
     def __init__(
-        self,
-        name: str = "mavlink",
-        *,
-        connection: Any | None = None,
-        connection_factory: ConnectionFactory | None = None,
-        message_type: str = "GLOBAL_POSITION_INT",
-        source_uid: str = "mav-1",
-        callsign: str | None = None,
-        coord_scale: float = 1e7,
-        alt_scale: float = 1e-3,
-        recv_timeout_s: float = 1.0,
-        clock: Clock | None = None,
-        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
-        **_options: Any,
+        self, name: str = "mavlink", options: MavlinkSourceOptions | None = None, **overrides: Any
     ) -> None:
-        endpoint = str(_options.get("endpoint", DEFAULT_MAVLINK_ENDPOINT))
-        token = _options.get("token")
+        """Build the transport from a :class:`MavlinkSourceOptions` and/or its fields as keywords.
+
+        The ``endpoint``/``token`` extras drive the fail-closed bind check before any
+        resource is touched (a non-loopback ingest without a token is refused).
+        """
+        opts, extras = resolve_options(MavlinkSourceOptions, options, overrides)
+        #: The resolved options (exposed for observability/tests).
+        self.options = opts
+        endpoint = str(extras.get("endpoint", DEFAULT_MAVLINK_ENDPOINT))
+        token = extras.get("token")
         host = _extract_endpoint_host(endpoint)
         if host:
             from ..netauth import validate_bind
@@ -101,19 +119,19 @@ class MavlinkSourceTransport(PollingSourceTransport):
             )
         super().__init__(
             name,
-            resource=connection,
-            factory=connection_factory or _default_connection_factory(_options),
-            source_uid=source_uid,
-            callsign=callsign,
-            clock=clock,
-            queue_maxsize=queue_maxsize,
+            resource=opts.connection,
+            factory=opts.connection_factory or _default_connection_factory(extras),
+            source_uid=opts.source_uid,
+            callsign=opts.callsign,
+            clock=opts.clock,
+            queue_maxsize=opts.queue_maxsize,
             # The blocking recv_match (below) paces the loop; no extra wait needed.
             poll_wait_s=0.0,
         )
-        self._message_type = message_type
-        self._coord_scale = coord_scale
-        self._alt_scale = alt_scale
-        self._recv_timeout = recv_timeout_s
+        self._message_type = opts.message_type
+        self._coord_scale = opts.coord_scale
+        self._alt_scale = opts.alt_scale
+        self._recv_timeout = opts.recv_timeout_s
 
     def _poll(self, resource: Any) -> list[bytes]:
         msg = resource.recv_match(
@@ -142,4 +160,5 @@ class MavlinkSourceTransport(PollingSourceTransport):
 
 @transport_registry.register("mavlink_source")
 def _make_mavlink_source(name: str = "mavlink", **options: Any) -> MavlinkSourceTransport:
-    return MavlinkSourceTransport(name=name, **options)
+    opts, extras = resolve_options(MavlinkSourceOptions, None, options)
+    return MavlinkSourceTransport(name, opts, **extras)

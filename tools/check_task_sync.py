@@ -27,6 +27,14 @@ import sys
 from pathlib import Path
 from typing import Final
 
+if __package__ in (None, ""):
+    # Executed directly (`python tools/check_task_sync.py`, as CI and validate-pre-pr.sh
+    # do), so the repo root is not on sys.path as a package parent. Add it and import
+    # the fully-qualified helper — the same resolution bind_guard.py uses.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools._git import git_lines, git_ok  # noqa: E402 (import follows the sys.path fix above)
+
 _log = logging.getLogger("tools.check_task_sync")
 
 #: First commit of the tech-debt foundation branch's history window. Commits at or
@@ -47,20 +55,6 @@ BUNDLE_GLOBS: Final[tuple[str, ...]] = (
 )
 
 
-def _git_ok(repo_root: Path, *args: str) -> bool:
-    """Whether ``git <args>`` succeeds in ``repo_root`` (no output captured)."""
-    return (
-        subprocess.run(  # noqa: S603 (fixed argv)
-            ["git", *args],
-            cwd=repo_root,
-            capture_output=True,
-            timeout=60,
-            check=False,
-        ).returncode
-        == 0
-    )
-
-
 def is_git_repo(repo_root: Path) -> bool:
     """Whether ``repo_root`` is inside a git work tree at all.
 
@@ -68,7 +62,7 @@ def is_git_repo(repo_root: Path) -> bool:
     (run outside a checkout) still reports an operational error, rather than being
     silently absorbed by the missing-baseline path below.
     """
-    return _git_ok(repo_root, "rev-parse", "--git-dir")
+    return git_ok(repo_root, "rev-parse", "--git-dir")
 
 
 def baseline_reachable(repo_root: Path, baseline: str) -> bool:
@@ -81,20 +75,15 @@ def baseline_reachable(repo_root: Path, baseline: str) -> bool:
     nonzero as a failed step, which would turn this advisory check into a hard
     red for every contributor after this branch merges.
     """
-    return _git_ok(repo_root, "cat-file", "-e", f"{baseline}^{{commit}}")
+    # --end-of-options: ``baseline`` is the one value in this tool that comes from argv,
+    # so a ``-``-prefixed string must read as a revision, never as a git option.
+    return git_ok(repo_root, "cat-file", "-e", "--end-of-options", f"{baseline}^{{commit}}")
 
 
 def commit_subjects(repo_root: Path, baseline: str) -> list[str]:
     """Subjects of commits after ``baseline`` up to HEAD (empty list if none)."""
-    result = subprocess.run(  # noqa: S603 (fixed argv)
-        ["git", "log", "--format=%s", f"{baseline}..HEAD"],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=True,
-    )
-    return [line for line in result.stdout.splitlines() if line.strip()]
+    lines = git_lines(repo_root, "log", "--format=%s", "--end-of-options", f"{baseline}..HEAD")
+    return [line for line in lines if line.strip()]
 
 
 def subject_task_ids(subject: str) -> list[str]:
