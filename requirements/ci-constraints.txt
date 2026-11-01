@@ -62,7 +62,7 @@ frozenlist==1.8.0
     #   aiosignal
 hypothesis==6.168.5 ; python_full_version < '3.11'
     # via meshsa (packages/meshsa/pyproject.toml)
-hypothesis==6.170.12 ; python_full_version >= '3.11'
+hypothesis==6.170.13 ; python_full_version >= '3.11'
     # via meshsa (packages/meshsa/pyproject.toml)
 id==1.6.1
     # via twine
@@ -116,7 +116,7 @@ multidict==7.2.1 ; python_full_version >= '3.11'
     # via
     #   aiohttp
     #   yarl
-mypy==2.3.0
+mypy==2.4.1
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
@@ -136,7 +136,7 @@ pathspec==1.1.1
     # via mypy
 platformdirs==4.12.4 ; python_full_version < '3.11'
     # via virtualenv
-platformdirs==4.13.6 ; python_full_version >= '3.11'
+platformdirs==4.14.0 ; python_full_version >= '3.11'
     # via virtualenv
 pluggy==1.7.0
     # via
@@ -158,16 +158,16 @@ pycparser==3.11 ; python_full_version < '3.11' and implementation_name != 'PyPy'
     # via cffi
 pycparser==3.12 ; python_full_version >= '3.11' and implementation_name != 'PyPy' and platform_machine != 'ppc64le' and platform_machine != 's390x' and platform_python_implementation != 'PyPy' and sys_platform == 'linux'
     # via cffi
-pydantic==2.14.1
+pydantic==2.14.2
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
     #   pydantic-settings
-pydantic-core==2.50.1
+pydantic-core==2.50.2
     # via pydantic
 pydantic-settings==2.15.0 ; python_full_version < '3.11'
     # via jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
-pydantic-settings==2.16.1 ; python_full_version >= '3.11'
+pydantic-settings==2.16.2 ; python_full_version >= '3.11'
     # via jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
 pygments==2.21.0
     # via
@@ -188,7 +188,7 @@ pytest-cov==7.1.0
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
-python-discovery==1.6.6
+python-discovery==1.6.7
     # via virtualenv
 python-dotenv==1.2.4
     # via pydantic-settings
@@ -208,7 +208,7 @@ rfc3986==2.0.0
     # via twine
 rich==15.0.0
     # via twine
-ruff==0.16.3
+ruff==0.17.3
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
@@ -216,7 +216,7 @@ secretstorage==3.5.0 ; platform_machine != 'ppc64le' and platform_machine != 's3
     # via keyring
 sortedcontainers==2.4.0
     # via hypothesis
-structlog==25.5.0
+structlog==26.1.0
     # via
     #   jetson-yolo-gcs (packages/jetson_yolo_gcs/pyproject.toml)
     #   meshsa (packages/meshsa/pyproject.toml)
