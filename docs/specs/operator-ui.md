@@ -7,13 +7,14 @@
 > [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (Track F).
 > Change deliberately; code docstrings cite this spec's `§` numbers.
 > **Sequencing:** proposed while M2 was open and ratified via
-> `openspec/changes/meshsa-operator-ui/proposal.md` (CHARTER §6 convention); the
+> a `meshsa-operator-ui` OpenSpec proposal (CHARTER §6 convention; the bundle was folded into
+> this spec and never committed separately); the
 > implementation ships as `meshsa.ui` behind the `[ui]` extra.
 
 **Milestone / Initiative:** M4 (Fleet & resilience) — observability surface
 **Track:** F.3 (new row; F.1/F.2 are the existing M4/M5 planned specs)
 **Author:** rev.2 of a peer-reviewed operator draft
-(`docs/OPENSPEC_OPERATOR_UI_PEER_REVIEW.md`), 2026-07-26
+(an operator-UI peer review that was not kept as a record), 2026-07-26
 
 ---
 

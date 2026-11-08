@@ -30,7 +30,7 @@ costs an agent a wasted turn or a wrong result — a gate that fires on a partia
 ordering dependency, a file that regenerates, a predicate that looks equivalent and is not.
 Repository overviews, structure maps and file inventories SHALL NOT be added as new
 content: they are measurably ineffective where other documentation exists
-(`docs/AGENTS_MD_EVIDENCE.md` E-1 §4.3), and this repository has `docs/C4.md`,
+(`docs/reviews/AGENTS_MD_EVIDENCE.md` E-1 §4.3), and this repository has `docs/C4.md`,
 `docs/ARCHITECTURE.md` and `docs/specs/`.
 
 Procedure — how to run a thing, regenerate a thing, or follow a workflow — SHALL live in
@@ -52,7 +52,7 @@ instruction files grow +226% over their lifetime, and deletion hazard *falls* wi
 instruction age because the rationale decays faster than the instruction; 77.3% of
 instruction deaths arrive as wholesale rewrites. Recording the reason removed 99.3% of
 excess size, and is the only remedy in the literature that is independent of file count
-(`docs/AGENTS_MD_EVIDENCE.md` E-3).
+(`docs/reviews/AGENTS_MD_EVIDENCE.md` E-3).
 
 #### Scenario: Rule without a rationale
 - **WHEN** a `## Rules` line has no `why:` clause
@@ -80,7 +80,7 @@ both: it fires on the match and lives outside the deleted tree.
 ### Requirement: Citations State Why and When
 Every repository-relative path an instruction file cites SHALL exist and SHALL carry the
 reason to read it — a mentioned path with no stated purpose is commonly ignored
-(`docs/AGENTS_MD_EVIDENCE.md` E-7). Path extraction SHALL cover backtick spans and Markdown
+(`docs/reviews/AGENTS_MD_EVIDENCE.md` E-7). Path extraction SHALL cover backtick spans and Markdown
 link targets, SHALL strip a trailing `[extras]`, `::symbol` and `#anchor`, SHALL reject
 bare file-extension tokens and absolute paths, and SHALL resolve file-relative, then the
 nearest `src/<pkg>/`, then repository-root-relative. Deliberate counter-example citations
@@ -102,7 +102,7 @@ SHALL be declarable with a rationale.
 `AGENTS.md` and `.claude/rules/*.md` are loaded by the harness as trusted system context
 without inspection, which makes them the highest-privilege prompt-injection entry point in
 an agentic repository, under a threat model that includes a pull-request contributor
-(`docs/AGENTS_MD_EVIDENCE.md` E-5). They SHALL contain no bidirectional-override
+(`docs/reviews/AGENTS_MD_EVIDENCE.md` E-5). They SHALL contain no bidirectional-override
 (U+202A-E, U+2066-9) or zero-width (U+200B-D) code points, checked by exact code point. A
 broader "ASCII-dominant" rule is deliberately not imposed: the authoring contract itself
 mandates U+2014, U+00B7 and U+2264, so a density threshold would fire on its own format. `CODEOWNERS` SHALL cover `**/AGENTS.md`,

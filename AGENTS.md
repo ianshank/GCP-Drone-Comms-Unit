@@ -96,8 +96,9 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
 - **Source cites specs by `§` number**, so renumbering a spec heading orphans docstrings
   across the tree (`ui/app.py` cites §5.3, `ui/snapshot.py` §5.2, `command/audit.py`
   §4c, and dozens more). Renumber only deliberately.
-- **`docs/C4.md` and `docs/architecture/C4.md` are different documents** that share a
-  filename — 12.5 KB repo-level vs 8.5 KB workspace-level. Check which one you opened.
+- **`docs/C4.md` is the drone-comms C4; `docs/architecture/TS_WORKSPACE_C4.md` is the
+  TypeScript workspace's** — two documents for two subsystems. The second was also named
+  `C4.md` until plan P3-3 renamed it; historical records still cite the old name.
 - **`check_task_sync.py` requires the task id immediately after `] `** — its regex is
   `^[-*] \[([ xX])\] (T-\d+\.\d+[a-z]?)\b`. Bolding the id (`- [ ] **T-1.1**`) makes
   every checkbox in the file invisible to it, silently. `*` works as a bullet too, and

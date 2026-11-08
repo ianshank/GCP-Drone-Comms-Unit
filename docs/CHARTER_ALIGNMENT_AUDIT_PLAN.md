@@ -15,7 +15,7 @@ below) → [AUDIT_M2_AUTH.md](AUDIT_M2_AUTH.md) (auth posture, already covers Ph
 ## Why this plan exists
 
 The repo already carries several *partial* alignment checks: `AUDIT_M2_AUTH.md` (auth/encryption
-surfaces only), `GAP_ANALYSIS.md` (test-category coverage only), `ROADMAP_RECONCILIATION.md`
+surfaces only), `reviews/GAP_ANALYSIS.md` (test-category coverage only), `ROADMAP_RECONCILIATION.md`
 (one external document reconciled once), and mechanical enforcement for two invariants
 (`tools/claude_hooks/bind_guard.py`, `scope_freeze.py` via `.claude/governance.yaml`). Nothing
 currently walks **every** CHARTER clause — §3 scope/non-goals, all five ratified carve-outs, and
@@ -170,6 +170,6 @@ A single dated report, `docs/CHARTER_ALIGNMENT_AUDIT_<YYYY-MM-DD>.md`, structure
   decision per `charter-gate-keeper`'s standing refusal list.
 - Does not amend CHARTER.md/ROADMAP.md itself. Drift found here is a decision for a human, not a
   patch applied by whichever agent ran the scan.
-- Does not replace `AUDIT_M2_AUTH.md`, `GAP_ANALYSIS.md`, or `ROADMAP_RECONCILIATION.md` — it
+- Does not replace `AUDIT_M2_AUTH.md`, `reviews/GAP_ANALYSIS.md`, or `ROADMAP_RECONCILIATION.md` — it
   cites and reuses them (Phase D, Phase C.6, Phase E) rather than re-deriving what they already
   cover.

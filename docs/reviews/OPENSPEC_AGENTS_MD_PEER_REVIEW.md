@@ -3,7 +3,7 @@
 Date: 2026-09-19. Reviewer: agent-driven, every claim verified against the tree or
 against a primary source. **Six verification passes across four rounds**: external-research claims (eight sources: seven
 papers read in full, plus the vendor documentation registered as E-8, replacing four secondary blog summaries that rev.1 cited without
-reading — registered in `docs/AGENTS_MD_EVIDENCE.md`); adversarial repo-state
+reading — registered in `docs/reviews/AGENTS_MD_EVIDENCE.md`); adversarial repo-state
 verification (`security-reviewer`); house-format compliance against the two existing
 bundles (`openspec-author`); and a red-team pass on the proposed checker, which ran the
 proposed heuristics against the repository's own corpus. Method and format follow the
@@ -99,7 +99,7 @@ unaudited non-loopback unauthenticated surfaces. Two reviewer claims were checke
   drop as measured harm. What **is** significant (p < 0.001%) is cost: *"+20% and 23% on
   average."* The honest claim is a **cost** argument, not a harm argument. This repository
   already ratified a standing rule against exactly this, in
-  `docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1: *"external research is adopted only with
+  `docs/reviews/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1: *"external research is adopted only with
   a verifiable citation checked into `docs/` first."* rev.1 violated a rule the repo had
   already written down. rev.2 cites seven primary papers, all read in full, with the
   significance of each claim stated.
@@ -194,7 +194,7 @@ unaudited non-loopback unauthenticated surfaces. Two reviewer claims were checke
   sort -u` yields **118** including the repository root, **117** excluding it. rev.1's 114
   came from a command that silently also excluded `archive/`. The argument (114 or 117,
   one file per directory is not the answer) survives; the false precision does not. This
-  is the same failure as F-4 in `docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md`, repeated.
+  is the same failure as F-4 in `docs/reviews/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md`, repeated.
 
 - **F-10 — the one content type the evidence actively supports is the one rev.1 treated
   as incidental.** Khatri's two-agent ablation (288 evaluated runs, Claude Code + Codex,

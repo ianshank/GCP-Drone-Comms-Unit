@@ -3,7 +3,7 @@
 Date: 2026-07-05
 Scope: the `meshsa.scout` subsystem + additive `cv/geo.py`/`config.py`/`netauth.py` changes on
 branch `claude/peer-review-revised-plan-ks9dgl` (PR #25). Pairs with
-[specs/initiative-scout.md](specs/initiative-scout.md) and [CHANGELOG.md](../CHANGELOG.md).
+[specs/initiative-scout.md](../specs/initiative-scout.md) and [CHANGELOG.md](../../CHANGELOG.md).
 
 ## Summary
 

@@ -128,7 +128,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
   code is unchanged. Gating waits for the `docs/` reorganization. On today's tree the
   sweep reports 45 dead citations: 38 in `docs/*.md` (10 of them in the historical
   `BRANCHES.md`, 8 in the plan itself), 6 in `docs/specs/`, one in
-  `docs/architecture/C4.md` and one in `README.md`. A trailing line citation
+  `docs/architecture/TS_WORKSPACE_C4.md` and one in `README.md`. A trailing line citation
   (`config.py:188`, `ci.yml:81-91`) is now stripped by `validate_skills.py`'s
   normalizer before resolution, which both linters share; it was a quarter of the noise.
 - **Pragma reasons (P1-4):** every `# pragma: no cover` in both `src/` trees now carries
@@ -383,7 +383,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 #### Charter alignment audit (2026-07-31)
 - `docs/CHARTER_ALIGNMENT_AUDIT_PLAN.md` — repeatable Phase A–E method for scanning the codebase
   against `CHARTER.md` scope, all five ratified carve-outs, and all seven invariants in one pass;
-  `docs/CHARTER_ALIGNMENT_AUDIT_PLAN_PEER_REVIEW.md` — its peer review (8 findings, all fixed).
+  `docs/reviews/CHARTER_ALIGNMENT_AUDIT_PLAN_PEER_REVIEW.md` — its peer review (8 findings, all fixed).
 - `docs/CHARTER_ALIGNMENT_AUDIT_2026-07-31.md` — the plan's first execution: a full gap-analysis
   pass (quality gates, magic-number sweep, bind/auth re-derivation, doc staleness) with 12
   findings, most fixed directly.
@@ -487,7 +487,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `scripts/hooks/pre-commit` — git pre-commit hook enforcing typecheck + lint on staged TS files
 - `.gitleaks.toml` — secret scanning rules; allowlists synthetic test tokens in `deliverables/`
 - `.pre-commit-config.yaml` — pre-commit hooks for TypeScript (ESLint/tsc) and Python (ruff, mypy) sides
-- `docs/architecture/C4.md` — C4 context, container, and component diagrams (Mermaid)
+- `docs/architecture/TS_WORKSPACE_C4.md` — C4 context, container, and component diagrams (Mermaid)
 - `docs/adr/001-monorepo-typescript-esm.md` — ADR: pnpm workspace + TypeScript ESM + esbuild
 
 #### Test Suite (AQA / Regression)

@@ -12,7 +12,7 @@
 ## Charter alignment audit (process)
 > A dated, full-CHARTER scan (scope §3 + all five carve-outs + all seven §4 invariants) was
 > missing — existing docs each cover one slice (`AUDIT_M2_AUTH.md` = auth/encryption only,
-> `GAP_ANALYSIS.md` = test categories only). The repeatable method lives at
+> `reviews/GAP_ANALYSIS.md` = test categories only). The repeatable method lives at
 > [CHARTER_ALIGNMENT_AUDIT_PLAN.md](CHARTER_ALIGNMENT_AUDIT_PLAN.md); each run produces its own
 > dated findings report.
 
@@ -98,8 +98,8 @@
       lint/format/type/test steps repo-wide (previously `deliverables/`-only / syntax-only);
       `bind_guard`'s scan scope widened to include `tools/**/*.py` and `flightctl/**/*.py`.
 - [x] **T-2.3a:** fixed the root Dockerfile's invalid `COPY … 2>/dev/null || true` lines (`COPY`
-      is not a shell instruction); deleted dead TS scaffolding (`scripts/src/hello.ts`,
-      `scripts/post-merge.sh`, the root Makefile's `db-migrate`/`db-studio` targets).
+      is not a shell instruction); deleted dead TS scaffolding (the scripts workspace's hello module,
+      the post-merge hook script, the root Makefile's `db-migrate`/`db-studio` targets).
 - [ ] **T-2.3b (deferred, part of T-2):** archive `artifacts/mockup-sandbox` and
       `lib/api-client-react` into `archive/`, update `tsconfig`/`pnpm-workspace.yaml`, and add a
       new `ts` CI job for `api-spec`/`api-zod`/`api-server`. Deferred pending a Node.js/pnpm
@@ -148,7 +148,7 @@
 - [ ] **T-9/T-10 — Coupling cleanup, sdnotify watchdog, docs truth pass, openspec closeout.**
 
 See `openspec/changes/code-hygiene-modularity/tasks.md` for the full commit-by-commit plan and
-`docs/OPENSPEC_CODE_HYGIENE_PEER_REVIEW.md` for the peer-review corrections folded into it.
+`docs/reviews/OPENSPEC_CODE_HYGIENE_PEER_REVIEW.md` for the peer-review corrections folded into it.
 
 ## Done (this initial PR)
 - `telemetry` codec + `mavlink_source` (pymavlink) + `msp_source` (Betaflight MSP/YAMSPy)
@@ -480,7 +480,7 @@ prerequisite before the maintainer rules on the commanding M2 gate).
 > georeferenced, deduplicated anomaly map on TAK/ATAK + a thin web triage view. `meshsa.scout`
 > subpackage. Precision **A1 vine-level + RTK**; **B1** (no control loop); detection via a
 > `Protocol` seam + synthetic replay now, IMX500 later. Peer review:
-> [PLAN_PEER_REVIEW_SCOUT.md](PLAN_PEER_REVIEW_SCOUT.md); spec:
+> [reviews/PLAN_PEER_REVIEW_SCOUT.md](reviews/PLAN_PEER_REVIEW_SCOUT.md); spec:
 > [specs/initiative-scout.md](specs/initiative-scout.md). Gates green (871 tests, 98.7% cov).
 
 - [x] **GATE — CHARTER §3 carve-out:** ratified 2026-07-05 for *offline* survey/waypoint
@@ -506,7 +506,7 @@ prerequisite before the maintainer rules on the commanding M2 gate).
 - [ ] **[HW] validation (→ Validated):** camera calibration (H1), RTK (H2), DEM tile (H3),
       IMX500 model (H4), one-block field accuracy pass (H5).
 
-### Scout code-quality backlog (2026-07-05 gap scan — see [GAP_ANALYSIS_SCOUT.md](GAP_ANALYSIS_SCOUT.md))
+### Scout code-quality backlog (2026-07-05 gap scan — see [reviews/GAP_ANALYSIS_SCOUT.md](reviews/GAP_ANALYSIS_SCOUT.md))
 - [x] **[config]** Wire dead config to behaviour: `dem_path`→`build_terrain`, `store_path`→
       `build_store`, `marker_stale_s`→`make_marker_codec`; add `camera_*` intrinsics fields
       (retire the hardcoded default camera on `replay`/`gen-mission`).

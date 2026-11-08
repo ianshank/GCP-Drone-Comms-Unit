@@ -52,7 +52,7 @@ pnpm --filter @workspace/mockup-sandbox run dev
 
 ## Architecture
 
-See [`docs/architecture/C4.md`](docs/architecture/C4.md) for the full C4
+See [`docs/architecture/TS_WORKSPACE_C4.md`](docs/architecture/TS_WORKSPACE_C4.md) for the full C4
 context/container/component diagrams.
 
 ```
@@ -152,7 +152,7 @@ the [`GCP-Drone-Comms-Unit`](https://github.com/ianshank/GCP-Drone-Comms-Unit)
 
 ```
 deliverables/meshsa-ui-validation/
-├── docs/PEER_REVIEW.md          # Primary peer review document
+├── docs/                        # PEER_REVIEW (primary review), port deconfliction, residual risk
 ├── tests/                       # Named scenario tests S1–S6 (Python/pytest)
 ├── patches/                     # Gate 0.1 / 0.3 source patches
 ├── systemd/                     # meshsa-ui.service + env template
@@ -181,9 +181,11 @@ for the step-by-step integration guide.
 │           └── hooks/       # Custom React hooks
 ├── deliverables/            # External repo validation artifacts
 │   └── meshsa-ui-validation/
-├── docs/
-│   ├── architecture/        # C4 diagrams
-│   └── adr/                 # Architecture Decision Records
+├── docs/                    # CHARTER, ROADMAP, C4, NEXTSTEPS and the plans (stable + working)
+│   ├── architecture/        # TS_WORKSPACE_C4.md — the TypeScript workspace's C4
+│   ├── adr/                 # Architecture Decision Records
+│   ├── reviews/             # Historical records (point-in-time reviews and audits)
+│   └── specs/               # One spec per roadmap/initiative feature
 ├── lib/
 │   ├── api-zod/             # Shared Zod schemas
 │   ├── api-client-react/    # React API hooks

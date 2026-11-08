@@ -1,7 +1,7 @@
 """Lint the repository's agent instruction files.
 
 Orchestration and the command line of ``tools/agents_docs``: which files get which checks,
-the advisory docs sweep, and the exit-status contract.
+the docs citation sweep, and the exit-status contract.
 
 Usage::
 
@@ -115,23 +115,29 @@ def matches_single_level_glob(rel_path: str, pattern: str) -> bool:
     return rel_path.count("/") == pattern.count("/") and fnmatch.fnmatch(rel_path, pattern)
 
 
-def advisory_docs_citations(root: Path, tracked: list[str]) -> list[str]:
-    """Advisory sweep — dead path citations in README.md and the stable docs/ tree.
-
-    Reuses :func:`check_cited_paths` unchanged, so a citation is judged exactly as it
-    would be in a guide; only the consequence differs (a warning, never a failure).
-    """
-    warnings: list[str] = []
-    for rel_path in sorted(
+def docs_citation_targets(tracked: list[str]) -> list[str]:
+    """The tracked files :data:`policy.DOCS_CITATION_GLOBS` selects, sorted."""
+    return sorted(
         path
         for path in tracked
-        if any(matches_single_level_glob(path, pattern) for pattern in policy.DOCS_ADVISORY_GLOBS)
-    ):
+        if any(matches_single_level_glob(path, pattern) for pattern in policy.DOCS_CITATION_GLOBS)
+    )
+
+
+def check_docs_citations(root: Path, tracked: list[str]) -> list[str]:
+    """Dead path citations in README.md and the stable docs/ tree — findings, not warnings.
+
+    Reuses :func:`check_cited_paths` unchanged, so a citation is judged exactly as it
+    would be in a guide. Advisory from plan P1-3 until the historical records moved out of
+    reach (P3-3); gating since.
+    """
+    findings: list[str] = []
+    for rel_path in docs_citation_targets(tracked):
         path = root / rel_path
         if not path.is_file():
             continue
-        warnings.extend(check_cited_paths(rel_path, path.read_text(encoding="utf-8"), root))
-    return warnings
+        findings.extend(check_cited_paths(rel_path, path.read_text(encoding="utf-8"), root))
+    return findings
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -153,21 +159,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {root} is not a git work tree; cannot enumerate instruction files")
         return 2
 
-    findings = validate_instruction_files(root)
-    # Advisory, printed before the verdict so it never reads as part of it. GitHub's
-    # `::warning` prefix turns each line into a run annotation and is harmless elsewhere.
-    for warning in advisory_docs_citations(root, tracked_files(root)):
-        # No comma inside title=: the runner splits the property list on commas.
-        print(f"::warning title=docs citation advisory (plan P1-3)::{warning}")
+    tracked = tracked_files(root)
+    findings = validate_instruction_files(root) + check_docs_citations(root, tracked)
     if findings:
         for finding in findings:
             print(finding)
         print(f"FAIL: {len(findings)} finding(s) across the instruction files under {root}")
         return 1
     instruction_count = len(policy.GUIDE_MANIFEST) + len(discovered_rules(root))
-    context_count = len(discovered_context_files(root, tracked_files(root)))
+    context_count = len(discovered_context_files(root, tracked))
+    docs_count = len(docs_citation_targets(tracked))
     print(
         f"OK: {instruction_count} instruction file(s) under {root} passed all checks "
-        f"({context_count} further context file(s) scanned for hidden code points)"
+        f"({context_count} further context file(s) scanned for hidden code points, "
+        f"{docs_count} doc(s) checked for dead citations)"
     )
     return 0

@@ -1,6 +1,6 @@
 # Design — Agent Trap Documentation (rev.4)
 
-rev.1–rev.3 are superseded. `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` records four review
+rev.1–rev.3 are superseded. `docs/reviews/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` records four review
 rounds. Round 4 attacked the premise rather than the details and won: the change goes from
 64 new files to 6. This document records what was reversed, and why, rather than quietly
 dropping it — the reversals are the most useful thing in the bundle for whoever plans the
@@ -8,10 +8,10 @@ next one.
 
 ## D-0. Evidence baseline
 
-All external claims cite `docs/AGENTS_MD_EVIDENCE.md` (E-1 … E-8): seven primary papers
+All external claims cite `docs/reviews/AGENTS_MD_EVIDENCE.md` (E-1 … E-8): seven primary papers
 read in full, plus the vendor documentation behind the loading claims, each entry tagged
 with its significance or its status. Per the standing rule in
-`docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1, no URL outside the register is citable here.
+`docs/reviews/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1, no URL outside the register is citable here.
 
 The register's closing section says plainly that **no controlled evidence exists either
 way** for nested per-directory context files. rev.1–rev.3 built a 64-file tree on top of
@@ -168,7 +168,7 @@ open. rev.4 puts **nothing** documentation-shaped in that file (invariant I-2).
 ## D-8. Mermaid
 
 Kept, narrowed. Structure diagrams belong in `docs/` — this repo already has `docs/C4.md`,
-`docs/architecture/C4.md` and a package-local C4, and E-1 §4.3 measures overview content as
+`docs/architecture/TS_WORKSPACE_C4.md` and a package-local C4, and E-1 §4.3 measures overview content as
 ineffective where documentation exists. A guide may carry at most one diagram, and only
 where it encodes a constraint the code cannot show: bring-up ordering, codegen direction, a
 governance gate.

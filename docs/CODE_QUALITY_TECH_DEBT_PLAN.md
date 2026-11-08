@@ -306,7 +306,7 @@ carve-out set (`ArmGuard.update_health`/`latched`, `crsf/rc.py` `ticks_to_us`/`u
 
 **D4. Stale references.** `docs/IMPLEMENTATION_PLAN.md` cites four spec files that do not
 exist (`m2-fts-e2e.md`, `m3-richer-tracks.md`, `m4-store-and-forward.md`, `m5-packaging.md`
-— "author this" to-dos phrased as paths) and `docs/NEXT_STEPS.md` (real file: `NEXTSTEPS.md`);
+— "author this" to-dos phrased as paths) and a `NEXT_STEPS` spelling of `NEXTSTEPS.md`;
 `docs/specs/operator-ui.md` cites a peer-review doc and an openspec bundle that do not exist;
 README's tree block cites two missing paths (H3). 24 stale backticked paths repo-wide, most in
 historical review docs. No commented-out code blocks; no tracked `__pycache__`/`.egg-info`;
@@ -376,13 +376,13 @@ and stop growing the root surfaces.
   C4, ARCHITECTURE), working plans (NEXTSTEPS 40 KB, IMPLEMENTATION_PLAN, this file), and
   **historical records** (seven `*_PEER_REVIEW*.md`, two `GAP_ANALYSIS*`, `AUDIT_REPORT.md`
   dated 2026-06-02, `BRANCHES.md` verified 2026-07-07 against branches that no longer exist,
-  `PR_BODY.md`, `AGENTS_MD_EVIDENCE.md`). Move the records to `docs/reviews/` (or
-  `docs/history/`) with a one-line index; keep the stable/working split at the top level.
+  `PR_BODY.md`, `AGENTS_MD_EVIDENCE.md`). Move the records to `docs/reviews/` with a
+  one-line index; keep the stable/working split at the top level.
   `ROADMAP_RECONCILIATION.md` and `CHARTER_ALIGNMENT_AUDIT_*` stay — they are cited by
   NEXTSTEPS as process.
-- **H2. Two `C4.md`s** (repo-level 12.5 KB and `docs/architecture/C4.md` 8.5 KB) — a known
+- **H2. Two `C4.md`s** (repo-level 12.5 KB and `docs/architecture/TS_WORKSPACE_C4.md` 8.5 KB) — a known
   trap. Merge or rename; one should be the C4 and the other a workspace appendix.
-- **H3. README's tree block is stale** — it cites `docs/PEER_REVIEW.md` and a root
+- **H3. README's tree block is stale** — it cites a root-level `PEER_REVIEW` document and a root
   `validate-pre-pr.sh`, neither of which exists. `validate_agents_docs.py` checks cited paths
   in the five `AGENTS.md` guides; extending its `CONTEXT_SCAN_GLOBS` path check to `README.md`
   and `docs/*.md` (advisory first) is a 10-line change that makes H1 safe to execute.
@@ -489,7 +489,7 @@ alias and `run_gateway.py`'s single `MESHSA_LOG_LEVEL` read — keep a one-line 
 because they are non-mechanical), the two frozen sites wait for T-8.8. Two declared,
 pinned behaviour deltas: `WWW-Authenticate: Bearer realm="<service>"` on every 401 and
 `Cache-Control: no-store` on every bearer-guarded response, house-wide (spec delta in
-`openspec/.../m2-bind-safety/spec.md`). The S4d deliverables scenario (`X-Snapshot-Age`)
+`openspec/changes/code-hygiene-modularity/specs/m2-bind-safety/spec.md`). The S4d deliverables scenario (`X-Snapshot-Age`)
 was **not** salvaged — no spec asks for the header. The three reviews (security-reviewer,
 bind-auditor, test-engineer) independently caught one HIGH regression in the draft kit — a
 whitespace-only token normalised to "open" after the bind check had accepted it — fixed by

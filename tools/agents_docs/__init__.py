@@ -44,7 +44,8 @@ from .checks import (
     excerpt,
 )
 from .cli import (
-    advisory_docs_citations,
+    check_docs_citations,
+    docs_citation_targets,
     main,
     matches_single_level_glob,
     validate_file,
@@ -71,7 +72,8 @@ from .repo import (
 )
 
 __all__ = [
-    "advisory_docs_citations",
+    "check_docs_citations",
+    "docs_citation_targets",
     "check_cited_paths",
     "check_control_characters",
     "check_manifest",
