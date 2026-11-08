@@ -34,7 +34,12 @@ from typing import Any
 
 import structlog
 
-from ..defaults import DEFAULT_LINK_LOG_INTERVAL_S, DEFAULT_LOG_EVERY_N, DEFAULT_QUEUE_MAXSIZE
+from ..defaults import (
+    DEFAULT_LINK_LOG_INTERVAL_S,
+    DEFAULT_LOG_EVERY_N,
+    DEFAULT_QUEUE_MAXSIZE,
+    DEFAULT_SOURCE_JOIN_TIMEOUT_S,
+)
 from ..protocols import Clock, SystemClock
 from .base import AbstractTransport
 
@@ -58,7 +63,7 @@ class PollingSourceTransport(AbstractTransport):
         clock: Clock | None = None,
         queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         poll_wait_s: float = 0.0,
-        join_timeout_s: float = 2.0,
+        join_timeout_s: float = DEFAULT_SOURCE_JOIN_TIMEOUT_S,
         log_every_n: int = DEFAULT_LOG_EVERY_N,
         log_interval_s: float = DEFAULT_LINK_LOG_INTERVAL_S,
     ) -> None:

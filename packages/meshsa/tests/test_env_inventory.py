@@ -62,7 +62,7 @@ NODE_SECTIONS: dict[str, tuple[str, type[BaseModel], int]] = {
     "router": ("ROUTER", RouterConfig, 2),
     "health": ("HEALTH", HealthConfig, 7),
     "inference": ("INFERENCE", NemotronConfig, 20),
-    "scout": ("SCOUT", ScoutConfig, 23),
+    "scout": ("SCOUT", ScoutConfig, 25),
     "ui": ("UI", UIConfig, 16),
 }
 
@@ -133,6 +133,8 @@ GOLDEN_NODE_ENV_KEYS: tuple[str, ...] = (
     "MESHSA_SCOUT_STATION_HOST",
     "MESHSA_SCOUT_STATION_PORT",
     "MESHSA_SCOUT_STATION_TOKEN",
+    "MESHSA_SCOUT_STATION_POLL_INTERVAL_S",
+    "MESHSA_SCOUT_STATION_TILE_URL",
     "MESHSA_UI_ENABLED",
     "MESHSA_UI_HOST",
     "MESHSA_UI_PORT",
@@ -153,13 +155,13 @@ GOLDEN_NODE_ENV_KEYS: tuple[str, ...] = (
 
 
 def node_env_keys() -> list[str]:
-    """The pinned inventory (78 keys) in a stable order."""
+    """The pinned inventory (80 keys) in a stable order."""
     return list(GOLDEN_NODE_ENV_KEYS)
 
 
 def test_inventory_size_is_pinned() -> None:
-    assert len(GOLDEN_NODE_ENV_KEYS) == 78
-    assert len(set(GOLDEN_NODE_ENV_KEYS)) == 78
+    assert len(GOLDEN_NODE_ENV_KEYS) == 80
+    assert len(set(GOLDEN_NODE_ENV_KEYS)) == 80
     for section, (_, model, count) in NODE_SECTIONS.items():
         assert len(model.model_fields) == count, section
 
@@ -366,6 +368,7 @@ LLM_ENV_KEYS = (
     "MESHSA_LLM_PORT",
     "MESHSA_LLM_TOKEN",
     "MESHSA_LLM_MAX_PROMPT_CHARS",
+    "MESHSA_LLM_SOURCE_TIMEOUT_S",
     "MESHSA_MAVLINK2REST_URL",
     "MESHSA_DRONE_UID",
     "MESHSA_FTS_TRACKS_URL",
@@ -378,6 +381,7 @@ def test_llm_server_keys_are_honoured() -> None:
         "MESHSA_LLM_PORT": "9090",
         "MESHSA_LLM_TOKEN": " tok \n",
         "MESHSA_LLM_MAX_PROMPT_CHARS": "12",
+        "MESHSA_LLM_SOURCE_TIMEOUT_S": "0.5",
         "MESHSA_MAVLINK2REST_URL": "http://gw:1",
         "MESHSA_DRONE_UID": "uav-9",
         "MESHSA_FTS_TRACKS_URL": "http://fts/t",
@@ -389,6 +393,7 @@ def test_llm_server_keys_are_honoured() -> None:
         port=9090,
         token="tok",
         max_prompt_chars=12,
+        source_timeout_s=0.5,
         mavlink2rest_url="http://gw:1",
         drone_uid="uav-9",
         fts_tracks_url="http://fts/t",

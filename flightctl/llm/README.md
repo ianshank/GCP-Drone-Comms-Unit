@@ -57,6 +57,7 @@ port directly.
 | `MESHSA_MAVLINK2REST_URL` | `http://127.0.0.1:8088` | mavlink2rest base URL (from `start_all.sh`). |
 | `MESHSA_DRONE_UID` | `uav-1` | UID used in telemetry replies. |
 | `MESHSA_FTS_TRACKS_URL` | `http://127.0.0.1:19023/ManageGeoObject/getCoTGeoObject` | FreeTAKServer active-CoT endpoint. |
+| `MESHSA_LLM_SOURCE_TIMEOUT_S` | `3.0` | Total HTTP timeout on each upstream read (mavlink2rest, FTS tracks); must be > 0. |
 
 ## Notes / hardening
 

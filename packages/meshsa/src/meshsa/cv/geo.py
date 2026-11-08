@@ -24,7 +24,8 @@ import math
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-_EARTH_R_M = 6_371_000.0
+from ..defaults import EARTH_RADIUS_M as _EARTH_R_M
+
 #: Crude pointing uncertainty (deg) folded into the *legacy* ground error estimate
 #: (used only when no explicit ``att_sigma_deg`` is supplied — see :func:`ground_error`).
 _POINTING_UNCERTAINTY_DEG = 1.0

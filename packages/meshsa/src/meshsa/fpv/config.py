@@ -20,6 +20,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .._envconfig import merge_config_json
+from ..defaults import DEFAULT_CRSF_SERIAL_DEVICE
 
 
 class ParserSettings(BaseModel):
@@ -111,7 +112,7 @@ class ArmGuardSettings(BaseModel):
 class CrsfLinkSettings(BaseModel):
     """Half-duplex CRSF serial-link settings (E1.2/E1.3, §2.0)."""
 
-    crsf_device: str = "/dev/ttyAMA0"
+    crsf_device: str = DEFAULT_CRSF_SERIAL_DEVICE
     #: Single-wire half-duplex handset line runs at 400 kbaud (spec §2.0). The
     #: full-duplex FC side uses 416666; set per deployment if wired differently.
     crsf_baud: int = 400000

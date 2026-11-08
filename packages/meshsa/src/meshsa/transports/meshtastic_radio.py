@@ -27,6 +27,7 @@ from ..defaults import (
     DEFAULT_BACKOFF_FACTOR,
     DEFAULT_BACKOFF_INITIAL_S,
     DEFAULT_BACKOFF_MAX_S,
+    DEFAULT_MESHTASTIC_PORTNUM,
     DEFAULT_QUEUE_MAXSIZE,
 )
 from ..registry import transport_registry
@@ -109,7 +110,7 @@ class MeshtasticOptions:
     unsubscribe: SubscribeFn | None = None
     topic: str = "meshtastic.receive"
     lost_topic: str = "meshtastic.connection.lost"
-    portnum: int = 256  # PRIVATE_APP
+    portnum: int = DEFAULT_MESHTASTIC_PORTNUM  # PRIVATE_APP
     portnum_name: str = "PRIVATE_APP"
     destination: str = "^all"
     want_ack: bool = False

@@ -31,6 +31,7 @@ if [ "${#AP_PSK}" -lt 8 ] || [ "${#AP_PSK}" -gt 63 ]; then
   echo "AP_PSK must be 8-63 characters (WPA2-PSK); got ${#AP_PSK}" >&2; exit 1
 fi
 FTS_IP="${NODE_IP}"        # FreeTAKServer bind/host IP on the mesh
+FTS_COT_PORT="${FTS_COT_PORT:-8087}"  # FTS CoT TCP (defaults.PORT_FTS_TCP; same knob as start_all.sh)
 COUNTRY="US"
 MESH_USER="$(whoami)"
 # -----------------------------------------------------------------------------
@@ -149,7 +150,7 @@ sudo tee /etc/systemd/system/adsbcot.service >/dev/null <<UNIT
 Description=ADS-B to CoT feed
 After=mesh-up.service
 [Service]
-Environment=COT_URL=tcp://${FTS_IP}:8087
+Environment=COT_URL=tcp://${FTS_IP}:${FTS_COT_PORT}
 Environment=FEED_URL=tcp+beast://127.0.0.1:30005
 ExecStart=${HOME}/adsb/bin/adsbcot
 Restart=always
@@ -177,6 +178,6 @@ cat <<DONE
     STILL TO DO:
       1. Install the Morse Micro HaLow driver (Seeed wiki) + confirm ${HALOW_IF} appears.
       2. Verify HALOW_FREQ / channel + bandwidth for your region.
-      3. Point ATAK clients (on ${AP_SSID}) at tcp://${FTS_IP}:8087 or the FTS data package.
+      3. Point ATAK clients (on ${AP_SSID}) at tcp://${FTS_IP}:${FTS_COT_PORT} or the FTS data package.
       4. Mind 900 MHz coexistence: HaLow + 915 LoRa + LR900.
 DONE

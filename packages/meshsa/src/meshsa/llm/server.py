@@ -18,12 +18,12 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 
 import structlog
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .._envconfig import apply_overrides, env_key, parse_token
 from .._parsing import parse_int
 from .._web import ServiceAuth, api_json, guarded, healthz, read_json_or_none, register_routes
-from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_LLM
+from ..defaults import DEFAULT_HTTP_SOURCE_TIMEOUT_S, DEFAULT_LOOPBACK_HOST, PORT_LLM
 
 # ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
 # ``as`` alias makes the re-export visible to mypy's ``no_implicit_reexport``.
@@ -79,6 +79,8 @@ class ServerConfig(BaseModel):
     drone_uid: str = DEFAULT_DRONE_UID
     fts_tracks_url: str = DEFAULT_FTS_TRACKS_URL
     max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
+    #: Total HTTP timeout on each upstream source read (``MESHSA_LLM_SOURCE_TIMEOUT_S``).
+    source_timeout_s: float = Field(default=DEFAULT_HTTP_SOURCE_TIMEOUT_S, gt=0.0)
 
 
 def _port(name: str, raw: str) -> int:
@@ -215,8 +217,10 @@ def main() -> None:  # pragma: no cover - process entry point
 
     cfg = resolve_config(os.environ)
     validate_bind(cfg.host, cfg.token)  # fail closed before opening a socket
-    telemetry = Mavlink2RestSource(cfg.mavlink2rest_url, uid=cfg.drone_uid)
-    tracks = FtsTrackSource(cfg.fts_tracks_url)
+    telemetry = Mavlink2RestSource(
+        cfg.mavlink2rest_url, uid=cfg.drone_uid, timeout_s=cfg.source_timeout_s
+    )
+    tracks = FtsTrackSource(cfg.fts_tracks_url, timeout_s=cfg.source_timeout_s)
     agent = build_agent(telemetry, tracks)
     web.run_app(
         build_app(agent, cfg.token, max_prompt_chars=cfg.max_prompt_chars),

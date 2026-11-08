@@ -16,6 +16,8 @@ def test_defaults() -> None:
     assert c.rtk_enabled is True
     assert c.marker_stale_s == 86_400.0  # overrides the 120 s CoT default
     assert c.station_host == "127.0.0.1"
+    assert c.station_poll_interval_s == 3.0
+    assert c.station_tile_url.startswith("https://tile.openstreetmap.org/")
 
 
 def test_bounds_enforced() -> None:

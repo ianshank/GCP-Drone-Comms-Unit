@@ -79,6 +79,23 @@ def test_pinned_literal_values_are_preserved():
     assert defaults.DEFAULT_PLI_INTERVAL_S == 30.0
     assert defaults.DEFAULT_LOG_EVERY_N == 100
     assert defaults.DEFAULT_LINK_LOG_INTERVAL_S == 30.0
+    assert defaults.DEFAULT_SOURCE_POLL_INTERVAL_S == 1.0
+    assert defaults.DEFAULT_SOURCE_JOIN_TIMEOUT_S == 2.0
+    assert defaults.DEFAULT_HTTP_SOURCE_TIMEOUT_S == 3.0
+    assert defaults.DEFAULT_STATION_POLL_INTERVAL_S == 3.0
+    assert defaults.DEFAULT_STATION_TILE_URL == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    assert defaults.DEFAULT_MESHTASTIC_SERIAL_DEVICE == "/dev/ttyUSB0"
+    assert defaults.DEFAULT_MSP_SERIAL_DEVICE == "/dev/ttyACM0"
+    assert defaults.DEFAULT_CRSF_SERIAL_DEVICE == "/dev/ttyAMA0"
+    assert defaults.DEFAULT_MESHTASTIC_PORTNUM == 256
+    assert defaults.EARTH_RADIUS_M == 6_371_000.0
+    # External-convention port rows (recorded, not bound by meshsa).
+    assert defaults.PORT_FTS_UI == 5000
+    assert defaults.PORT_WEBMAP == 1880
+    assert defaults.PORT_MAVP2P_GATEWAY == 14551
+    assert defaults.PORT_MAVP2P_MAVLINK2REST == 14552
+    assert defaults.PORT_DUMP1090_BEAST == 30005
+    assert defaults.PORT_SITL_TCP == 5762
     assert defaults.DEFAULT_INFERENCE_BACKOFF_MAX_S == 30.0
     assert defaults.DEFAULT_INFERENCE_BACKOFF_BASE == 2.0
 

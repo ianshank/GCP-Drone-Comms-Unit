@@ -17,11 +17,11 @@ from collections.abc import Sequence
 
 import structlog
 
+from ..defaults import EARTH_RADIUS_M as _EARTH_R_M
 from .schemas import Block, Waypoint
 
 _log = structlog.get_logger("meshsa.scout.survey")
 
-_EARTH_R_M = 6_371_000.0
 #: Default grid resolution (m) for the coverage sampler.
 _COVERAGE_SAMPLE_M = 2.0
 

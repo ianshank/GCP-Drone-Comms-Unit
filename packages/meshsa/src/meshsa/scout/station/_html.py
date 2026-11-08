@@ -14,9 +14,14 @@ from __future__ import annotations
 
 from ..._webpage import MAPLIBRE_CSS_TAG, MAPLIBRE_JS_TAG
 from ..._webpage import js_literal as _js_literal
+from ...defaults import DEFAULT_STATION_POLL_INTERVAL_S, DEFAULT_STATION_TILE_URL
 
 #: Placeholder replaced at serve time with the JSON-encoded bearer token (or ``null``).
 _TOKEN_PLACEHOLDER = "__SCOUT_TOKEN__"
+#: Placeholders for the two operator-tunable page settings (plan P3-1 / C3): the poll
+#: cadence in milliseconds and the raster tile template (``ScoutConfig.station_*``).
+_POLL_MS_PLACEHOLDER = "__SCOUT_POLL_MS__"
+_TILE_URL_PLACEHOLDER = "__SCOUT_TILE_URL__"
 
 #: Build-time placeholders for the shared, version-pinned MapLibre asset tags — resolved
 #: once below, not per request.
@@ -24,8 +29,16 @@ _MAPLIBRE_CSS_PLACEHOLDER = "__MAPLIBRE_CSS_TAG__"
 _MAPLIBRE_JS_PLACEHOLDER = "__MAPLIBRE_JS_TAG__"
 
 
-def render_page(token: str | None) -> str:
-    """Return the operator page with the bearer token injected for its `fetch` calls.
+def render_page(
+    token: str | None,
+    *,
+    poll_interval_s: float = DEFAULT_STATION_POLL_INTERVAL_S,
+    tile_url: str = DEFAULT_STATION_TILE_URL,
+) -> str:
+    """Return the operator page with the bearer token and page settings injected.
+
+    ``poll_interval_s`` becomes the refresh cadence (milliseconds, floored at 1) and
+    ``tile_url`` the raster tile template, both as safe JS literals like the token.
 
     The token is embedded via :func:`meshsa._webpage.js_literal` (JSON-encoded and with
     ``<``/``>``/``&`` escaped, so it is a valid JS literal that cannot break out of the
@@ -33,7 +46,11 @@ def render_page(token: str | None) -> str:
     data/status requests. `/` itself is gated on the same token by the app, so serving it
     here does not widen exposure.
     """
-    return MAP_HTML.replace(_TOKEN_PLACEHOLDER, _js_literal(token))
+    return (
+        MAP_HTML.replace(_TOKEN_PLACEHOLDER, _js_literal(token))
+        .replace(_POLL_MS_PLACEHOLDER, str(max(1, int(poll_interval_s * 1000))))
+        .replace(_TILE_URL_PLACEHOLDER, _js_literal(tile_url))
+    )
 
 
 _MAP_HTML_TEMPLATE = """<!doctype html>
@@ -60,7 +77,7 @@ __MAPLIBRE_JS_TAG__
 const map = new maplibregl.Map({
   container: 'map',
   style: { version: 8, sources: {
-      osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      osm: { type: 'raster', tiles: [__SCOUT_TILE_URL__],
              tileSize: 256, attribution: '\\u00a9 OpenStreetMap' } },
     layers: [{ id: 'osm', type: 'raster', source: 'osm' }] },
   center: [0, 0], zoom: 2,
@@ -117,7 +134,7 @@ async function setStatus(status) {
   refresh();
 }
 window.setStatus = setStatus;
-map.on('load', () => { refresh(); setInterval(refresh, 3000); });
+map.on('load', () => { refresh(); setInterval(refresh, __SCOUT_POLL_MS__); });
 </script>
 </body>
 </html>

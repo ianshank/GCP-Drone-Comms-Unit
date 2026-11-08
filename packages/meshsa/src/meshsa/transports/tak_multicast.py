@@ -32,6 +32,9 @@ from .base import AbstractTransport
 
 _log = structlog.get_logger("meshsa.tak")
 
+#: Largest possible UDP payload; one recv buffer of this size never truncates a datagram.
+_MAX_DATAGRAM_BYTES = 65535
+
 
 class DatagramIO(Protocol):
     def sendto(self, data: bytes) -> None: ...
@@ -60,7 +63,7 @@ def _default_multicast_io(
 
         async def recv(self) -> bytes:
             loop = asyncio.get_running_loop()
-            return await loop.sock_recv(self._s, 65535)
+            return await loop.sock_recv(self._s, _MAX_DATAGRAM_BYTES)
 
         def close(self) -> None:
             self._s.close()

@@ -25,6 +25,7 @@ from ..._web import (
     register_routes,
     text_body,
 )
+from ...defaults import DEFAULT_STATION_POLL_INTERVAL_S, DEFAULT_STATION_TILE_URL
 from ...netauth import authorize, is_loopback
 from ...netauth import validate_bind as _validate_bind
 from ..protocols import Store
@@ -81,6 +82,8 @@ def build_app(
     host: str | None = None,
     token: str | None = None,
     block_geojson: dict[str, object] | None = None,
+    poll_interval_s: float = DEFAULT_STATION_POLL_INTERVAL_S,
+    tile_url: str = DEFAULT_STATION_TILE_URL,
 ) -> Any:
     """Build the aiohttp station app.
 
@@ -88,7 +91,8 @@ def build_app(
     non-loopback bind without a token raises), so the guarantee travels with the app rather than
     relying on the caller. ``/healthz`` stays open; ``/`` (map) and the data/status endpoints
     require the bearer token when one is configured — the page is served with the token injected
-    (gated by a ``?token=`` query) so its `fetch` calls can authenticate.
+    (gated by a ``?token=`` query) so its `fetch` calls can authenticate. ``poll_interval_s``
+    and ``tile_url`` are the page's two operator-tunable settings (``ScoutConfig.station_*``).
     """
     if host is not None:
         validate_bind(host, token)
@@ -100,7 +104,7 @@ def build_app(
         denied = page_token_gate(auth, request)
         if denied is not None:
             return denied
-        return html_page(render_page(token))
+        return html_page(render_page(token, poll_interval_s=poll_interval_s, tile_url=tile_url))
 
     async def detections(_request: Any) -> Any:
         return api_json(detections_geojson(store))

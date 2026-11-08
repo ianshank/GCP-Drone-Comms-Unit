@@ -29,6 +29,8 @@ from .defaults import (
     DEFAULT_COT_STALE_S,
     DEFAULT_LOCAL_TARGET_HOST,
     DEFAULT_LOOPBACK_HOST,
+    DEFAULT_MESHTASTIC_PORTNUM,
+    DEFAULT_MESHTASTIC_SERIAL_DEVICE,
     DEFAULT_PLI_INTERVAL_S,
     PORT_FTS_TCP,
     PORT_HEALTH,
@@ -56,12 +58,16 @@ def _env_float(key: str, default: float) -> float:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Meshtastic <-> FreeTAKServer bridge node")
-    p.add_argument("--port", default=_env("PORT", "/dev/ttyUSB0"), help="T-Beam serial device")
+    p.add_argument(
+        "--port",
+        default=_env("PORT", DEFAULT_MESHTASTIC_SERIAL_DEVICE),
+        help="T-Beam serial device",
+    )
     p.add_argument(
         "--portnum",
         type=int,
-        default=_env_int("PORTNUM", 256),
-        help="Meshtastic app portnum (default 256 / PRIVATE_APP)",
+        default=_env_int("PORTNUM", DEFAULT_MESHTASTIC_PORTNUM),
+        help=f"Meshtastic app portnum (default {DEFAULT_MESHTASTIC_PORTNUM} / PRIVATE_APP)",
     )
     p.add_argument("--region", default=_env("MESH_REGION", "US"))
     p.add_argument("--fts-host", default=_env("FTS_HOST", DEFAULT_LOCAL_TARGET_HOST))

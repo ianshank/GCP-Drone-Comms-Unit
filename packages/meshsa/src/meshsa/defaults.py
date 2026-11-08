@@ -5,10 +5,12 @@ those defaults live, so they stop being copy-pasted literals at each call site).
 A leaf module: no imports from the rest of ``meshsa``, so every config model and transport
 can depend on it without risk of a cycle.
 
-Adoption is staged deliberately (code-hygiene-modularity tasks.md): the service-port table
-below is wired to ``HealthConfig``/``cli.py`` as of T-1.4; the queue/backoff/endpoint
-constants are sourced here now but only swept into their ~15 call sites in T-3.5, so this
-module's full constant set exists before every consumer has adopted it.
+Adoption history (code-hygiene-modularity tasks.md): the service-port table was wired to
+``HealthConfig``/``cli.py`` in T-1.4; the queue/backoff/endpoint/host constants were swept
+into every transport constructor in T-3.5a; the log-cadence, source-timing, serial-device
+and geodesy rows below landed with the Phase 3 sweep (plan P3-1). ``literal_guard``
+(``tools/claude_hooks/literal_guard.py``) fails CI when a ``PORT_*`` value, a loopback/any
+host string, a queue/backoff default or a MAVLink endpoint is re-typed outside this module.
 """
 
 from __future__ import annotations
@@ -71,6 +73,44 @@ DEFAULT_LOG_EVERY_N = 100
 #: never alias them.
 DEFAULT_LINK_LOG_INTERVAL_S = 30.0
 
+#: Poll cadence of the serial source transports (MSP and CRSF) between frames (seconds).
+DEFAULT_SOURCE_POLL_INTERVAL_S = 1.0
+
+#: How long a polling source waits for its reader thread to exit on stop (seconds).
+DEFAULT_SOURCE_JOIN_TIMEOUT_S = 2.0
+
+#: Total HTTP timeout for the assistant's upstream reads (mavlink2rest, FTS tracks). Short
+#: on purpose: the sources are on the same host or LAN, and the chat request is waiting.
+DEFAULT_HTTP_SOURCE_TIMEOUT_S = 3.0
+
+#: Browser poll cadence of the scout station page (seconds); the operator console's
+#: ``UIConfig.poll_interval_s`` is the same knob for the other page.
+DEFAULT_STATION_POLL_INTERVAL_S = 3.0
+
+#: Raster tile template the scout station map loads from the operator's browser. Third-party
+#: egress: an offline deployment points ``ScoutConfig.station_tile_url`` at a local server.
+DEFAULT_STATION_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+# ── Serial devices ──────────────────────────────────────────────────────────────────────
+# Every one is overridable (CLI flag, transport option or env); named here so the three
+# conventions are visible side by side. The udev alias ``/dev/meshsa-radio`` in
+# ops/base-service/base.env.example is the deployment override of the first.
+#: Meshtastic T-Beam over USB serial (``meshsa-base --port``).
+DEFAULT_MESHTASTIC_SERIAL_DEVICE = "/dev/ttyUSB0"
+#: MSP flight controller over USB CDC (``msp_source`` ``device`` option).
+DEFAULT_MSP_SERIAL_DEVICE = "/dev/ttyACM0"
+#: CRSF handset line on the Pi's UART (``CrsfLinkSettings.crsf_device``).
+DEFAULT_CRSF_SERIAL_DEVICE = "/dev/ttyAMA0"
+
+# ── Protocol conventions ────────────────────────────────────────────────────────────────
+#: Meshtastic PortNum for application payloads (``PRIVATE_APP``); shared by the radio
+#: transport default and ``meshsa-base --portnum``.
+DEFAULT_MESHTASTIC_PORTNUM = 256
+
+#: Mean Earth radius (m) for the equirectangular/haversine helpers in ``cv/geo.py`` and
+#: ``scout/survey.py`` — one value so the two projections cannot drift apart.
+EARTH_RADIUS_M = 6_371_000.0
+
 # ── Service port table ──────────────────────────────────────────────────────────────────
 # One place recording every port a meshsa-adjacent service binds by default, including
 # external tools this codebase talks to but does not own — so a future addition can check
@@ -94,6 +134,20 @@ PORT_UI = 8100
 #: FreeTAKServer's REST API upstream default (external tool; meshsa does not claim this
 #: port — llm/sources.py composes its tracks URL from it).
 PORT_FTS_REST = 19023
+#: FreeTAKServer's web UI (external; ``start_all.sh`` FTS_UI_PORT, the Pi provisioning
+#: script's "FreeTAKServer UI" hint).
+PORT_FTS_UI = 5000
+#: FreeTAKHub WebMap, a Node-RED flow (external; ``start_all.sh`` WEBMAP_PORT).
+PORT_WEBMAP = 1880
+#: mavp2p ``udpc`` fan-out to the meshsa gateway (``start_all.sh`` GW_PORT; the two
+#: ``flightctl/configs/jetson_gateway.*.json`` endpoints).
+PORT_MAVP2P_GATEWAY = 14551
+#: mavp2p ``udpc`` fan-out to mavlink2rest (``start_all.sh`` M2R_UDP_PORT).
+PORT_MAVP2P_MAVLINK2REST = 14552
+#: dump1090 Beast output consumed by adsbcot (``setup_pi5_node.sh`` FEED_URL).
+PORT_DUMP1090_BEAST = 30005
+#: ArduPilot SITL's MAVLink TCP (``flightctl/configs/jetson_command.json``).
+PORT_SITL_TCP = 5762
 
 # External conventions this codebase talks to but does not own, recorded so a future
 # addition checks here first (the T-1.4 lesson): MAVLink UDP telemetry rendezvous is
