@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from conftest import SettableClock
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -12,16 +13,8 @@ from meshsa.models import Envelope, MessageKind
 from meshsa.ui.snapshot import SnapshotStore
 
 
-class FakeClock:
-    def __init__(self, t: float = 0.0) -> None:
-        self.t = t
-
-    def now(self) -> float:
-        return self.t
-
-
 def _store(
-    clock: FakeClock,
+    clock: SettableClock,
     *,
     max_tracks: int = 8,
     max_detections: int = 8,
@@ -93,14 +86,14 @@ def test_invalid_bounds_rejected(kwargs: dict[str, Any]) -> None:
     }
     defaults.update(kwargs)
     with pytest.raises(ValueError):
-        SnapshotStore(FakeClock(), **defaults)
+        SnapshotStore(SettableClock(), **defaults)
 
 
 # ── upsert semantics ──────────────────────────────────────────────────────────
 
 
 def test_pli_upserts_by_source_uid() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(_pli("a", ts=1.0))
     store.handle(_pli("a", ts=2.0))
     fc = store.tracks_geojson()
@@ -111,14 +104,14 @@ def test_pli_upserts_by_source_uid() -> None:
 def test_marker_composite_key_distinguishes_sources() -> None:
     # track_id is per-source tracker numbering: two nodes both emitting track_id=1
     # must stay two detections (design D-1).
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(_marker("a", msg_id="m1", track_id=1))
     store.handle(_marker("b", msg_id="m2", track_id=1))
     assert len(store.detections_geojson()["features"]) == 2
 
 
 def test_marker_same_source_same_track_upserts() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(_marker("a", msg_id="m1", track_id=1, ts=1.0))
     store.handle(_marker("a", msg_id="m2", track_id=1, ts=2.0))
     features = store.detections_geojson()["features"]
@@ -127,14 +120,14 @@ def test_marker_same_source_same_track_upserts() -> None:
 
 
 def test_marker_without_track_id_falls_back_to_msg_id() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(_marker("a", msg_id="m1"))
     store.handle(_marker("a", msg_id="m2"))
     assert len(store.detections_geojson()["features"]) == 2
 
 
 def test_chat_and_status_ignored() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(
         Envelope(msg_id="c1", ts=1.0, source_uid="a", kind=MessageKind.CHAT, payload={"text": "x"})
     )
@@ -157,7 +150,7 @@ def test_chat_and_status_ignored() -> None:
     ],
 )
 def test_unusable_position_dropped_and_counted(payload: dict[str, Any]) -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(
         Envelope(msg_id="m1", ts=1.0, source_uid="a", kind=MessageKind.PLI, payload=payload)
     )
@@ -169,7 +162,7 @@ def test_unusable_position_dropped_and_counted(payload: dict[str, Any]) -> None:
 
 
 def test_cap_evicts_oldest_first() -> None:
-    clock = FakeClock()
+    clock = SettableClock()
     store = _store(clock, max_tracks=2)
     for i, uid in enumerate(["a", "b", "c"]):
         clock.t = float(i)
@@ -180,7 +173,7 @@ def test_cap_evicts_oldest_first() -> None:
 
 
 def test_upsert_refreshes_recency_for_eviction_order() -> None:
-    clock = FakeClock()
+    clock = SettableClock()
     store = _store(clock, max_tracks=2)
     store.handle(_pli("a"))
     store.handle(_pli("b"))
@@ -191,7 +184,7 @@ def test_upsert_refreshes_recency_for_eviction_order() -> None:
 
 
 def test_ttl_sweep_on_read() -> None:
-    clock = FakeClock()
+    clock = SettableClock()
     store = _store(clock, track_stale_s=10.0, detection_stale_s=50.0)
     store.handle(_pli("a"))
     store.handle(_marker("a", msg_id="m1", track_id=1))
@@ -211,7 +204,7 @@ def test_ttl_sweep_on_read() -> None:
 
 
 def test_unknown_scalar_keys_pass_through() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     env = _pli("a", course_deg=45.0, speed_ms=3.0)
     env.payload["rssi_dbm"] = -71  # unknown top-level scalar (M3 additive pattern)
     env.payload["position"]["fix_quality"] = "rtk"  # unknown scalar inside a known block
@@ -224,7 +217,7 @@ def test_unknown_scalar_keys_pass_through() -> None:
 
 
 def test_nonscalar_unknowns_ignored_and_counted() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     env = _pli("a")
     env.payload["waypoints"] = [{"lat": 1.0}]  # non-scalar unknown: never rendered
     env.payload["position"]["cov"] = [[1.0]]
@@ -236,7 +229,7 @@ def test_nonscalar_unknowns_ignored_and_counted() -> None:
 
 
 def test_nonscalar_callsign_omitted() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     env = _pli("a")
     env.payload["node"] = {"uid": "a", "callsign": {"nested": True}}
     store.handle(env)
@@ -244,7 +237,7 @@ def test_nonscalar_callsign_omitted() -> None:
 
 
 def test_telemetry_scalars_prefixed() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     env = _pli("a")
     env.payload["telemetry"] = {"battery_pct": 80, "attitude": {"yaw_deg": 1.0}}
     store.handle(env)
@@ -257,7 +250,7 @@ def test_telemetry_scalars_prefixed() -> None:
 
 
 def test_golden_feature_collection() -> None:
-    store = _store(FakeClock(t=5.0))
+    store = _store(SettableClock(t=5.0))
     pli = _pli("drone-1", ts=4.0, hae=120.0, course_deg=90.0)
     store.handle(pli)
     store.handle(_marker("scout-2", msg_id="det-7", track_id=3, ts=4.5, label="vehicle"))
@@ -324,7 +317,7 @@ def _events(draw: st.DrawFn) -> tuple[str, str, int | None, float]:
 def test_store_never_exceeds_caps_or_serves_stale(
     events: list[tuple[str, str, int | None, float]],
 ) -> None:
-    clock = FakeClock()
+    clock = SettableClock()
     cap_t, cap_d, ttl = 3, 4, 15.0
     store = _store(
         clock, max_tracks=cap_t, max_detections=cap_d, track_stale_s=ttl, detection_stale_s=ttl
@@ -355,7 +348,7 @@ def test_store_never_exceeds_caps_or_serves_stale(
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
 def test_nonfinite_coordinates_dropped_and_counted(bad: float) -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(_pli("a", lat=bad))
     store.handle(_pli("b", lon=bad))
     assert store.tracks_geojson()["features"] == []
@@ -363,7 +356,7 @@ def test_nonfinite_coordinates_dropped_and_counted(bad: float) -> None:
 
 
 def test_nonfinite_scalar_property_excluded() -> None:
-    store = _store(FakeClock())
+    store = _store(SettableClock())
     store.handle(_pli("a", speed=float("nan")))
     (feature,) = store.tracks_geojson()["features"]
     # NaN/inf are not valid JSON: excluded from properties, counted like non-scalars.
@@ -372,7 +365,7 @@ def test_nonfinite_scalar_property_excluded() -> None:
 
 
 def test_counters_sweeps_expired_before_reporting_live() -> None:
-    clock = FakeClock()
+    clock = SettableClock()
     store = _store(clock, track_stale_s=10.0, detection_stale_s=10.0)
     store.handle(_pli("a"))
     store.handle(_marker("a", msg_id="d1", track_id=1))

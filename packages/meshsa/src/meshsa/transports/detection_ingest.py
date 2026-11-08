@@ -63,7 +63,6 @@ class DetectionIngestTransport(AbstractTransport):
             remedy="set a 'token' in the transport options, or bind to 127.0.0.1",
         )
         self._host = host
-        self._token = token
         self._port = int(port)
         self._endpoint: asyncio.DatagramTransport | None = None
         #: Actual bound UDP port (resolved after start; useful when port=0 picks one).

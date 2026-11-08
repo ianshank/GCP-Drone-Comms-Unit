@@ -149,6 +149,20 @@ class FakeClock:
         return self._t
 
 
+class SettableClock:
+    """A clock a test drives by assigning ``t`` (the TTL/stale-window tests).
+
+    The counterpart of :class:`FakeClock`, which auto-increments so ordered timestamps
+    need no bookkeeping; this one holds still until the test moves it.
+    """
+
+    def __init__(self, t: float = 0.0) -> None:
+        self.t = t
+
+    def now(self) -> float:
+        return self.t
+
+
 class SeqIdFactory:
     def __init__(self) -> None:
         self._c = itertools.count(1)

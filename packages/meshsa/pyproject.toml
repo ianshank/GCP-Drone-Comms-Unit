@@ -34,7 +34,6 @@ meshtastic = [
     "meshtastic>=2.3",
     "pypubsub>=4.0",
 ]
-tak = []
 mavlink = [
     "pymavlink>=2.4",
 ]
@@ -88,7 +87,6 @@ dev = [
     "mypy==2.3.0",
     "pre-commit>=3.7",
     "build>=1.2",
-    "twine>=5",
 ]
 
 [project.scripts]

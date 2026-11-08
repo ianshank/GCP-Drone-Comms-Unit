@@ -20,12 +20,12 @@ class TelemetryStore:
     """Per-type latest value."""
 
     def __init__(self, history_len: int = 512) -> None:
-        # ``history_len`` is retained (and still validated) purely for constructor
-        # compatibility: the monitor and replay tools thread it through. Whether it
-        # is removed or re-wired to a real ring is T-5.4's store_history_len item.
+        # ``history_len`` is accepted (and still validated) purely for constructor
+        # compatibility: the monitor and replay tools thread it through. Nothing reads
+        # it, so it is not stored; whether the parameter is removed or re-wired to a
+        # real ring is T-5.4's store_history_len item.
         if history_len < 1:
             raise ValueError("history_len must be >= 1")
-        self._history_len = history_len
         self._latest: dict[type, tuple[TelemetryMessage, float]] = {}
 
     def update(self, msg: TelemetryMessage, t_mono: float) -> None:

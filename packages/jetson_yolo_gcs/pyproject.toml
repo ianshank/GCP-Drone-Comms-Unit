@@ -34,7 +34,6 @@ dependencies = [
 ultralytics = [
     "ultralytics>=8.2",
 ]
-hailo = []
 camera = [
     "opencv-python-headless>=4.8",
 ]
@@ -56,7 +55,6 @@ dev = [
     "mypy==2.3.0",
     "pre-commit>=3.7",
     "build>=1.2",
-    "twine>=5",
 ]
 
 [project.scripts]
