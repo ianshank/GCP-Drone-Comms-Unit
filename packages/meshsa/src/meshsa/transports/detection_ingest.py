@@ -36,7 +36,7 @@ class _DetectionDatagramProtocol(asyncio.DatagramProtocol):
         # this guards any other unexpected failure so the receiver stays up.
         try:
             self._ingest(data)
-        except Exception:
+        except Exception:  # noqa: BLE001 - the datagram receiver must stay up whatever one datagram does
             _log.warning("failed to ingest detection datagram", addr=addr, exc_info=True)
 
 

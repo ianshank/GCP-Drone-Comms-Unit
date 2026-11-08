@@ -149,8 +149,10 @@ def _build_chat_agent() -> object | None:  # pragma: no cover - optional [llm] w
         telemetry = Mavlink2RestSource(llm_cfg.mavlink2rest_url, uid=llm_cfg.drone_uid)
         tracks = FtsTrackSource(llm_cfg.fts_tracks_url)
         return build_agent(telemetry, tracks)
-    except Exception as exc:
-        _log.warning("ui_chat_unavailable", error=str(exc), error_type=type(exc).__name__)
+    except Exception as exc:  # noqa: BLE001 - optional assistant wiring must never take the console down
+        _log.warning(
+            "ui_chat_unavailable", error=str(exc), error_type=type(exc).__name__, exc_info=True
+        )
         return None
 
 

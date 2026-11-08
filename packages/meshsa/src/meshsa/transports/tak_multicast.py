@@ -118,8 +118,10 @@ class TakMulticastTransport(AbstractTransport):
             if self._io is None:
                 try:
                     self._io = self._io_factory()
-                except Exception:
-                    _log.warning("tak_multicast rebuild failed; retrying", transport=self.name)
+                except Exception:  # noqa: BLE001 - link-loss resilience: back off and rebuild whatever the socket factory raised
+                    _log.warning(
+                        "tak_multicast rebuild failed; retrying", transport=self.name, exc_info=True
+                    )
                     await self._backoff.sleep_and_advance()
                     continue
                 self._backoff.reset()
@@ -129,8 +131,10 @@ class TakMulticastTransport(AbstractTransport):
                 if data:
                     await self._ingest(data)
                 self._backoff.reset()
-            except Exception:
-                _log.warning("tak_multicast recv error; rebuilding", transport=self.name)
+            except Exception:  # noqa: BLE001 - link-loss resilience: a recv error means rebuild, not exit
+                _log.warning(
+                    "tak_multicast recv error; rebuilding", transport=self.name, exc_info=True
+                )
                 self._close_io()
                 await self._backoff.sleep_and_advance()
 
@@ -140,8 +144,8 @@ class TakMulticastTransport(AbstractTransport):
             return
         try:
             io.close()
-        except Exception:  # best-effort during error recovery / shutdown
-            _log.debug("tak_multicast io close error", transport=self.name)
+        except Exception:  # noqa: BLE001 - teardown is best-effort during error recovery / shutdown
+            _log.debug("tak_multicast io close error", transport=self.name, exc_info=True)
 
     async def send(self, data: bytes) -> None:
         if self._io is None:

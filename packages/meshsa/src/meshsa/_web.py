@@ -178,9 +178,11 @@ async def read_json_or_none(
     """
     try:
         return await request.json()
-    except Exception as exc:
+    except ValueError as exc:  # json.JSONDecodeError / UnicodeDecodeError: a malformed body
         if log is not None:
-            log.warning(event, route=route, error=str(exc), error_type=type(exc).__name__)
+            log.warning(
+                event, route=route, error=str(exc), error_type=type(exc).__name__, exc_info=True
+            )
         return None
 
 
@@ -199,7 +201,7 @@ def upstream_error(
     log: Any, route: str, exc: Exception, *, message: str, event: str = "upstream_error"
 ) -> Any:
     """A generic 502 for a raising data source: detail server-side only (the llm policy)."""
-    log.warning(event, route=route, error=str(exc), error_type=type(exc).__name__)
+    log.warning(event, route=route, error=str(exc), error_type=type(exc).__name__, exc_info=True)
     return api_json({"error": message}, status=502)
 
 

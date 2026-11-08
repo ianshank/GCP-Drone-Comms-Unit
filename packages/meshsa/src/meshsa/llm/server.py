@@ -156,8 +156,10 @@ async def chat_reply(
         return {"error": f"prompt too long (max {max_prompt_chars} chars)"}, 400
     try:
         reply = await agent.ask(prompt.strip())
-    except Exception as exc:
-        _log.warning("sa_assistant_error", error=str(exc), error_type=type(exc).__name__)
+    except Exception as exc:  # noqa: BLE001 - HTTP boundary: any agent/tool failure is one generic 502
+        _log.warning(
+            "sa_assistant_error", error=str(exc), error_type=type(exc).__name__, exc_info=True
+        )
         return {"error": _UPSTREAM_ERROR}, 502
     return {"reply": reply.text, "tools": reply.tool_calls, "stop_reason": reply.stop_reason}, 200
 

@@ -134,7 +134,7 @@ class PollingSourceTransport(AbstractTransport):
                         self._log_link("up")
                 if not produced and self._interval_elapsed():
                     self._log_link("down")
-            except Exception:
+            except Exception:  # noqa: BLE001 - link-loss resilience: the reader thread outlives any one poll error
                 # A poll/iteration error during shutdown (stop flag set / resource
                 # closing) is a normal stop, not a failure: log it at DEBUG. Only
                 # an error while still running is a genuine WARNING.
@@ -192,8 +192,8 @@ class PollingSourceTransport(AbstractTransport):
         if self._resource is not None:
             try:
                 self._close(self._resource)
-            except Exception:
-                _log.debug("source close error", transport=self.name)
+            except Exception:  # noqa: BLE001 - teardown is best-effort; never raise on close
+                _log.debug("source close error", transport=self.name, exc_info=True)
         if self._thread is not None:
             self._thread.join(timeout=self._join_timeout_s)
             self._thread = None

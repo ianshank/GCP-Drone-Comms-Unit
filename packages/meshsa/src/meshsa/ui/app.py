@@ -101,7 +101,7 @@ def _json_route(auth: ServiceAuth, route: str, read: Callable[[], Any]) -> Handl
     async def handler(_request: Any) -> Any:
         try:
             return api_json(read())
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - HTTP boundary: any source failure is one generic 502 (logged with traceback)
             return upstream_error(_log, route, exc, message=UPSTREAM_ERROR, event="ui_source_error")
 
     return guarded(auth, handler)
@@ -116,7 +116,7 @@ def _chat_route(auth: ServiceAuth, backend: ChatBackend) -> Handler:
         )
         try:
             body, status = await backend.reply(payload)
-        except Exception as exc:  # a raising backend still yields the generic 502
+        except Exception as exc:  # noqa: BLE001 - a raising backend still yields the generic 502 (logged with traceback)
             return upstream_error(
                 _log, "/api/chat", exc, message=UPSTREAM_ERROR, event="ui_source_error"
             )
