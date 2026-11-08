@@ -107,7 +107,7 @@ ignore = [
 max-complexity = 10   # pipeline.py::Pipeline.step
 
 [tool.ruff.lint.pylint]
-max-args = 13         # pipeline.py::Pipeline.__init__ (P2-7 PipelineDeps)
+max-args = 8          # mavlink/bridge.py::LandingTargetBridge.__init__ (was 13: Pipeline.__init__, P2-7 -> 3)
 max-branches = 9      # pipeline.py
 max-returns = 4
 max-statements = 34   # pipeline.py

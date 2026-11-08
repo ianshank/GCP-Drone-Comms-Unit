@@ -24,9 +24,9 @@ ignore = [
 max-complexity = 21   # flightctl/run_commander.py::build_app (frozen path; T-8.7)
 
 [lint.pylint]
-max-args = 5          # tools/validate_agents_docs.py::validate_file
+max-args = 5          # tools/agents_docs/cli.py::validate_file
 max-branches = 14     # tools/claude_hooks/literal_guard.py::_iter_magic_bindings
-max-returns = 8       # tools/validate_agents_docs.py (check dispatch)
+max-returns = 8       # tools/agents_docs/checks.py::check_rule_frontmatter
 max-statements = 48   # flightctl/run_commander.py::build_app
 
 [format]

@@ -12,12 +12,15 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
 from .core.clock import Clock, MonotonicClock
 from .core.config import MavlinkSettings, PipelineSettings, Settings
 from .core.errors import DetectionError
+from .core.options import field_names, resolve_options
 from .detection.base import Detection, DetectionResult, DetectorBase
 from .mavlink.bridge import LandingTargetBridge
 from .streaming.camera import CameraSource
@@ -50,51 +53,106 @@ _DEFAULT_IDLE_POLL_S: float = float(PipelineSettings.model_fields["idle_poll_s"]
 _log = structlog.get_logger("jetson_yolo_gcs.pipeline")
 
 
+@dataclass(frozen=True, kw_only=True)
+class PipelineDeps:
+    """The seams a :class:`Pipeline` is assembled from (code-hygiene-modularity T-4.5).
+
+    ``camera`` and ``detector`` are required; the rest are optional collaborators that a
+    unit test fakes and ``build_pipeline`` wires from real devices.
+    """
+
+    camera: CameraSource
+    detector: DetectorBase
+    stream: StreamWriter | None = None
+    bridge: LandingTargetBridge | None = None
+    tracker: TrackerBase | None = None
+    target_classes: frozenset[str] | None = None
+    fps: FpsCounter | None = None
+    clock: Clock | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class PipelinePolicy:
+    """The loop's tunables, with the settings-model defaults (single source of truth).
+
+    Validated here, independent of the config ``Field`` bounds, so a direct
+    ``Pipeline(...)`` (tests, embedders) cannot construct a self-inconsistent loop — e.g.
+    ``drop_log_every=0`` would divide-by-zero in the throttle.
+    """
+
+    fps_window: int = _DEFAULT_FPS_WINDOW
+    liveness_timeout_s: float = _DEFAULT_LIVENESS_TIMEOUT_S
+    drop_log_every: int = _DEFAULT_DROP_LOG_EVERY
+    min_publish_rate_hz: float = _DEFAULT_MIN_PUBLISH_RATE_HZ
+    publish_failure_tolerance: int = _DEFAULT_PUBLISH_FAILURE_TOLERANCE
+
+    def __post_init__(self) -> None:
+        if self.liveness_timeout_s <= 0:
+            raise ValueError(f"liveness_timeout_s must be > 0, got {self.liveness_timeout_s}")
+        if self.drop_log_every < 1:
+            raise ValueError(f"drop_log_every must be >= 1, got {self.drop_log_every}")
+        if self.min_publish_rate_hz <= 0:
+            raise ValueError(f"min_publish_rate_hz must be > 0, got {self.min_publish_rate_hz}")
+        if self.publish_failure_tolerance < 0:
+            raise ValueError(
+                f"publish_failure_tolerance must be >= 0, got {self.publish_failure_tolerance}"
+            )
+
+    @classmethod
+    def from_settings(cls, pipeline: PipelineSettings, mavlink: MavlinkSettings) -> PipelinePolicy:
+        """The policy a settings-driven run uses (what ``build_pipeline`` passes)."""
+        return cls(
+            fps_window=pipeline.fps_window,
+            liveness_timeout_s=pipeline.liveness_timeout_s,
+            drop_log_every=pipeline.drop_log_every,
+            min_publish_rate_hz=mavlink.min_publish_rate_hz,
+            publish_failure_tolerance=pipeline.publish_failure_tolerance,
+        )
+
+
+_DEPS_FIELDS = field_names(PipelineDeps)
+_POLICY_FIELDS = field_names(PipelinePolicy)
+
+
 class Pipeline:
     """Reads frames, detects, optionally streams and publishes LANDING_TARGET."""
 
     def __init__(
         self,
-        *,
-        camera: CameraSource,
-        detector: DetectorBase,
-        stream: StreamWriter | None = None,
-        bridge: LandingTargetBridge | None = None,
-        tracker: TrackerBase | None = None,
-        target_classes: frozenset[str] | None = None,
-        fps: FpsCounter | None = None,
-        fps_window: int = _DEFAULT_FPS_WINDOW,
-        clock: Clock | None = None,
-        liveness_timeout_s: float = _DEFAULT_LIVENESS_TIMEOUT_S,
-        drop_log_every: int = _DEFAULT_DROP_LOG_EVERY,
-        min_publish_rate_hz: float = _DEFAULT_MIN_PUBLISH_RATE_HZ,
-        publish_failure_tolerance: int = _DEFAULT_PUBLISH_FAILURE_TOLERANCE,
+        deps: PipelineDeps | None = None,
+        policy: PipelinePolicy | None = None,
+        **overrides: Any,
     ) -> None:
-        # Enforce the class's own invariants independent of config Field bounds — a direct
-        # ``Pipeline(...)`` (tests, embedders) must not be able to construct a self-inconsistent
-        # loop (e.g. ``drop_log_every=0`` would divide-by-zero in the throttle).
-        if liveness_timeout_s <= 0:
-            raise ValueError(f"liveness_timeout_s must be > 0, got {liveness_timeout_s}")
-        if drop_log_every < 1:
-            raise ValueError(f"drop_log_every must be >= 1, got {drop_log_every}")
-        if min_publish_rate_hz <= 0:
-            raise ValueError(f"min_publish_rate_hz must be > 0, got {min_publish_rate_hz}")
-        if publish_failure_tolerance < 0:
-            raise ValueError(
-                f"publish_failure_tolerance must be >= 0, got {publish_failure_tolerance}"
-            )
-        self._camera = camera
-        self._detector = detector
-        self._stream = stream
-        self._bridge = bridge
-        self._tracker = tracker
-        self._target_classes = target_classes
-        self._clock: Clock = clock or MonotonicClock()
-        self._fps = fps or FpsCounter(window=fps_window, clock=self._clock)
-        self._liveness_timeout_s = liveness_timeout_s
-        self._drop_log_every = drop_log_every
-        self._min_publish_rate_hz = min_publish_rate_hz
-        self._publish_failure_tolerance = publish_failure_tolerance
+        """Assemble from a :class:`PipelineDeps` + :class:`PipelinePolicy`, or their fields.
+
+        Every field of either model is also accepted as a keyword (``Pipeline(camera=...,
+        detector=..., drop_log_every=5)``), which is the form the tests and embedders use;
+        a keyword overrides the matching field of a model passed alongside it. A keyword
+        that is a field of neither is a ``TypeError``.
+        """
+        unknown = sorted(set(overrides) - _DEPS_FIELDS - _POLICY_FIELDS)
+        if unknown:
+            raise TypeError(f"Pipeline() got unexpected keyword argument(s): {', '.join(unknown)}")
+        deps = resolve_options(
+            PipelineDeps, deps, {k: v for k, v in overrides.items() if k in _DEPS_FIELDS}
+        )
+        policy = resolve_options(
+            PipelinePolicy, policy, {k: v for k, v in overrides.items() if k in _POLICY_FIELDS}
+        )
+        self.deps = deps
+        self.policy = policy
+        self._camera = deps.camera
+        self._detector = deps.detector
+        self._stream = deps.stream
+        self._bridge = deps.bridge
+        self._tracker = deps.tracker
+        self._target_classes = deps.target_classes
+        self._clock: Clock = deps.clock or MonotonicClock()
+        self._fps = deps.fps or FpsCounter(window=policy.fps_window, clock=self._clock)
+        self._liveness_timeout_s = policy.liveness_timeout_s
+        self._drop_log_every = policy.drop_log_every
+        self._min_publish_rate_hz = policy.min_publish_rate_hz
+        self._publish_failure_tolerance = policy.publish_failure_tolerance
         self._stop = threading.Event()
 
         #: Frames dropped because detection failed recoverably (malformed output).
@@ -401,15 +459,13 @@ def build_pipeline(settings: Settings) -> Pipeline:  # pragma: no cover - real h
 
         tracker = build_tracker(settings.tracker)
     return Pipeline(
-        camera=camera,
-        detector=detector,
-        stream=stream,
-        bridge=bridge,
-        tracker=tracker,
-        target_classes=settings.mavlink.target_class_set,
-        fps_window=settings.pipeline.fps_window,
-        liveness_timeout_s=settings.pipeline.liveness_timeout_s,
-        drop_log_every=settings.pipeline.drop_log_every,
-        min_publish_rate_hz=settings.mavlink.min_publish_rate_hz,
-        publish_failure_tolerance=settings.pipeline.publish_failure_tolerance,
+        PipelineDeps(
+            camera=camera,
+            detector=detector,
+            stream=stream,
+            bridge=bridge,
+            tracker=tracker,
+            target_classes=settings.mavlink.target_class_set,
+        ),
+        PipelinePolicy.from_settings(settings.pipeline, settings.mavlink),
     )

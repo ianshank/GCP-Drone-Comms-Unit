@@ -61,6 +61,16 @@ DEFAULT_COT_STALE_S = 120.0
 #: Position-report (PLI) send interval (seconds).
 DEFAULT_PLI_INTERVAL_S = 30.0
 
+#: Throttled-log cadence shared by the transport inbox-full warning (`transports/base.py`)
+#: and the polling sources' link-health line: the 1st event, then every Nth. A stuck
+#: consumer can drop thousands of frames a second, so one line per frame is not an option.
+DEFAULT_LOG_EVERY_N = 100
+
+#: Upper bound between two link-health log lines from a polling source (seconds). Equal
+#: to DEFAULT_PLI_INTERVAL_S and DEFAULT_BACKOFF_MAX_S by coincidence — independent knobs,
+#: never alias them.
+DEFAULT_LINK_LOG_INTERVAL_S = 30.0
+
 # ── Service port table ──────────────────────────────────────────────────────────────────
 # One place recording every port a meshsa-adjacent service binds by default, including
 # external tools this codebase talks to but does not own — so a future addition can check

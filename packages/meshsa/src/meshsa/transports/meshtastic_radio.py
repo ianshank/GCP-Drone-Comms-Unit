@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 import structlog
@@ -29,6 +30,7 @@ from ..defaults import (
     DEFAULT_QUEUE_MAXSIZE,
 )
 from ..registry import transport_registry
+from ._options import resolve_options
 from .backoff import Backoff, SleepFn
 from .base import AbstractTransport
 
@@ -94,52 +96,71 @@ def _default_provisioner(iface: Any, mesh: dict[str, Any]) -> None:
         )
 
 
+@dataclass(frozen=True, kw_only=True)
+class MeshtasticOptions:
+    """Every ``MeshtasticTransport`` tunable, with its default (plan P2-4; see ``_options``).
+
+    Device-specific keys the default interface factory reads (``connection``, ``port``,
+    ``host``) are deliberately *not* fields: they stay in the extras the factory receives.
+    """
+
+    interface_factory: InterfaceFactory | None = None
+    subscribe: SubscribeFn | None = None
+    unsubscribe: SubscribeFn | None = None
+    topic: str = "meshtastic.receive"
+    lost_topic: str = "meshtastic.connection.lost"
+    portnum: int = 256  # PRIVATE_APP
+    portnum_name: str = "PRIVATE_APP"
+    destination: str = "^all"
+    want_ack: bool = False
+    channel_index: int = 0
+    reconnect: bool = True
+    backoff_initial_s: float = DEFAULT_BACKOFF_INITIAL_S
+    backoff_max_s: float = DEFAULT_BACKOFF_MAX_S
+    backoff_factor: float = DEFAULT_BACKOFF_FACTOR
+    sleep: SleepFn | None = None
+    queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
+    #: ``repr=False``: ``build_node`` injects ``MeshConfig.model_dump()`` here, PSK included.
+    mesh: dict[str, Any] | None = field(default=None, repr=False)
+    provision: Provisioner | None = None
+
+
 class MeshtasticTransport(AbstractTransport):
     def __init__(
-        self,
-        name: str = "meshtastic",
-        *,
-        interface_factory: InterfaceFactory | None = None,
-        subscribe: SubscribeFn | None = None,
-        unsubscribe: SubscribeFn | None = None,
-        topic: str = "meshtastic.receive",
-        lost_topic: str = "meshtastic.connection.lost",
-        portnum: int = 256,  # PRIVATE_APP
-        portnum_name: str = "PRIVATE_APP",
-        destination: str = "^all",
-        want_ack: bool = False,
-        channel_index: int = 0,
-        reconnect: bool = True,
-        backoff_initial_s: float = DEFAULT_BACKOFF_INITIAL_S,
-        backoff_max_s: float = DEFAULT_BACKOFF_MAX_S,
-        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
-        sleep: SleepFn | None = None,
-        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
-        mesh: dict[str, Any] | None = None,
-        provision: Provisioner | None = None,
-        **options: Any,
+        self, name: str = "meshtastic", options: MeshtasticOptions | None = None, **overrides: Any
     ) -> None:
-        super().__init__(name, queue_maxsize)
-        # `mesh` is an explicit param (not left in **options) so it never leaks
+        """Build the transport from a :class:`MeshtasticOptions` and/or its fields as keywords.
+
+        A keyword overrides the model's field; keywords that are not fields (the device
+        keys ``connection``/``port``/``host``) go to the default interface factory.
+        """
+        opts, extras = resolve_options(MeshtasticOptions, options, overrides)
+        #: The resolved options (exposed for observability/tests).
+        self.options = opts
+        super().__init__(name, opts.queue_maxsize)
+        # `mesh` is a model field (not left in the extras) so it never leaks
         # into the interface factory; provisioning is an injectable seam.
-        self._mesh = mesh
-        self._provision = provision or _default_provisioner
-        self._factory = interface_factory or _default_interface_factory(options)
+        self._mesh = opts.mesh
+        self._provision = opts.provision or _default_provisioner
+        self._factory = opts.interface_factory or _default_interface_factory(extras)
         # pypubsub is resolved lazily in start() (not here), so constructing the
         # transport — e.g. for config validation in build_node — never requires
         # the optional pypubsub dependency.
-        self._subscribe = subscribe
-        self._unsubscribe = unsubscribe
-        self._topic = topic
-        self._lost_topic = lost_topic
-        self.portnum = portnum
-        self.portnum_name = portnum_name
-        self.destination = destination
-        self.want_ack = want_ack
-        self.channel_index = channel_index
-        self._reconnect = reconnect
+        self._subscribe = opts.subscribe
+        self._unsubscribe = opts.unsubscribe
+        self._topic = opts.topic
+        self._lost_topic = opts.lost_topic
+        self.portnum = opts.portnum
+        self.portnum_name = opts.portnum_name
+        self.destination = opts.destination
+        self.want_ack = opts.want_ack
+        self.channel_index = opts.channel_index
+        self._reconnect = opts.reconnect
         self._backoff = Backoff(
-            initial_s=backoff_initial_s, max_s=backoff_max_s, factor=backoff_factor, sleep=sleep
+            initial_s=opts.backoff_initial_s,
+            max_s=opts.backoff_max_s,
+            factor=opts.backoff_factor,
+            sleep=opts.sleep,
         )
         self._iface: Any | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -273,4 +294,5 @@ class MeshtasticTransport(AbstractTransport):
 
 @transport_registry.register("meshtastic")
 def _make_meshtastic(name: str = "meshtastic", **options: Any) -> MeshtasticTransport:
-    return MeshtasticTransport(name=name, **options)
+    opts, extras = resolve_options(MeshtasticOptions, None, options)
+    return MeshtasticTransport(name, opts, **extras)

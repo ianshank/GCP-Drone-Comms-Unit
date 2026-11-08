@@ -155,8 +155,13 @@
       `docs/AUDIT_M2_AUTH.md` citations refreshed to `module::symbol` form in the same
       commit. jetson stays out (separate distribution; its `udpout` endpoint is the other
       end of the rendezvous, and its literals already live in pydantic-settings fields).
-- [ ] T-3.5b `meshsa/_queues.py` (`BoundedDropQueue`); adopt in `flight_logger.py`,
-      `fpv/camera.py` (fixes its unguarded cross-thread counter).
+- [x] T-3.5b `meshsa/_queues.py` (`DropCounter` + `BoundedDropQueue`), adopted by the
+      transport inbox (`transports/base.py`, counter only — the inbox stays an
+      `asyncio.Queue`) and the inference offline queue (`inference/service.py`, the full
+      queue with the `oldest` policy). Scope narrowed honestly: `flight_logger.py` keeps
+      its thread-drained `queue.Queue` (its cross-thread counter is T-4.3's concern) and
+      `fpv/camera.py` was already fixed under T-4.3; sharing the *accounting* rather than
+      the backend is the deliberate call, recorded in the module docstring.
 - [ ] T-3.6 Geodesy consolidation into `cv/geo.py`: `scout/survey.py`'s `_LocalFrame` gains the
       pole guard `cv/geo.py` already has; `scout/replay.py`'s hand-rolled inverse projector
       moves beside the forward one with a round-trip property test.
@@ -214,9 +219,16 @@
       complexity 17 → every function in the module ≤ 6; the golden snapshots are
       byte-identical; the Hypothesis round-trip now covers the richer detail —
       course/speed, battery, current, attitude.)
-- [ ] T-4.5 jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies;
+- [x] T-4.5 jetson `LandingTargetBridge` → `_SuppressionCounter` + frame-encoder strategies;
       `Pipeline` → `PipelineMetrics` + `_PublishPolicy`; `idle_poll_s` sourced from
-      `PipelineSettings.model_fields` instead of a re-hardcoded literal.
+      `PipelineSettings.model_fields` instead of a re-hardcoded literal. (Landed as plan
+      P2-7: `mavlink/suppression.py::SuppressionCounter` and the pure
+      `mavlink/frames.py::encode_body_frd`/`encode_local_ned` encoders behind the unchanged
+      bridge; `Pipeline` takes `PipelineDeps` + `PipelinePolicy` (the policy carries the
+      validated tunables — the `_PublishPolicy` half — while the counters stay plain
+      attributes the tests read, so no `PipelineMetrics` object was introduced);
+      `idle_poll_s` was already sourced from `model_fields`. `Pipeline.__init__` 13 → 3
+      args; every keyword call site unchanged.)
 
 ## Phase 5 — `fpv/` prune and decouple
 - [x] T-5.1a Safe deletions (design D-1): `AddressProber`/`ProbeResult`/`ProberSettings`,

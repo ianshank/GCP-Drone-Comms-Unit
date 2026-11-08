@@ -22,11 +22,13 @@ supplies only the MSP specifics:
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
-from ..defaults import DEFAULT_QUEUE_MAXSIZE
+from ..defaults import DEFAULT_LINK_LOG_INTERVAL_S, DEFAULT_LOG_EVERY_N, DEFAULT_QUEUE_MAXSIZE
 from ..protocols import Clock
 from ..registry import transport_registry
+from ._options import resolve_options
 from .polling_source import PollingSourceTransport
 
 BoardFactory = Callable[[], Any]
@@ -63,42 +65,53 @@ def _default_poll(board: Any) -> dict[str, Any] | None:  # pragma: no cover - ne
     return {"lat": gps["lat"], "lon": gps["lon"], "alt": gps.get("alt", 0)}
 
 
+@dataclass(frozen=True, kw_only=True)
+class MspOptions:
+    """Every ``MspSourceTransport`` tunable, with its default (plan P2-4; see ``_options``).
+
+    The board keys the default factory reads (``device``, ``loglevel``, ``baudrate``) stay
+    in the extras, as before.
+    """
+
+    board: Any | None = None
+    board_factory: BoardFactory | None = None
+    poll: PollFn | None = None
+    source_uid: str = "fc-1"
+    callsign: str | None = None
+    coord_scale: float = 1e7
+    alt_scale: float = 1.0
+    poll_interval_s: float = 1.0
+    clock: Clock | None = None
+    queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
+    log_every_n: int = DEFAULT_LOG_EVERY_N
+    log_interval_s: float = DEFAULT_LINK_LOG_INTERVAL_S
+
+
 class MspSourceTransport(PollingSourceTransport):
     _thread_prefix = "msp"
 
     def __init__(
-        self,
-        name: str = "msp",
-        *,
-        board: Any | None = None,
-        board_factory: BoardFactory | None = None,
-        poll: PollFn | None = None,
-        source_uid: str = "fc-1",
-        callsign: str | None = None,
-        coord_scale: float = 1e7,
-        alt_scale: float = 1.0,
-        poll_interval_s: float = 1.0,
-        clock: Clock | None = None,
-        queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
-        log_every_n: int = 100,
-        log_interval_s: float = 30.0,
-        **_options: Any,
+        self, name: str = "msp", options: MspOptions | None = None, **overrides: Any
     ) -> None:
+        """Build the transport from an :class:`MspOptions` and/or its fields as keywords."""
+        opts, extras = resolve_options(MspOptions, options, overrides)
+        #: The resolved options (exposed for observability/tests).
+        self.options = opts
         super().__init__(
             name,
-            resource=board,
-            factory=board_factory or _default_board_factory(_options),
-            source_uid=source_uid,
-            callsign=callsign,
-            clock=clock,
-            queue_maxsize=queue_maxsize,
-            poll_wait_s=poll_interval_s,
-            log_every_n=log_every_n,
-            log_interval_s=log_interval_s,
+            resource=opts.board,
+            factory=opts.board_factory or _default_board_factory(extras),
+            source_uid=opts.source_uid,
+            callsign=opts.callsign,
+            clock=opts.clock,
+            queue_maxsize=opts.queue_maxsize,
+            poll_wait_s=opts.poll_interval_s,
+            log_every_n=opts.log_every_n,
+            log_interval_s=opts.log_interval_s,
         )
-        self._poll_fn = poll or _default_poll
-        self._coord_scale = coord_scale
-        self._alt_scale = alt_scale
+        self._poll_fn = opts.poll or _default_poll
+        self._coord_scale = opts.coord_scale
+        self._alt_scale = opts.alt_scale
 
     def _poll(self, resource: Any) -> list[bytes]:
         fix = self._poll_fn(resource)
@@ -115,4 +128,5 @@ class MspSourceTransport(PollingSourceTransport):
 
 @transport_registry.register("msp_source")
 def _make_msp_source(name: str = "msp", **options: Any) -> MspSourceTransport:
-    return MspSourceTransport(name=name, **options)
+    opts, extras = resolve_options(MspOptions, None, options)
+    return MspSourceTransport(name, opts, **extras)

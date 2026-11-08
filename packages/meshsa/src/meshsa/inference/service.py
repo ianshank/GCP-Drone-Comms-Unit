@@ -8,11 +8,11 @@ in an earlier step of the same task (T-4.1a).
 from __future__ import annotations
 
 import asyncio
-from collections import deque
 from collections.abc import Awaitable, Callable
 
 import structlog
 
+from .._queues import BoundedDropQueue, DropCounter
 from ..models import ChatPayload, Envelope, MessageKind
 from ..protocols import Clock, IdFactory
 from ..router import Router
@@ -98,15 +98,20 @@ class _RateGate:
 class _OfflineQueue:
     """Bounded queue of envelopes that failed while the API was unreachable.
 
-    Extracted from InferenceService (code-hygiene-modularity T-4.1a). A failure
-    (transport/HTTP error surviving retries) enqueues the envelope (drop-and-count
-    on overflow, mirroring ``FlightLogger``); the next success drains/replays it.
-    ``maxlen=0`` disables queueing entirely, preserving prior service behavior.
+    Extracted from InferenceService (code-hygiene-modularity T-4.1a); the queue and its
+    drop accounting are the shared ``_queues`` primitives (T-3.5b). A failure
+    (transport/HTTP error surviving retries) enqueues the envelope (drop-oldest-and-count
+    on overflow); the next success drains/replays it. ``maxlen=0`` disables queueing
+    entirely, preserving prior service behavior.
     """
 
     def __init__(self, maxlen: int) -> None:
-        self._queue: deque[Envelope] | None = deque(maxlen=maxlen) if maxlen > 0 else None
-        self._dropped = 0
+        self._counter = DropCounter(
+            _log, "inference_offline_dropped", counter_field="dropped_total"
+        )
+        self._queue: BoundedDropQueue[Envelope] | None = (
+            BoundedDropQueue(maxlen, self._counter, policy="oldest") if maxlen > 0 else None
+        )
         self.drain_lock = asyncio.Lock()
 
     def __bool__(self) -> bool:
@@ -122,7 +127,12 @@ class _OfflineQueue:
 
     @property
     def dropped(self) -> int:
-        return self._dropped
+        return self._counter.count
+
+    @property
+    def _dropped(self) -> int:
+        """White-box alias the service tests read (the counter's count)."""
+        return self._counter.count
 
     @property
     def depth(self) -> int:
@@ -132,30 +142,24 @@ class _OfflineQueue:
         """Add ``envelope`` to either end, counting any overflow.
 
         Callers only reach here after an :attr:`enabled`/truthiness check, so
-        ``self._queue`` is always a real deque (never called while disabled).
+        ``self._queue`` is always a real queue (never called while disabled).
 
         ``front=True`` (a re-queued replay) preserves FIFO — the item returns to where
-        it was popped. A full deque silently drops the item at the opposite end on
-        insert, so we count it (drop-and-count) rather than lose it silently — this
-        also covers the case where a concurrent producer refilled the queue during a
-        drain ``await``.
+        it was popped. A full queue drops the item at the opposite end on insert and
+        counts it (drop-oldest-and-count) rather than losing it silently — this also
+        covers the case where a concurrent producer refilled the queue during a drain
+        ``await``.
         """
         assert self._queue is not None
-        if len(self._queue) == self._queue.maxlen:
-            self._dropped += 1
-            _log.warning("inference_offline_dropped", dropped_total=self._dropped)
-        if front:
-            self._queue.appendleft(envelope)
-        else:
-            self._queue.append(envelope)
+        self._queue.put(envelope, front=front)
 
     def pop(self) -> Envelope:
         assert self._queue is not None  # callers only pop after a truthiness check
-        return self._queue.popleft()
+        return self._queue.pop()
 
     def record_drop(self) -> None:
         """Count a drop that happens outside :meth:`put` (a permanently-failed replay)."""
-        self._dropped += 1
+        self._counter.record(quiet=True)
 
 
 class InferenceService:
