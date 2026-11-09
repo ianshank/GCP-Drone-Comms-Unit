@@ -54,10 +54,14 @@
       `Dockerfile` (`2>/dev/null || true` parses as extra COPY source paths); delete
       `scripts/src/hello.ts`, `scripts/post-merge.sh`, the dead `Makefile`
       `db-migrate`/`db-studio` targets.
-- [ ] T-2.3b Archive half of T-2.3 (separate PR — folder reorg per AGENTS.md):
+- [x] T-2.3b Archive half of T-2.3 (separate PR — folder reorg per AGENTS.md):
       `git mv artifacts/mockup-sandbox lib/api-client-react archive/`; update
       `tsconfig.json`/`pnpm-workspace.yaml`; new CI `ts` job
       (`pnpm install --frozen-lockfile && pnpm -r run typecheck && pnpm -r run lint && pnpm -r run test`).
+      **Landed 2026-11-09 as plan P3-4.** The `ts` job had already arrived with plan P0-4;
+      this PR did the moves (indexed in `archive/README.md`), dropped the Replit leftovers
+      and the empty `scripts/` workspace, re-resolved the lockfile (7,917 → 5,053 lines) and
+      pruned the root `Makefile` to aliases of `scripts/validate-pre-pr.sh` steps 1–4.
       Note: `deliverables/meshsa-ui-validation/tests` (38 tests, after T-10.2a deleted
       `test_mavlink_bind_guard.py`) deliberately gets no CI leg — the tree retires in
       T-10.2b.

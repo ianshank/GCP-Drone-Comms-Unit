@@ -9,6 +9,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+#### Code-quality reflection, Phase 3b — the TypeScript archive (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md` P3-4 / T-2.3b)
+- `archive/README.md`: an index of the read-only history, now including the two archived
+  TypeScript trees below.
+
+### Added
 #### Code-quality reflection, Phase 3a — literal sweep, dead code, docs organization (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
 - **New operator knobs (P3-1 / C3), defaults unchanged:** `MESHSA_LLM_SOURCE_TIMEOUT_S`
   (`ServerConfig.source_timeout_s`, the HTTP timeout on the assistant's mavlink2rest/FTS
@@ -96,6 +101,35 @@ Versions follow [Semantic Versioning](https://semver.org/).
   — the "no runtime dependency on `meshsa`" invariant was documented as a hard
   architectural gate but nothing enforced it; that test file checked only the six
   heavy/hardware modules. The rule held in fact; now it is checked.
+
+### Changed
+#### Code-quality reflection, Phase 3b (P3-4 / T-2.3b)
+- The pnpm workspace is `artifacts/*` + `lib/*`: `lib/integrations/*` (never existed) and
+  `scripts` (no sources) are gone from `pnpm-workspace.yaml`, with the `@replit/*` /
+  `stripe-replit-sync` release-age allowlist and every catalog entry only the archived trees
+  used; the catalog is `@types/node`, `drizzle-orm`, `zod`. `pnpm-lock.yaml` re-resolved,
+  7,917 → 5,053 lines. The platform-binary `overrides` are untouched (plan §7 item 7).
+- `lib/api-spec/orval.config.ts` has one target (`lib/api-zod`); the root `tsconfig.json`
+  references two libs.
+- The root `Makefile` is thin aliases: `make validate` = steps 1–4 of
+  `scripts/validate-pre-pr.sh` (typecheck, lint, test, build), `make install` uses the
+  frozen lockfile, and `dev`, `dev-sandbox`, `format`, `secrets-check`, `db-push`,
+  `py-check`, `ci`, `list-packages`, `outdated` are removed (gitleaks runs in pre-commit and
+  CI; nothing called the rest). README reflects the pruned targets.
+- `Dockerfile` installs the `packageManager`-pinned pnpm (`10.28.0`) instead of
+  `pnpm@latest`.
+- Audit row #25 (the sandbox's all-interfaces Vite server) is retired by archival: the tree
+  is no workspace member and cannot be started from the repo.
+
+### Removed
+#### Code-quality reflection, Phase 3b — Replit-era scaffolding (P3-4 / T-2.3b; archived, not deleted)
+- `artifacts/mockup-sandbox` → `archive/mockup-sandbox/` and `lib/api-client-react` →
+  `archive/api-client-react/` (`git mv`; history intact). Neither is type-checked, linted,
+  tested or installed; the pre-commit hygiene hooks exclude `archive/`.
+- The `@workspace/scripts` pnpm workspace (`scripts/package.json`, `scripts/tsconfig.json`,
+  `"files": []`); `scripts/` keeps `validate-pre-pr.sh` and `hooks/`.
+- Root `package.json`: `@replit/connectors-sdk` (imported by nothing) and the Windows-only
+  `@rollup/rollup-win32-x64-msvc` dev dependency.
 
 ### Changed
 #### Code-quality reflection, Phase 3a (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)

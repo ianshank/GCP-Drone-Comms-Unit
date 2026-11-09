@@ -1,23 +1,23 @@
 ---
 name: ts-codegen
-description: "Use when: changing the OpenAPI spec, regenerating the TypeScript API clients, editing anything under lib/*/src/generated, running orval, or fixing a workspace typecheck that fails on a missing lib .d.ts."
-argument-hint: "The endpoint or schema that changed, and which client(s) consume it"
+description: "Use when: changing the OpenAPI spec, regenerating the TypeScript zod client, editing anything under lib/api-zod/src/generated, running orval, or fixing a workspace typecheck that fails on a missing lib .d.ts."
+argument-hint: "The endpoint or schema that changed, and which consumer(s) read it"
 ---
 
-# Regenerate the TypeScript API Clients
+# Regenerate the TypeScript API Client
 
 ## When to Use
 
 - Add, remove, or change an endpoint or schema in `lib/api-spec/openapi.yaml`.
-- A file under `lib/api-zod/src/generated/` or `lib/api-client-react/src/generated/`
-  needs to change — the change belongs in the spec, never in the output.
+- A file under `lib/api-zod/src/generated/` needs to change — the change belongs in the
+  spec, never in the output.
 - `pnpm -r run typecheck` fails with "cannot find module" for a `lib/*` package on a
   fresh clone.
 
 ## Procedure
 
-1. Edit `lib/api-spec/openapi.yaml`. This is the only hand-edited input; both generated
-   trees are derived from it.
+1. Edit `lib/api-spec/openapi.yaml`. This is the only hand-edited input; the generated
+   tree is derived from it.
 2. Run the codegen from `lib/api-spec`:
 
    ```bash
@@ -25,9 +25,9 @@ argument-hint: "The endpoint or schema that changed, and which client(s) consume
    ```
 
    That script is `orval --config ./orval.config.ts && pnpm -w run typecheck:libs`, so
-   it regenerates both targets and then builds the composite projects.
-3. Review the regenerated diff in **both** trees before committing. They are committed
-   to the repo, so a spec change that produces no diff means the codegen did not run.
+   it regenerates the zod target and then builds the composite projects.
+3. Review the regenerated diff before committing. The tree is committed to the repo, so
+   a spec change that produces no diff means the codegen did not run.
 4. If you changed a shared type, rebuild the composite projects and typecheck the
    whole workspace:
 
@@ -40,16 +40,14 @@ argument-hint: "The endpoint or schema that changed, and which client(s) consume
 
 ## Traps
 
-- **`orval.config.ts` sets `clean: true` on both targets.** The generated directory is
-  deleted and rewritten on every run, so a hand edit there does not conflict — it
-  vanishes silently at the next codegen.
-- **`lib/api-client-react/src/custom-fetch.ts` is hand-written and load-bearing.** It
-  survives only because it sits one level *above* the `clean:` scope. Do not move it
-  into `generated/`.
-- **There are exactly two generated trees**, `lib/api-zod/src/generated/` and
-  `lib/api-client-react/src/generated/`. `lib/db/src/schema/index.ts` is *not* one of
-  them — drizzle-kit pushes SQL and does not emit that file, so "regenerating" it loses
-  the schema.
+- **`orval.config.ts` sets `clean: true`.** The generated directory is deleted and
+  rewritten on every run, so a hand edit there does not conflict — it vanishes silently
+  at the next codegen.
+- **There is exactly one generated tree**, `lib/api-zod/src/generated/`. The React Query
+  client (`api-client-react`, with its hand-written `custom-fetch.ts` mutator) was
+  archived under `archive/` by plan P3-4 when its only consumer, the mockup sandbox, was.
+  `lib/db/src/schema/index.ts` is *not* generated — drizzle-kit pushes SQL and does not
+  emit that file, so "regenerating" it loses the schema.
 - **Build the libs before type-checking on a fresh clone.** `lib/api-zod` and `lib/db`
   are TS composite projects (`composite: true`, `emitDeclarationOnly: true`) whose
   gitignored `dist/` `.d.ts` output must exist before dependents resolve their

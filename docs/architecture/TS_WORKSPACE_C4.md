@@ -4,6 +4,11 @@ Diagrams follow the [C4 model](https://c4model.com/).  All diagrams are rendered
 with [Mermaid](https://mermaid.js.org/) (GitHub, VS Code, and most CI platforms
 render these natively).
 
+> The React/Vite mockup sandbox and the `@workspace/api-client-react` hooks library were
+> archived in plan P3-4 (2026-11-09) and no longer appear below; the trees are kept
+> read-only under `../../archive/` (see its README). The drone-comms C4 is
+> [`../C4.md`](../C4.md).
+
 ---
 
 ## Level 1 — System Context
@@ -16,7 +21,6 @@ graph TB
 
     subgraph workspace["Replit Development Workspace"]
         api["🖥 API Server\n─────────────────\nExpress 5 REST API\nNode.js / TypeScript"]
-        sandbox["🎨 Mockup Sandbox\n─────────────────\nReact 19 / Vite 7\nUI component preview"]
     end
 
     subgraph external["External Systems"]
@@ -26,7 +30,6 @@ graph TB
     end
 
     dev -->|"develops / tests"| api
-    dev -->|"previews UI"| sandbox
     dev -->|"applies validated\ndeliverables to"| drone
     api -->|"reads / writes"| db
     workspace -->|"hosted on"| replit
@@ -36,7 +39,7 @@ graph TB
     classDef external fill:#999,color:#fff,stroke:#888
 
     class dev person
-    class api,sandbox system
+    class api system
     class drone,db,replit external
 ```
 
@@ -57,14 +60,9 @@ graph TB
             apiApp["Express 5 Application\n─────────────\nPino HTTP logging\nCORS middleware\nJSON body parsing\nDrizzle ORM"]
         end
 
-        subgraph sandboxArtifact["artifacts/mockup-sandbox  [:PORT]"]
-            viteApp["Vite Dev Server\n─────────────\nReact 19 SPA\nTailwind 4 CSS\nRadix UI components\nHot module reload"]
-        end
-
         subgraph libs["Shared Libraries - lib workspace"]
             dbLib["@workspace/db\n─────────────\nDrizzle schema\nClient factory\nMigrations"]
             zodLib["@workspace/api-zod\n─────────────\nZod schemas\nRequest/response\ntypes (shared)"]
-            clientLib["@workspace/api-client-react\n─────────────\nTyped React hooks\nFetch wrappers"]
         end
 
         subgraph deliverables["deliverables/meshsa-ui-validation/"]
@@ -77,21 +75,18 @@ graph TB
     db[("PostgreSQL")]
 
     dev -->|"HTTP"| apiArtifact
-    dev -->|"Browser"| sandboxArtifact
     apiApp -->|"Drizzle ORM"| db
     apiApp -.->|"imports"| dbLib
     apiApp -.->|"imports"| zodLib
-    sandboxArtifact -.->|"imports"| zodLib
-    sandboxArtifact -.->|"imports"| clientLib
 
     classDef container fill:#1168bd,color:#fff,stroke:#0e5fa8
     classDef db fill:#2d6a2d,color:#fff,stroke:#1e4d1e
     classDef lib fill:#555,color:#fff,stroke:#444
     classDef deliverable fill:#6b3a8e,color:#fff,stroke:#5a2f78
 
-    class apiApp,viteApp container
+    class apiApp container
     class db db
-    class dbLib,zodLib,clientLib lib
+    class dbLib,zodLib lib
     class pyTests,sysd,docs2 deliverable
 ```
 
@@ -157,51 +152,6 @@ graph TB
 
 ---
 
-## Level 3 — Component (Mockup Sandbox)
-
-```mermaid
-graph TB
-    browser["Developer Browser"]
-
-    subgraph sandbox["@workspace/mockup-sandbox"]
-        main["main.tsx\nReact root mount"]
-        app["App.tsx\nDynamic component\nrouter + previewer"]
-
-        subgraph generated[".generated/"]
-            registry["mockup-components.ts\n(auto-generated module map)"]
-        end
-
-        subgraph components["src/components/"]
-            mockups["mockups/\nUser-authored preview\ncomponents"]
-            ui["ui/ (50+ components)\nRadix UI primitives\n+ Tailwind classes"]
-        end
-
-        subgraph hooks["src/hooks/"]
-            useMobile["use-mobile.tsx"]
-            useToast["use-toast.ts"]
-        end
-    end
-
-    vite["Vite 7\nDev server + HMR\nTailwind 4 plugin\nReplit cartographer"]
-
-    browser -->|"HTTP/WS"| vite
-    vite -->|"serves"| main
-    main --> app
-    app -->|"dynamic import"| registry
-    registry -->|"resolves"| mockups
-    mockups -.->|"imports"| ui
-
-    classDef entry fill:#08427b,color:#fff,stroke:#073b6f
-    classDef comp fill:#1168bd,color:#fff,stroke:#0e5fa8
-    classDef gen fill:#8b6914,color:#fff,stroke:#7a5e12
-
-    class main,app entry
-    class ui,mockups,useMobile,useToast comp
-    class registry gen
-```
-
----
-
 ## Deployment
 
 ```mermaid
@@ -229,7 +179,7 @@ See [`docs/adr/`](../adr/) for full Architecture Decision Records.
 |---|---|---|
 | Package manager | pnpm workspaces | Strict hoisting, catalog pinning, `minimumReleaseAge` security policy |
 | Module format | ESM (`"type": "module"`) | Native Node.js ESM; compatible with Vite and Vitest without transforms |
-| Bundler | esbuild (api-server) / Vite (sandbox) | Sub-second builds; esbuild for Node.js single-file bundle, Vite for browser HMR |
+| Bundler | esbuild (api-server) | Sub-second single-file Node.js bundle (Vite left with the archived sandbox) |
 | Logging | pino + pino-http | Structured JSON; lowest-overhead Node.js logger; header redaction built-in |
 | Schema validation | Zod (shared via @workspace/api-zod) | Single source of truth for request/response shapes; TypeScript inference |
 | ORM | Drizzle | Type-safe SQL; minimal runtime; schema-first migrations |

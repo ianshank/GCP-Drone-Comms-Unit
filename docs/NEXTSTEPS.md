@@ -51,11 +51,12 @@
       (`cot.py` split). **2026-10-29:** Phase 2b landed the transport `*Options` models,
       `_queues.py` (T-3.5b, scope narrowed to shared *accounting* — see the plan's status
       note), the `tools/agents_docs/` split + `tools/_git.py`, and jetson T-4.5.
-- [ ] **Phase 3 — config sweep, dead code, docs organization** (incl. T-2.3b).
+- [x] **Phase 3 — config sweep, dead code, docs organization** (incl. T-2.3b).
       **2026-11-08:** Phase 3a landed P3-1 (literal sweep; env inventory 78 → 80), P3-2
       (dead code; `vulture` at zero), P3-3 (`docs/reviews/`, `TS_WORKSPACE_C4.md`, the docs
       citation check now gates) and P3-5 (`BLE001` on; every broad catch annotated or
-      narrowed). 3b = P3-4 / T-2.3b (TypeScript archive) follows the merge.
+      narrowed). **2026-11-09:** Phase 3b landed P3-4 / T-2.3b (the TypeScript archive;
+      lockfile 7,917 → 5,053 lines; root `Makefile` pruned to aliases of the gate).
 - [ ] **Phase 4 — `meshsa_core`** (T-7) once a release exists.
 - [ ] **Maintainer decisions** — that plan's §7 (six items; the A1 option and the `v0.3.0`
       cut gate Phase 0).
@@ -104,8 +105,9 @@
 - [x] **T-2.3a:** fixed the root Dockerfile's invalid `COPY … 2>/dev/null || true` lines (`COPY`
       is not a shell instruction); deleted dead TS scaffolding (the scripts workspace's hello module,
       the post-merge hook script, the root Makefile's `db-migrate`/`db-studio` targets).
-- [ ] **T-2.3b (deferred, part of T-2):** archive `artifacts/mockup-sandbox` and
-      `lib/api-client-react` into `archive/`, update `tsconfig`/`pnpm-workspace.yaml`, and add a
+- [x] **T-2.3b (deferred, part of T-2):** archive `archive/mockup-sandbox` and
+      `archive/api-client-react` (their names before 2026-11-09 were under `artifacts/` and
+      `lib/`), update `tsconfig`/`pnpm-workspace.yaml`, and add a
       new `ts` CI job for `api-spec`/`api-zod`/`api-server`. Deferred pending a Node.js/pnpm
       toolchain in this working environment to verify the workspace surgery safely — not dropped.
 - [x] **T-2.7 — CI determinism & hardening:** per-ref concurrency groups (main never cancelled),

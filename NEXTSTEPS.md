@@ -129,8 +129,8 @@ Items are grouped by **track** and ordered by priority within each track.
 
 - [x] Initial monorepo scaffold (pnpm, TypeScript, ESM)
 - [x] Express 5 API server with pino logging and CORS
-- [x] React 19 / Vite 7 mockup sandbox
-- [x] Shared libraries (db, api-zod, api-client-react)
+- [x] React 19 / Vite 7 mockup sandbox *(archived 2026-11-09, plan P3-4 — `archive/mockup-sandbox/`)*
+- [x] Shared libraries (db, api-zod; api-client-react archived with the sandbox)
 - [x] meshsa.ui peer review + rewritten validation plan
 - [x] All 6 named scenario tests (S1–S6)
 - [x] Gate 0–2 patch files and documentation
