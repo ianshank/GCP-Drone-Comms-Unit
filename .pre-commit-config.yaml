@@ -27,12 +27,13 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: "^deliverables/.*\\.md$"   # markdown uses trailing spaces for line breaks
+        exclude: "^deliverables/.*\\.md$|^archive/"   # markdown line breaks; archive is read-only
       - id: end-of-file-fixer
+        exclude: "^archive/"
       - id: check-yaml
         args: ["--unsafe"]                  # allows custom YAML tags (e.g. !!str)
       - id: check-json
-        exclude: "tsconfig.*\\.json$"       # tsconfig uses comments (not strict JSON)
+        exclude: "tsconfig.*\\.json$|^archive/"       # tsconfig uses comments (not strict JSON)
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files

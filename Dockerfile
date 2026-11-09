@@ -18,8 +18,8 @@
 # ── Stage 1: deps ─────────────────────────────────────────────────────────────
 FROM node:24-alpine AS deps
 
-# Install pnpm via corepack (matches engines field)
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm via corepack, pinned to the root package.json `packageManager` version
+RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
 WORKDIR /app
 

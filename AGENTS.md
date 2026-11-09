@@ -24,7 +24,7 @@ roadmap/initiative feature gets a committed spec under `docs/specs/` before code
 | [packages/jetson_yolo_gcs](packages/jetson_yolo_gcs) | Second Python distribution — Jetson perception. Own [AGENTS.md](packages/jetson_yolo_gcs/AGENTS.md), own coverage floor (96), and **no runtime dependency on `meshsa`** |
 | [flightctl](flightctl) | MAVLink bring-up: mavp2p, mavlink2rest, the simulator, and the (frozen) commander |
 | [lib](lib) | TypeScript workspace — the OpenAPI spec and the clients generated from it |
-| [artifacts](artifacts) | Standalone TS deliverables (`api-server`, `mockup-sandbox`) |
+| [artifacts](artifacts) | Standalone TS deliverables (`api-server`; the mockup sandbox is archived) |
 | [deliverables](deliverables) | Validation harnesses that pin behavior for handoff |
 | [openspec](openspec) | Change bundles (`proposal`/`design`/`tasks` + spec deltas), additive to `docs/specs/` |
 | [ops](ops) | Raspberry Pi 5 provisioning and base-node systemd deployment |
@@ -35,7 +35,7 @@ roadmap/initiative feature gets a committed spec under `docs/specs/` before code
 | [.claude](.claude) | `governance.yaml`, the scope-freeze hook config, and the subagent roster |
 | [.agents/skills](.agents/skills) | On-demand playbooks for repeatable agent workflows |
 | [.github/agents](.github/agents) | Focused custom agent modes |
-| [archive](archive) | Historical ZIP snapshots; treat as read-only |
+| [archive](archive) | Historical ZIP snapshots plus the two archived TS trees (`mockup-sandbox`, `api-client-react`); treat as read-only |
 
 ## Commands
 
@@ -120,13 +120,11 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
   hits this — a fresh checkout has no `.tsbuildinfo`.
   **`.pre-commit-config.yaml` runs a bare `pnpm -r run typecheck` with no lib build**,
   so that hook fails on a fresh clone until something has built them.
-- **`orval.config.ts` sets `clean: true` on both targets**, wiping the generated
-  directory on every codegen. There are **two** generated trees, not three:
-  `lib/api-client-react/src/generated/` and `lib/api-zod/src/generated/`. Both are
-  committed. Edit `lib/api-spec/openapi.yaml` and regenerate — never the output.
-- **`lib/api-client-react/src/custom-fetch.ts` is hand-written and load-bearing**, and
-  survives codegen only because it sits one level *above* the `clean:` scope. Moving it
-  into `generated/` deletes it on the next run.
+- **`orval.config.ts` sets `clean: true`**, wiping the generated directory on every
+  codegen. There is **one** generated tree, `lib/api-zod/src/generated/`, and it is
+  committed. Edit `lib/api-spec/openapi.yaml` and regenerate — never the output. (The
+  React client and its hand-written `custom-fetch.ts` mutator went to `archive/` with
+  the mockup sandbox in plan P3-4.)
 - `lib/db/src/schema/index.ts` is hand-written; drizzle-kit pushes SQL, it does not
   emit that file.
 
@@ -139,14 +137,11 @@ Procedure belongs in a skill (see Delegation); this section is only the surprise
   its scope. Severity, stated plainly: one static `GET /api/healthz`, no data path,
   deployed behind a platform proxy that requires an all-interfaces bind *inside* the
   container. Recorded, not remediated.
-- **`PORT` throws by design in both artifacts; `BASE_PATH` throws only in
-  `mockup-sandbox/vite.config.ts`** — it appears nowhere in `api-server`. The esbuild
-  `banner`/`external` list is load-bearing.
-- `mockup-sandbox/src/.generated/mockup-components.ts` is rewritten on every dev/build
-  **and is git-tracked**, so a plain `vite build` can dirty the working tree.
-- `components/ui` holds **55** vendored shadcn files — regenerate via the CLI, do not
-  hand-edit.
-- A `test` script exists **only** in `api-server`; `mockup-sandbox` has none.
+- **`PORT` throws by design in `api-server`.** The esbuild `banner`/`external` list is
+  load-bearing.
+- `api-server` is the only remaining artifact and the only workspace with a `test`
+  script; `mockup-sandbox` (vendored shadcn tree, git-tracked `.generated` module, the
+  all-interfaces Vite server of audit row #25) lives under `archive/` since plan P3-4.
 
 **`tools`, `.claude`, `.github`, `scripts`, `archive`**
 

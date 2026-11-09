@@ -5,7 +5,7 @@
 [![Node](https://img.shields.io/badge/Node.js-24.x-brightgreen)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-workspace-orange)](https://pnpm.io/)
 
-pnpm monorepo: REST API server + UI component preview sandbox, with
+pnpm monorepo: REST API server and its shared libraries, with
 validation deliverables for the
 [GCP-Drone-Comms-Unit](https://github.com/ianshank/GCP-Drone-Comms-Unit)
 `meshsa.ui` operator console.
@@ -27,26 +27,24 @@ validation deliverables for the
 | Package | Kind | Port | Description |
 |---|---|---|---|
 | `@workspace/api-server` | API | `$PORT` | Express 5 REST server, structured logging (pino), Drizzle ORM |
-| `@workspace/mockup-sandbox` | Design | `$PORT` | React/Vite/Tailwind UI component preview environment |
 | `@workspace/db` | Library | — | Drizzle schema, migrations, client factory |
 | `@workspace/api-zod` | Library | — | Zod schemas shared between server and clients |
-| `@workspace/api-client-react` | Library | — | Type-safe React hooks for the API |
 
 ---
 
 ## Quick start
 
 ```bash
-# Install dependencies
-pnpm install
+# Install dependencies (frozen lockfile)
+make install
 
-# Start all services (API + sandbox)
-make dev
-
-# Or start individually
-pnpm --filter @workspace/api-server run dev
-pnpm --filter @workspace/mockup-sandbox run dev
+# Run the API server locally (build + start)
+make dev-api
 ```
+
+The React/Vite mockup sandbox and the React Query client it consumed were archived in
+plan P3-4 (`archive/mockup-sandbox/`, `archive/api-client-react/`; see
+[`archive/README.md`](archive/README.md)). They are not workspace members.
 
 ---
 
@@ -56,21 +54,19 @@ See [`docs/architecture/TS_WORKSPACE_C4.md`](docs/architecture/TS_WORKSPACE_C4.m
 context/container/component diagrams.
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                  pnpm Monorepo                       │
-│                                                      │
-│  ┌──────────────┐      ┌──────────────────────────┐  │
-│  │  api-server  │      │    mockup-sandbox         │  │
-│  │  (Express 5) │      │  (React 19 / Vite 7)     │  │
-│  │  /api/*      │      │  Component preview        │  │
-│  └──────┬───────┘      └──────────────────────────┘  │
-│         │                                             │
-│  ┌──────▼─────────────────────────────────────────┐  │
-│  │            Shared Libraries                     │  │
-│  │  @workspace/db   @workspace/api-zod             │  │
-│  │  @workspace/api-client-react                   │  │
-│  └────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│                 pnpm Monorepo                    │
+│                                                  │
+│  ┌──────────────┐                                │
+│  │  api-server  │  Express 5 · pino · Drizzle    │
+│  └──────┬───────┘                                │
+│         │ imports                                │
+│  ┌──────▼───────────────────────────────┐        │
+│  │  @workspace/db   @workspace/api-zod  │        │
+│  └──────────────────────────────────────┘        │
+│                                                  │
+│  lib/api-spec/openapi.yaml ──orval──▶ api-zod    │
+└──────────────────────────────────────────────────┘
 ```
 
 ---
@@ -80,7 +76,7 @@ context/container/component diagrams.
 ### Prerequisites
 
 - Node.js ≥ 24
-- pnpm ≥ 9 (`npm install -g pnpm`)
+- pnpm, at the version pinned by `packageManager` in `package.json` (`corepack enable` selects it)
 - PostgreSQL (or Replit managed DB)
 
 ### Environment variables
@@ -100,7 +96,7 @@ SESSION_SECRET=...    # For future auth middleware
 
 > **Never commit secrets.** All sensitive values must be in environment
 > variables or Replit Secrets — never in source code or config files.
-> Run `make secrets-check` to scan for leaks before committing.
+> `gitleaks` runs in pre-commit and again in the CI `Secret scan` step.
 
 ---
 
@@ -139,7 +135,10 @@ make typecheck   # TypeScript strict type checking
 make lint        # ESLint (no warnings permitted)
 make test        # Vitest unit + integration tests
 make build       # Production bundle (esbuild)
-make secrets-check  # gitleaks scan
+```
+
+`make validate` is exactly steps 1–4 of `scripts/validate-pre-pr.sh`; `make validate-pre-pr`
+runs the whole gate (TypeScript, Python and governance).
 ```
 
 ---
@@ -175,10 +174,6 @@ for the step-by-step integration guide.
 │   │   │   ├── lib/         # logger, shared utilities
 │   │   │   └── routes/      # Express route handlers
 │   │   └── build.mjs        # esbuild bundle script
-│   └── mockup-sandbox/      # React component preview
-│       └── src/
-│           ├── components/  # UI components
-│           └── hooks/       # Custom React hooks
 ├── deliverables/            # External repo validation artifacts
 │   └── meshsa-ui-validation/
 ├── docs/                    # CHARTER, ROADMAP, C4, NEXTSTEPS and the plans (stable + working)
@@ -188,12 +183,12 @@ for the step-by-step integration guide.
 │   └── specs/               # One spec per roadmap/initiative feature
 ├── lib/
 │   ├── api-zod/             # Shared Zod schemas
-│   ├── api-client-react/    # React API hooks
 │   └── db/                  # Drizzle ORM schema + client
 ├── scripts/
 │   ├── validate-pre-pr.sh   # Full pre-PR validation gate
 │   └── hooks/               # Git hook scripts
-├── Makefile                 # Developer convenience targets
+├── archive/                 # Read-only history: ZIP snapshots + the archived TS trees
+├── Makefile                 # Thin aliases for the TS steps of scripts/validate-pre-pr.sh
 ├── .gitleaks.toml           # Secret scanning configuration
 ├── .pre-commit-config.yaml  # Pre-commit hook configuration
 └── pnpm-workspace.yaml      # pnpm workspace definition
@@ -223,7 +218,7 @@ for publish instructions.
 2. Write tests for any new behaviour
 3. Run `make validate` — all checks must pass
 4. Open a PR with a description referencing the relevant issue or deliverable
-5. Ensure `make secrets-check` produces no findings
+5. Let pre-commit run `gitleaks`; CI runs it again and is the non-bypassable copy
 
 ### Conventions
 

@@ -6,7 +6,7 @@
     "preinstall": "node -e \"if (!/pnpm/.test(process.env.npm_config_user_agent || '')) { console.error('Use pnpm instead'); process.exit(1); }\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
     "test:coverage": "pnpm -r --if-present run test:coverage",
     "lint": "pnpm -r --if-present run lint",
@@ -17,12 +17,8 @@
   "type": "module",
   "private": true,
   "packageManager": "pnpm@10.28.0+sha512.05df71d1421f21399e053fde567cea34d446fa02c76571441bfc1c7956e98e363088982d940465fd34480d4d90a0668bc12362f8aa88000a64e83d0b0e47be48",
-  "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
-  },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
-    "@rollup/rollup-win32-x64-msvc": "^4.62.3",
     "@typescript-eslint/eslint-plugin": "^8.35.1",
     "@typescript-eslint/parser": "^8.35.1",
     "eslint": "^9.28.0",

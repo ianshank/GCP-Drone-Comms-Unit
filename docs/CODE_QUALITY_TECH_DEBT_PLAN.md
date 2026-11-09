@@ -197,7 +197,7 @@ classes of literal the sweep did not cover. The config-guardian sweep run for th
 **C2. Unrecorded all-interfaces surfaces (record, do not change) — recorded 2026-10-27 as audit rows #23–#25.**
 `flightctl/systemd/fts.env.example:14-16` (`FTS_USER/API/DP_ADDRESS=0.0.0.0`, the shipped FTS
 deployment example), `flightctl/systemd/mavp2p.env.example:4` (the systemd twin of audit
-row #19, which cites only `start_all.sh`), and `artifacts/mockup-sandbox/vite.config.ts:60,68`
+row #19, which cites only `start_all.sh`), and `archive/mockup-sandbox/vite.config.ts:60,68` (then under `artifacts/`; archived by P3-4)
 (`host: "0.0.0.0"` + `allowedHosts: true`, Replit-era dev tooling). All three are outside
 `bind_guard`'s Python-only scope; the audit's inventory is the control, so they get rows with
 the same "accepted, not remediated" treatment as #18.
@@ -272,7 +272,7 @@ dataclass fields, Protocol methods, the pypubsub `interface` parameter). What su
 | `meshsa/transports/detection_ingest.py:66` `self._token = token` | assigned, never read; `validate_bind` consumed it two lines earlier |
 | `meshsa/fpv/telemetry_store.py:28` `self._history_len` | assigned, never read; the in-file comment already says "retained for constructor compatibility" pending T-5.4 |
 | `lib/db/src/index.ts:13` `export const pool` | consumed only by the next line in the same file |
-| `lib/api-client-react/src/custom-fetch.ts` exports `BodyType`, `ApiError`, `ResponseParseError`, `CustomFetchOptions` | zero references including the orval-generated trees (`ErrorType` *is* used). **Kept (P3-2):** orval imports `BodyType` by contract once an endpoint has a body, and the error classes are the library's public surface — reclassified to D2 |
+| `archive/api-client-react/src/custom-fetch.ts` (formerly under `lib/`) exports `BodyType`, `ApiError`, `ResponseParseError`, `CustomFetchOptions` | zero references including the orval-generated trees (`ErrorType` *is* used). **Kept (P3-2):** orval imports `BodyType` by contract once an endpoint has a body, and the error classes are the library's public surface — reclassified to D2; the whole tree then went to `archive/` with its only consumer (P3-4) |
 | `meshsa[tak] = []`, `jetson_yolo_gcs[hailo] = []` | empty extras — install no-ops that imply a dependency set that does not exist |
 | `twine` in both `[dev]` extras | `release.yml` installs its own copy; nothing local invokes it |
 | `scripts/` pnpm workspace | `@workspace/scripts` with `"files": []` and **zero** `.ts` files, still typechecked by `package.json`'s `typecheck` script (documented scaffolding — fold into P3-4) |
@@ -598,6 +598,28 @@ honest sense (43 → 14 bare),
 but the stronger result is that a new silent `except Exception` can no longer land.
 Ratchets re-measured: unchanged at every anchor.
 
+**Status (2026-11-09, Phase 3b):** P3-4 / T-2.3b landed (Phase 3b PR). The mockup sandbox and
+the React client moved from `artifacts/` and `lib/` to `archive/mockup-sandbox` and
+`archive/api-client-react` (indexed in `archive/README.md`); the
+`scripts/` pnpm workspace (`"files": []`, zero sources) is gone, leaving `scripts/` as the
+shell-script directory it always was. `pnpm-workspace.yaml` lost the Replit leftovers
+(`lib/integrations/*`, the `@replit/*` and `stripe-replit-sync` release-age allowlist, the
+`@replit/*` catalog pins) and every catalog entry only the archived trees used — the
+catalog is `@types/node`, `drizzle-orm`, `zod`. The root `package.json` lost
+`@replit/connectors-sdk` and the Windows-only rollup binary. `orval.config.ts` has one
+target; the root `tsconfig.json` three references → two. The lockfile re-resolved from
+7,917 to 5,053 lines and `pnpm install --frozen-lockfile` + the four TS gates pass. The
+root `Makefile` is 16 targets of thin aliases: `validate` = steps 1–4 of
+`validate-pre-pr.sh` exactly, `install` uses the frozen lockfile, and `dev`/`dev-sandbox`/
+`format`/`secrets-check`/`db-push`/`py-check`/`ci`/`list-packages`/`outdated` are gone
+(gitleaks runs in pre-commit and CI; nothing called the rest). The Dockerfile's corepack
+line pins the `packageManager` version instead of `pnpm@latest`. Audit row #25 is
+retired by archival, not remediated. **Left as found, for §7:** the esbuild/rollup/
+lightningcss/tailwind platform-binary `overrides` — their comment said "replit uses
+linux-x64 only", and they exclude the macOS and Windows binaries, so a contributor on
+either cannot run esbuild from this lockfile; widening them is a maintainer decision
+(§7 item 7). Phase 3 is complete.
+
 ### Phase 4 — Reuse at distribution scale (after a release exists)
 
 | ID | Item | Theme | Bundle | Size |
@@ -695,7 +717,13 @@ Phase 0 (CI honest)  ──►  Phase 1 (guardrails)  ──►  Phase 2 (founda
    scope with no production entry point (T-5.1b). This plan does **not** touch it; the decision
    to wire or retire it is yours and predates this pass.
 6. **`docs/reviews/` move (H1)** — low risk, but it is "reorganizing folders", which the
-   engineering rules reserve for deliberate decisions. Yes/no.
+   engineering rules reserve for deliberate decisions. Yes/no. *(Done in P3-3.)*
+7. **Platform-binary `overrides` in `pnpm-workspace.yaml`** — the Replit-era block excludes
+   every non-linux-x64 esbuild/rollup/lightningcss/tailwind binary, so a macOS or Windows
+   contributor cannot run the TS gate from this lockfile. P3-4 left it as found (the CI
+   runner is linux-x64 and the lockfile stays small). Widen to darwin-arm64/x64 and win32-x64,
+   or keep CI-only? Recommendation: widen once a second contributor needs it; until then the
+   block is documented, not hidden.
 
 ---
 
