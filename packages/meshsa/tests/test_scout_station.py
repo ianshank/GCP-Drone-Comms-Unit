@@ -170,3 +170,36 @@ async def test_auth_gates_data_endpoints() -> None:
         assert ok.status == 200
         assert (await client.get("/export.geojson")).status == 401
         assert (await client.post("/detections/d1/status", json={"status": "tagged"})).status == 401
+
+
+def test_render_page_injects_poll_interval_and_tile_url_as_safe_literals() -> None:
+    """Plan P3-1 / C3: the two page settings come from ScoutConfig, not the template."""
+    from meshsa.scout.station._html import render_page
+
+    default = render_page(None)
+    assert "setInterval(refresh, 3000)" in default
+    assert "'https://tile.openstreetmap.org/{z}/{x}/{y}.png'" not in default  # no bare literal
+    assert '"https://tile.openstreetmap.org/{z}/{x}/{y}.png"' in default  # the JSON literal
+    tuned = render_page(None, poll_interval_s=0.5, tile_url="http://tiles.local/</script>{z}")
+    assert "setInterval(refresh, 500)" in tuned
+    assert "</script>{z}" not in tuned  # escaped like the token
+    # The exact js_literal output: both `<` and `>` as \uXXXX escapes, the rest verbatim.
+    assert '"http://tiles.local/\\u003c/script\\u003e{z}"' in tuned
+    assert "setInterval(refresh, 1)" in render_page(None, poll_interval_s=0.0001)  # floored
+
+
+async def test_build_app_threads_the_page_settings() -> None:
+    app = build_app(_store(), poll_interval_s=7.0, tile_url="http://tiles.local/{z}/{x}/{y}.png")
+    async with TestClient(TestServer(app)) as client:
+        body = await (await client.get("/")).text()
+    assert "setInterval(refresh, 7000)" in body
+    assert "http://tiles.local/{z}/{x}/{y}.png" in body
+
+
+def test_render_page_substitutes_placeholders_in_one_pass() -> None:
+    """A token spelling another placeholder is injected verbatim, never rewritten."""
+    from meshsa.scout.station._html import render_page
+
+    page = render_page("x__SCOUT_TILE_URL__y", tile_url="http://t.local/{z}")
+    assert '"x__SCOUT_TILE_URL__y"' in page  # the token, as a JSON literal, untouched
+    assert page.count("http://t.local/{z}") == 1  # the tile URL landed exactly once

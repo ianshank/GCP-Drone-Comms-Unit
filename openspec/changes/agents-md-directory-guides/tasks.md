@@ -9,7 +9,7 @@
 > that `check_task_sync.py` requires. Split `T-x.ya/b` records honest partial execution.
 > One review stop point, after Step 1.
 
-rev.1–rev.3 are superseded. `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` records four review
+rev.1–rev.3 are superseded. `docs/reviews/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` records four review
 rounds; round 4 cut the change from 64 new files to 6 and is why this file is a third its
 former length. The **trap register below is fully reused** — it is the artifact that
 survived every round, and three adversarial passes made it accurate. What changed is where
@@ -31,7 +31,7 @@ Covers `flightctl`, `lib`, `artifacts`, `tools`, `docs`, `openspec`, `deliverabl
 | `lib` | Composite `dist/` must build before `pnpm -r run typecheck`. `orval.config.ts` sets `clean: true`, wiping the generated directory each codegen. **[corrected]** Two generated trees here, not three |
 | `artifacts` | **[corrected: added]** `api-server/src/index.ts` calls `app.listen(port, cb)` with **no host argument** → binds all interfaces; `src/middlewares/` is `.gitkeep` only; `cors()` is unrestricted-origin; no auth. Absent from `docs/AUDIT_M2_AUTH.md`, outside `bind_guard`'s Python-only `SCAN_GLOBS`. See T-0.3. Also `PORT`/`BASE_PATH` throw by design; the esbuild `banner`/`external` list is load-bearing. **[corrected]** `test` exists only in `api-server` |
 | `tools` | Coverage is **measured, not gated**, deliberately. `scope_freeze.py` must keep failing open. **[corrected]** `check_tool_pins.py::TOOLS` covers `ruff` and `mypy` only — nothing checks PyYAML |
-| `docs` | No spec, no merge. Source cites specs by `§`, so renumbering breaks docstrings. `docs/C4.md` and `docs/architecture/C4.md` are different documents with one filename |
+| `docs` | No spec, no merge. Source cites specs by `§`, so renumbering breaks docstrings. `docs/C4.md` and `docs/architecture/TS_WORKSPACE_C4.md` are different documents with one filename |
 | `openspec` | `check_task_sync.py` parses `- [ ] T-x.y` with the id **immediately** after the bracket; bolding it makes every checkbox invisible (rev.1 scored 0/32) |
 | `deliverables` | `xfail(strict=True)` is the contract. Test files inline reference implementations deliberately — do **not** DRY them. **[corrected]** Retirement is `code-hygiene-modularity` T-10.2b, not `NEXTSTEPS.md` |
 | `.github` | Actions SHA-pinned; gitleaks version+checksum must match the pre-commit rev; the `governance` step's `shell: bash` is load-bearing (default shell lacks `pipefail`). **[corrected]** mypy runs at four points, not three |

@@ -198,16 +198,38 @@ PACKAGE_SOURCE_DIR = "src"
 #: file's repo-relative path, then by token, with the rationale as the value. The
 #: canonical case is a guide explaining why a given instruction file *cannot* be
 #: created. An entry with an empty rationale is itself a finding.
-CITATION_EXCEPTIONS: dict[str, dict[str, str]] = {}
+CITATION_EXCEPTIONS: dict[str, dict[str, str]] = {
+    # Planned package (plan P4-1 / T-7): the spec and the plans describe a distribution that
+    # does not exist yet, by path, because the path *is* the decision being recorded.
+    "docs/specs/meshsa-core.md": {
+        "packages/meshsa_core": "planned distribution; the spec names the path it will take",
+        "packages/meshsa_core/": "planned distribution; the spec names the path it will take",
+        "packages/meshsa_core/src/meshsa_core/": "planned layout of the distribution above",
+        "hardware/bench": "the spec states this change has no bench surface; the path is the "
+        "negative claim, not a reference",
+    },
+    "docs/NEXTSTEPS.md": {
+        "packages/meshsa_core": "planned distribution (T-7); exists once Phase 4 lands",
+    },
+    "docs/CODE_QUALITY_TECH_DEBT_PLAN.md": {
+        "packages/meshsa_core": "planned distribution (P4-1); exists once Phase 4 lands",
+    },
+    # A .gitignore pattern quoted as such, not a tree path.
+    "docs/CHARTER_ALIGNMENT_AUDIT_2026-07-31.md": {
+        ".claude/worktrees/": "the audit quotes the .gitignore rule it added; the directory is "
+        "harness-created and untracked by design",
+    },
+}
 
-#: Documents swept for dead path citations as an ADVISORY (plan P1-3): each finding is
-#: printed as a warning and never changes the exit code. These are not instruction files,
-#: so their checks are not the trusted-context obligation above — but a dead path in the
-#: README or the stable plan is the same reference rot, and it was invisible until now.
-#: Gating waits for the docs/ reorganization (plan H1 / P3-3); gating today would fail on
-#: historical review documents that cite paths which no longer exist by design.
-#: Patterns match one directory level: ``docs/*.md`` does not reach ``docs/reviews/``.
-DOCS_ADVISORY_GLOBS: tuple[str, ...] = (
+#: Documents whose dead path citations are FINDINGS (plan P1-3 advisory → P3-3 gating).
+#: These are not instruction files, so this is not the trusted-context obligation above —
+#: but a dead path in the README or the stable plan is the same reference rot. Gating became
+#: possible once the historical records moved to ``docs/reviews/`` (plan H1): they cite
+#: paths that no longer exist *by design* and are outside this list. Patterns match one
+#: directory level: ``docs/*.md`` does not reach ``docs/reviews/``. A citation a stable doc
+#: must make to a path that does not exist yet (a planned package) is declared in
+#: ``CITATION_EXCEPTIONS`` with its rationale, like a guide's.
+DOCS_CITATION_GLOBS: tuple[str, ...] = (
     "README.md",
     "docs/*.md",
     "docs/specs/*.md",

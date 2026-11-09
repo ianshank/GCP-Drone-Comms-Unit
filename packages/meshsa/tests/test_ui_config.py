@@ -134,3 +134,14 @@ def test_log_ring_level_validated_at_parse() -> None:
 @pytest.mark.parametrize("raw", ["INFO", "  Warning ", "debug"])
 def test_log_ring_level_normalised(raw: str) -> None:
     assert UIConfig(log_ring_level=raw).log_ring_level == raw.strip().lower()
+
+
+def test_poll_interval_rejects_non_finite() -> None:
+    """JSON `Infinity` passes gt=0 but would raise at render time (int(inf * 1000))."""
+    import pytest
+    from pydantic import ValidationError
+
+    from meshsa.ui.config import UIConfig
+
+    with pytest.raises(ValidationError):
+        UIConfig(poll_interval_s=float("inf"))

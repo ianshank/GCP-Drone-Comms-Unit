@@ -7,7 +7,7 @@ target-version = "py310"
 extend-exclude = [".venv", "build", "dist"]
 
 [lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+select = ["E", "F", "I", "UP", "B", "BLE", "SIM", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 ignore = [
     "E501", # line length handled by the formatter
 ]
@@ -15,6 +15,11 @@ ignore = [
 [lint.per-file-ignores]
 # PLR0913: a test's signature is its fixture list, not a design smell.
 "**/tests/**" = ["PLR0913"]
+# BLE001 (plan P3-5): run_commander.py is the frozen command path (c_gate_met false), so its
+# three JSON-body catches cannot be annotated until T-8; deliverables/ inlines reference
+# implementations by design (AGENTS.md Traps) and must not be edited to satisfy a linter.
+"flightctl/run_commander.py" = ["BLE001"]
+"deliverables/**" = ["BLE001"]
 
 # Complexity RATCHET (docs/CODE_QUALITY_TECH_DEBT_PLAN.md P1-1) for flightctl/, tools/ and
 # deliverables/: each threshold is today's maximum and names the function that sets it.

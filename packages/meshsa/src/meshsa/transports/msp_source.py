@@ -25,7 +25,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ..defaults import DEFAULT_LINK_LOG_INTERVAL_S, DEFAULT_LOG_EVERY_N, DEFAULT_QUEUE_MAXSIZE
+from ..defaults import (
+    DEFAULT_LINK_LOG_INTERVAL_S,
+    DEFAULT_LOG_EVERY_N,
+    DEFAULT_MSP_SERIAL_DEVICE,
+    DEFAULT_QUEUE_MAXSIZE,
+    DEFAULT_SOURCE_POLL_INTERVAL_S,
+)
 from ..protocols import Clock
 from ..registry import transport_registry
 from ._options import resolve_options
@@ -43,7 +49,7 @@ def _default_board_factory(
         from yamspy import MSPy
 
         board = MSPy(
-            device=options.get("device", "/dev/ttyACM0"),
+            device=options.get("device", DEFAULT_MSP_SERIAL_DEVICE),
             loglevel=options.get("loglevel", "WARNING"),
             baudrate=int(options.get("baudrate", 115200)),
         )
@@ -80,7 +86,7 @@ class MspOptions:
     callsign: str | None = None
     coord_scale: float = 1e7
     alt_scale: float = 1.0
-    poll_interval_s: float = 1.0
+    poll_interval_s: float = DEFAULT_SOURCE_POLL_INTERVAL_S
     clock: Clock | None = None
     queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE
     log_every_n: int = DEFAULT_LOG_EVERY_N

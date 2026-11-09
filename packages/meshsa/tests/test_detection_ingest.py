@@ -80,3 +80,17 @@ async def test_loopback_bind_does_not_warn():
         assert not any(entry["log_level"] == "warning" for entry in cap)
     finally:
         await t.stop()
+
+
+def test_datagram_ingest_error_is_logged_and_receiver_survives() -> None:
+    """A raising ingest must not propagate to the loop (which would tear the endpoint down)."""
+    from meshsa.transports.detection_ingest import _DetectionDatagramProtocol
+
+    def boom(_data: bytes) -> None:
+        raise RuntimeError("bad frame")
+
+    proto = _DetectionDatagramProtocol(boom)
+    with structlog.testing.capture_logs() as cap:
+        proto.datagram_received(b"x", ("127.0.0.1", 1))  # must not raise
+    assert [e["event"] for e in cap] == ["failed to ingest detection datagram"]
+    assert cap[0]["addr"] == ("127.0.0.1", 1)

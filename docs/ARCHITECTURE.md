@@ -134,7 +134,7 @@ older builds load configs that contain transports they do not yet understand.
 | Change Envelope shape (rename / remove) | Bump `SCHEMA_VERSION`, document in CHANGELOG|
 | Drop support for an older build         | Raise `MIN_COMPATIBLE_SCHEMA`, document     |
 
-See [docs/AUDIT_REPORT.md](AUDIT_REPORT.md) for known gaps and the prioritized
+See [docs/reviews/AUDIT_REPORT.md](reviews/AUDIT_REPORT.md) for known gaps and the prioritized
 backlog.
 
 ## FPV ground-side telemetry subsystem

@@ -300,16 +300,16 @@ class TakTcpTransport(AbstractTransport):
             if self._reader is None:
                 try:
                     self._reader, self._writer = await self._connector()
-                except Exception:
-                    _log.warning("tak_tcp connect failed", transport=self.name)
+                except Exception:  # noqa: BLE001 - link-loss resilience: back off and retry whatever the connector raised
+                    _log.warning("tak_tcp connect failed", transport=self.name, exc_info=True)
                     await self._backoff.sleep_and_advance()
                     continue
                 self._backoff.reset()
                 self.reconnects += 1
             try:
                 await self._read_loop(self._reader)
-            except Exception:
-                _log.warning("tak_tcp read error", transport=self.name)
+            except Exception:  # noqa: BLE001 - link-loss resilience: a read error means reconnect, not exit
+                _log.warning("tak_tcp read error", transport=self.name, exc_info=True)
             finally:
                 await self._aclose_writer()
                 self._reader = None
@@ -335,8 +335,8 @@ class TakTcpTransport(AbstractTransport):
             waiter = getattr(writer, "wait_closed", None)
             if waiter is not None:
                 await waiter()
-        except Exception:  # best-effort during shutdown / reconnect
-            _log.debug("tak_tcp writer close error", transport=self.name)
+        except Exception:  # noqa: BLE001 - teardown is best-effort during shutdown / reconnect
+            _log.debug("tak_tcp writer close error", transport=self.name, exc_info=True)
 
     async def send(self, data: bytes) -> None:
         if not self._started:
@@ -349,8 +349,8 @@ class TakTcpTransport(AbstractTransport):
         try:
             writer.write(data + self._delimiter)
             await writer.drain()
-        except Exception:
-            _log.warning("tak_tcp send failed; dropping frame", transport=self.name)
+        except Exception:  # noqa: BLE001 - a send fault drops one frame; the link loop owns reconnecting
+            _log.warning("tak_tcp send failed; dropping frame", transport=self.name, exc_info=True)
 
     async def stop(self) -> None:
         self._stopping = True

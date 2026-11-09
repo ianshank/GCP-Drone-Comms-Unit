@@ -27,6 +27,7 @@ from ..defaults import (
     DEFAULT_BACKOFF_FACTOR,
     DEFAULT_BACKOFF_INITIAL_S,
     DEFAULT_BACKOFF_MAX_S,
+    DEFAULT_MESHTASTIC_PORTNUM,
     DEFAULT_QUEUE_MAXSIZE,
 )
 from ..registry import transport_registry
@@ -109,7 +110,7 @@ class MeshtasticOptions:
     unsubscribe: SubscribeFn | None = None
     topic: str = "meshtastic.receive"
     lost_topic: str = "meshtastic.connection.lost"
-    portnum: int = 256  # PRIVATE_APP
+    portnum: int = DEFAULT_MESHTASTIC_PORTNUM  # PRIVATE_APP
     portnum_name: str = "PRIVATE_APP"
     destination: str = "^all"
     want_ack: bool = False
@@ -219,8 +220,8 @@ class MeshtasticTransport(AbstractTransport):
             if self._iface is None:
                 try:
                     self._iface = self._factory()
-                except Exception:
-                    _log.warning("meshtastic connect failed", transport=self.name)
+                except Exception:  # noqa: BLE001 - link-loss resilience: back off and retry whatever the interface factory raised
+                    _log.warning("meshtastic connect failed", transport=self.name, exc_info=True)
                     await self._backoff.sleep_and_advance()
                     continue
                 self._backoff.reset()
@@ -238,8 +239,8 @@ class MeshtasticTransport(AbstractTransport):
         if iface is not None:
             try:
                 iface.close()
-            except Exception:
-                _log.debug("meshtastic close error", transport=self.name)
+            except Exception:  # noqa: BLE001 - teardown is best-effort; never raise on close
+                _log.debug("meshtastic close error", transport=self.name, exc_info=True)
 
     def _teardown_subs(self) -> None:
         if self._subscribed:
@@ -262,8 +263,10 @@ class MeshtasticTransport(AbstractTransport):
                 wantAck=self.want_ack,
                 channelIndex=self.channel_index,
             )
-        except Exception:
-            _log.warning("meshtastic send failed; dropping frame", transport=self.name)
+        except Exception:  # noqa: BLE001 - a send fault drops one frame; the link loop owns reconnecting
+            _log.warning(
+                "meshtastic send failed; dropping frame", transport=self.name, exc_info=True
+            )
 
     def _on_receive(self, packet: dict[str, Any] | None = None, interface: Any = None) -> None:
         decoded = (packet or {}).get("decoded") or {}

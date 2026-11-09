@@ -18,12 +18,13 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 
 import structlog
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .._envconfig import apply_overrides, env_key, parse_token
 from .._parsing import parse_int
 from .._web import ServiceAuth, api_json, guarded, healthz, read_json_or_none, register_routes
-from ..defaults import DEFAULT_LOOPBACK_HOST, PORT_LLM
+from ..cli import configure_logging
+from ..defaults import DEFAULT_HTTP_SOURCE_TIMEOUT_S, DEFAULT_LOOPBACK_HOST, PORT_LLM
 
 # ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
 # ``as`` alias makes the re-export visible to mypy's ``no_implicit_reexport``.
@@ -74,11 +75,15 @@ class ServerConfig(BaseModel):
 
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    token: str | None = None
+    token: str | None = Field(default=None, repr=False)
     mavlink2rest_url: str = DEFAULT_MAVLINK2REST_URL
     drone_uid: str = DEFAULT_DRONE_UID
     fts_tracks_url: str = DEFAULT_FTS_TRACKS_URL
     max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
+    #: Total HTTP timeout on each upstream source read (``MESHSA_LLM_SOURCE_TIMEOUT_S``).
+    source_timeout_s: float = Field(
+        default=DEFAULT_HTTP_SOURCE_TIMEOUT_S, gt=0.0, allow_inf_nan=False
+    )
 
 
 def _port(name: str, raw: str) -> int:
@@ -154,8 +159,10 @@ async def chat_reply(
         return {"error": f"prompt too long (max {max_prompt_chars} chars)"}, 400
     try:
         reply = await agent.ask(prompt.strip())
-    except Exception as exc:
-        _log.warning("sa_assistant_error", error=str(exc), error_type=type(exc).__name__)
+    except Exception as exc:  # noqa: BLE001 - HTTP boundary: any agent/tool failure is one generic 502
+        _log.warning(
+            "sa_assistant_error", error=str(exc), error_type=type(exc).__name__, exc_info=True
+        )
         return {"error": _UPSTREAM_ERROR}, 502
     return {"reply": reply.text, "tools": reply.tool_calls, "stop_reason": reply.stop_reason}, 200
 
@@ -198,6 +205,7 @@ def main() -> None:  # pragma: no cover - process entry point
     Requires the ``[llm]`` extra and ``ANTHROPIC_API_KEY``. Missing optional
     dependencies produce a clear install hint rather than a raw import traceback.
     """
+    configure_logging()
     try:
         import aiohttp  # noqa: F401  # presence check; web imported below
         import anthropic  # noqa: F401  # presence check; used lazily by build_agent
@@ -215,8 +223,10 @@ def main() -> None:  # pragma: no cover - process entry point
 
     cfg = resolve_config(os.environ)
     validate_bind(cfg.host, cfg.token)  # fail closed before opening a socket
-    telemetry = Mavlink2RestSource(cfg.mavlink2rest_url, uid=cfg.drone_uid)
-    tracks = FtsTrackSource(cfg.fts_tracks_url)
+    telemetry = Mavlink2RestSource(
+        cfg.mavlink2rest_url, uid=cfg.drone_uid, timeout_s=cfg.source_timeout_s
+    )
+    tracks = FtsTrackSource(cfg.fts_tracks_url, timeout_s=cfg.source_timeout_s)
     agent = build_agent(telemetry, tracks)
     web.run_app(
         build_app(agent, cfg.token, max_prompt_chars=cfg.max_prompt_chars),

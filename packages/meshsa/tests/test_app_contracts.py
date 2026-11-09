@@ -550,6 +550,32 @@ async def test_malformed_json_body_is_a_400_not_a_500(
         assert "error" in await resp.json()
 
 
+@pytest.mark.parametrize(
+    "factory, path, headers",
+    [
+        (_ui_app, "/api/chat", BEARER),
+        (_station_app, "/detections/d1/status", BEARER),
+        (_llm_app, "/chat", BEARER),
+    ],
+)
+async def test_unknown_charset_body_is_a_400_not_a_500(
+    factory: Any, path: str, headers: dict[str, str]
+) -> None:
+    """aiohttp decodes the body with the *client's* charset; an unknown one raises LookupError.
+
+    Regression pin (plan P3-5): narrowing `read_json_or_none` to ValueError alone let this
+    escape as a 500 on all three JSON routes while every existing test fed it a ValueError.
+    """
+    async with _serve(factory()) as client:
+        resp = await client.post(
+            path,
+            data=b"{}",
+            headers={**headers, "Content-Type": "application/json; charset=bogus-enc"},
+        )
+        assert resp.status == 400
+        assert "error" in await resp.json()
+
+
 # ── salvaged deliverables scenarios (S5b/S5c/S6a/S6b) ────────────────────────
 
 

@@ -33,7 +33,7 @@ from typing import Any
 
 import structlog
 
-from ..defaults import DEFAULT_QUEUE_MAXSIZE
+from ..defaults import DEFAULT_QUEUE_MAXSIZE, DEFAULT_SOURCE_POLL_INTERVAL_S
 from ..fpv.config import CrsfLinkSettings, ParserSettings
 from ..fpv.crsf.link import CrsfLink
 from ..fpv.crsf.telemetry import GpsSensor, TelemetryParser
@@ -71,7 +71,7 @@ class CrsfSourceTransport(PollingSourceTransport):
         parser_settings: ParserSettings | None = None,
         source_uid: str = "uav-1",
         callsign: str | None = None,
-        poll_interval_s: float = 1.0,
+        poll_interval_s: float = DEFAULT_SOURCE_POLL_INTERVAL_S,
         clock: Clock | None = None,
         queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         **_options: Any,

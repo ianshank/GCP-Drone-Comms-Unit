@@ -56,8 +56,13 @@ def load_plugins(
         for ep in resolve(group):
             try:
                 ep.load()
-            except Exception:
-                _log.warning("failed to load plugin", group=group, name=getattr(ep, "name", "?"))
+            except Exception:  # noqa: BLE001 - a third-party entry point can raise anything; one bad plugin must not stop the rest
+                _log.warning(
+                    "failed to load plugin",
+                    group=group,
+                    name=getattr(ep, "name", "?"),
+                    exc_info=True,
+                )
                 continue
             loaded.append(ep.name)
             _log.info("loaded plugin", group=group, name=ep.name)

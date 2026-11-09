@@ -1,19 +1,13 @@
 """Heartbeat-driven pre-arm health provider (fakes-only)."""
 
+from conftest import SettableClock
+
 from meshsa.command import HeartbeatHealth
 from meshsa.fpv.link_health import HealthState
 
 
-class SettableClock:
-    def __init__(self, t: float = 100.0) -> None:
-        self.t = t
-
-    def now(self) -> float:
-        return self.t
-
-
 def test_no_heartbeat_yet_is_none():
-    assert HeartbeatHealth(SettableClock())() is None
+    assert HeartbeatHealth(SettableClock(100.0))() is None
 
 
 def test_fresh_heartbeat_permits_arming():

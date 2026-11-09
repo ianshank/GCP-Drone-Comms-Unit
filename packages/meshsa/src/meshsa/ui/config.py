@@ -33,9 +33,9 @@ class UIConfig(BaseModel):
     enabled: bool = False
     host: str = DEFAULT_LOOPBACK_HOST
     port: int = Field(default=DEFAULT_UI_PORT, gt=0, lt=65536)
-    token: str | None = None
+    token: str | None = Field(default=None, repr=False)
     map_style_url: str = "https://demotiles.maplibre.org/style.json"
-    poll_interval_s: float = Field(default=2.0, gt=0.0)
+    poll_interval_s: float = Field(default=2.0, gt=0.0, allow_inf_nan=False)
     track_stale_s: float = Field(default=300.0, gt=0.0)
     detection_stale_s: float = Field(default=3600.0, gt=0.0)
     max_tracks: int = Field(default=256, gt=0)

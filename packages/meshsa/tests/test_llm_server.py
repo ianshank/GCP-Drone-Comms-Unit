@@ -11,6 +11,7 @@ from meshsa.llm.server import (
     DEFAULT_HOST,
     DEFAULT_MAX_PROMPT_CHARS,
     DEFAULT_PORT,
+    ServerConfig,
     authorize,
     chat_reply,
     is_loopback,
@@ -96,6 +97,7 @@ def test_resolve_config_defaults_when_env_empty() -> None:
     assert cfg.mavlink2rest_url == DEFAULT_MAVLINK2REST_URL
     assert cfg.drone_uid == DEFAULT_DRONE_UID
     assert cfg.fts_tracks_url == DEFAULT_FTS_TRACKS_URL
+    assert cfg.source_timeout_s == 3.0  # defaults.DEFAULT_HTTP_SOURCE_TIMEOUT_S
 
 
 def test_resolve_config_rejects_bad_or_out_of_range_port() -> None:
@@ -213,3 +215,12 @@ async def test_chat_reply_with_custom_max_prompt_chars() -> None:
     # Custom limit = 10, exact length
     body2, status2 = await chat_reply(agent, {"prompt": "A" * 10}, max_prompt_chars=10)
     assert status2 == 200
+
+
+def test_source_timeout_is_env_reachable_and_must_be_positive() -> None:
+    """Plan P3-1 / C3: the only HTTP timeout on the assistant's upstream reads."""
+    assert resolve_config({"MESHSA_LLM_SOURCE_TIMEOUT_S": "0.25"}).source_timeout_s == 0.25
+    with pytest.raises(ValueError):
+        resolve_config({"MESHSA_LLM_SOURCE_TIMEOUT_S": "0"})
+    with pytest.raises(ValueError):
+        ServerConfig(source_timeout_s=float("inf"))  # non-finite is rejected on every path

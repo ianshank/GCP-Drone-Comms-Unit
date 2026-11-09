@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ._web import ServiceAuth, api_json, guarded, text_body
 from .defaults import DEFAULT_LOOPBACK_HOST, PORT_HEALTH
@@ -35,7 +35,7 @@ class HealthConfig(BaseModel):
     enabled: bool = False
     host: str = DEFAULT_LOOPBACK_HOST
     port: int = PORT_HEALTH
-    token: str | None = None
+    token: str | None = Field(default=None, repr=False)
     metrics_enabled: bool = False
     metrics_path: str = "/metrics"
     metrics_format: Literal["prometheus", "json"] = "prometheus"

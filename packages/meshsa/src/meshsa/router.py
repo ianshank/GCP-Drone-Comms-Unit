@@ -95,7 +95,7 @@ class Router:
                 self.metrics.schema_mismatch += 1
                 _log.warning("dropped schema-incompatible frame", transport=source.name)
                 continue
-            except Exception:  # malformed / undecodable wire data
+            except Exception:  # noqa: BLE001 - a codec may raise anything on malformed wire data; the frame is dropped and counted
                 self.metrics.dropped_undecodable += 1
                 _log.warning("dropped undecodable frame", transport=source.name, exc_info=True)
                 continue
@@ -107,7 +107,7 @@ class Router:
                     await _maybe_await(handler(envelope))
                 except asyncio.CancelledError:
                     raise
-                except Exception:  # a failing subscriber must not crash the pump
+                except Exception:  # noqa: BLE001 - a failing subscriber must not crash the pump
                     _log.warning("subscriber raised", exc_info=True)
             for transport in self.transports:
                 if transport is not source:

@@ -7,7 +7,7 @@
   **not** clear the Initiative-C command gate (`c_gate_met` stays `false`).
 - **authoritative sources**: `docs/CHARTER.md`, `docs/ROADMAP.md`, `docs/AUDIT_M2_AUTH.md`,
   `AGENTS.md`, `.claude/governance.yaml`, `docs/specs/README.md`
-- **peer review**: `docs/OPENSPEC_CODE_HYGIENE_PEER_REVIEW.md` (this bundle's design was
+- **peer review**: `docs/reviews/OPENSPEC_CODE_HYGIENE_PEER_REVIEW.md` (this bundle's design was
   reviewed against `docs/CHARTER.md`, the `bind_guard.py` adapter rule, and Invariants 1–2
   before implementation; thirteen corrections were made to the pre-review draft — five of
   them defects the draft itself introduced, including a would-be Invariant-1 violation)

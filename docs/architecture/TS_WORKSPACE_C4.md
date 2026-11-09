@@ -61,7 +61,7 @@ graph TB
             viteApp["Vite Dev Server\n─────────────\nReact 19 SPA\nTailwind 4 CSS\nRadix UI components\nHot module reload"]
         end
 
-        subgraph libs["Shared Libraries  (lib/)"]
+        subgraph libs["Shared Libraries - lib workspace"]
             dbLib["@workspace/db\n─────────────\nDrizzle schema\nClient factory\nMigrations"]
             zodLib["@workspace/api-zod\n─────────────\nZod schemas\nRequest/response\ntypes (shared)"]
             clientLib["@workspace/api-client-react\n─────────────\nTyped React hooks\nFetch wrappers"]

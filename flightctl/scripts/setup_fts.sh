@@ -19,9 +19,10 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONSTRAINTS="$SCRIPT_DIR/../constraints/fts-constraints.txt"
 
-VENV=/mnt/ssd/venvs/fts
-export UV_CACHE_DIR=${UV_CACHE_DIR:-/mnt/ssd/caches/uv}
-export TMPDIR=${TMPDIR:-/mnt/ssd/tmp}
+SSD="${SSD:-/mnt/ssd}"  # same override start_all.sh honours
+VENV="$SSD/venvs/fts"
+export UV_CACHE_DIR=${UV_CACHE_DIR:-$SSD/caches/uv}
+export TMPDIR=${TMPDIR:-$SSD/tmp}
 mkdir -p "$TMPDIR" "$UV_CACHE_DIR"
 
 command -v uv >/dev/null || { echo "uv not found; install uv first" >&2; exit 1; }

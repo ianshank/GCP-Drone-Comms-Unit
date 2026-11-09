@@ -23,7 +23,12 @@ from typing import Any, Protocol
 import structlog
 from pydantic import BaseModel
 
-from ..defaults import DEFAULT_LOCAL_TARGET_HOST, PORT_FTS_REST, PORT_MAVLINK2REST
+from ..defaults import (
+    DEFAULT_HTTP_SOURCE_TIMEOUT_S,
+    DEFAULT_LOCAL_TARGET_HOST,
+    PORT_FTS_REST,
+    PORT_MAVLINK2REST,
+)
 
 _log = structlog.get_logger("meshsa.llm.sources")
 
@@ -253,7 +258,7 @@ class Mavlink2RestSource:  # pragma: no cover - real HTTP I/O
         uid: str = DEFAULT_DRONE_UID,
         vehicle_id: int = 1,
         component_id: int = 1,
-        timeout_s: float = 3.0,
+        timeout_s: float = DEFAULT_HTTP_SOURCE_TIMEOUT_S,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._uid = uid
@@ -294,7 +299,7 @@ class FtsTrackSource:  # pragma: no cover - real HTTP I/O
         self,
         url: str = DEFAULT_FTS_TRACKS_URL,
         *,
-        timeout_s: float = 3.0,
+        timeout_s: float = DEFAULT_HTTP_SOURCE_TIMEOUT_S,
     ) -> None:
         self._url = url
         self._timeout_s = timeout_s

@@ -10,7 +10,7 @@
 
 ## Phase 0 — Spec + preconditions
 - [x] T-0.1 This bundle (`proposal.md`, `design.md`, `tasks.md`, three spec deltas),
-      `docs/specs/meshsa-core.md`, `docs/OPENSPEC_CODE_HYGIENE_PEER_REVIEW.md`, registered in
+      `docs/specs/meshsa-core.md`, `docs/reviews/OPENSPEC_CODE_HYGIENE_PEER_REVIEW.md`, registered in
       `docs/specs/README.md`.
 - [ ] T-0.2 CHARTER §3 amendment text drafted and reviewed (design D-2's wording); the actual
       `CHARTER.md` edit lands in T-7.3 alongside the dependency it describes, not before —
@@ -326,7 +326,9 @@
 - [ ] T-8.8 `command/config.py` migrates to `_envconfig.py`; picks up
       `defaults.PORT_COMMANDER`; adopts `meshsa_core.mavlink.extract_endpoint_host` for its
       MAVLink endpoint; `HealthReport` import points at the T-5.2 neutral module (retiring
-      the interim re-export).
+      the interim re-export); the three `except Exception` sites in `command/**` and the
+      three in `run_commander.py` get their `# noqa: BLE001 - reason` and the per-file
+      `BLE001` waivers in `packages/meshsa/pyproject.toml` / `ruff.toml` are dropped (plan P3-5).
 
 ## Phase 9 — Coupling fixes, non-command
 - [ ] T-9.1 `build_node(..., codecs: Registry[Codec] = codec_registry)` — additive kwarg,
@@ -361,11 +363,12 @@
       2026-07-24, predating this deliverable; the patch it pointed to was deleted in T-10.2a as
       redundant/less-safe) and a pointer from the root `NEXTSTEPS.md` to `docs/NEXTSTEPS.md`
       added.
-      **Correction to this task's original premise:** `docs/C4.md` and `docs/architecture/C4.md`
+      **Correction to this task's original premise:** `docs/C4.md` and `docs/architecture/TS_WORKSPACE_C4.md`
       are not a name collision needing consolidation — re-audited (2026-08-15) and confirmed they
       describe two entirely separate subsystems (`docs/C4.md` = the Python drone-comms
-      architecture; `docs/architecture/C4.md` = the separate TypeScript/Replit validation
-      workspace). Both are independently current; no merge or rename needed.
+      architecture; `docs/architecture/TS_WORKSPACE_C4.md` = the separate TypeScript/Replit validation
+      workspace). Both are independently current; no merge needed. Renamed anyway in plan
+      P3-3 (2026-11-08) to `TS_WORKSPACE_C4.md` so the two never share a filename again.
 - [ ] T-10.4b Remaining stale-doc claims corrected: `docs/AUDIT_M2_AUTH.md` residual rows,
       `netauth`'s `NetAuthPolicy` marked as a reserved seam, `tools/claude_hooks`' duplicated
       `sys.path` bootstrap consolidated, `validate_workforce.py` adopts `pyyaml` +

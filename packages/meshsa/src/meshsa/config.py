@@ -22,6 +22,8 @@ from .defaults import (
     DEFAULT_LOOPBACK_HOST,
     DEFAULT_PLI_INTERVAL_S,
     DEFAULT_QUEUE_MAXSIZE,
+    DEFAULT_STATION_POLL_INTERVAL_S,
+    DEFAULT_STATION_TILE_URL,
     PORT_SCOUT_STATION,
 )
 from .health import HealthConfig as HealthConfig
@@ -50,7 +52,7 @@ class RouterConfig(BaseModel):
 
 class MeshConfig(BaseModel):
     channel: str = "default"
-    psk: str | None = None
+    psk: str | None = Field(default=None, repr=False)
     region: str = "US"
     freq_khz: int | None = None
 
@@ -93,7 +95,13 @@ class ScoutConfig(BaseModel):
     store_path: str = ":memory:"
     station_host: str = DEFAULT_LOOPBACK_HOST
     station_port: int = PORT_SCOUT_STATION
-    station_token: str = ""
+    station_token: str = Field(default="", repr=False)
+    #: Browser poll cadence of the station page (seconds).
+    station_poll_interval_s: float = Field(
+        default=DEFAULT_STATION_POLL_INTERVAL_S, gt=0.0, allow_inf_nan=False
+    )
+    #: Raster tile template the station map loads; point at a local tile server offline.
+    station_tile_url: str = DEFAULT_STATION_TILE_URL
 
     @classmethod
     def from_env(

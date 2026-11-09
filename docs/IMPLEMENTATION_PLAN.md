@@ -146,7 +146,7 @@ docs) and goes first.
   enumerating every transport/surface and its actual auth posture — is itself a prerequisite
   task here, **before** any maintainer gate-clearance decision. This plan does **not** clear the
   gate unilaterally and does **not** assert transport-wide auth exists.
-- **Redundant backlog file:** ✅ resolved 2026-07-04 — `docs/NEXT_STEPS.md` (with the
+- **Redundant backlog file:** ✅ resolved 2026-07-04 — the duplicate `NEXT_STEPS` backlog file (with the
   underscore) was a separate, small, stale duplicate of the canonical `docs/NEXTSTEPS.md`;
   it has been deleted so there is a single canonical backlog.
 
@@ -172,7 +172,7 @@ drift test in `tests/test_metrics.py::test_render_prometheus_emits_all_dashboard
   `render_prometheus` output (guards dashboard/exporter drift) — pure, fakes-only.
 
 **A.2 Automated FTS end-to-end (non-coverage CI job).**
-- *Spec:* author `docs/specs/m2-fts-e2e.md` — bring up FreeTAKServer on a self-hosted Jetson
+- *Spec:* author an `m2-fts-e2e` spec under `docs/specs/` — bring up FreeTAKServer on a self-hosted Jetson
   runner; publish a track via the gateway; assert it via the FTS REST API + a multicast CoT
   listener. Pinned by `flightctl/constraints/fts-constraints.txt` (already exists).
 - *Invariants:* this is an integration job, **separate** from the coverage gate (hardware glue
@@ -262,7 +262,7 @@ smoke. Doc + `# pragma: no cover` device glue only.
 ### Track D — M3.2 richer tracks
 
 M3.1 (course/speed/battery/attitude) shipped additively. Remaining, spec
-`docs/specs/m3-richer-tracks.md`:
+an `m3-richer-tracks` spec under `docs/specs/`:
 
 **D.1 Sensor Point-of-Interest / Field-of-View CoT** — implement SPI/FoV **natively in the
 `cot` codec** (do not depend on the abandoned FreeTAKUAS). Needs pixel→geo / camera pose —
@@ -313,9 +313,9 @@ under sustained overflow (never silently drops an audit record).
 Lower priority; spec each before building.
 
 **F.1** Meshtastic **store-and-forward** for intermittent links (research semantics first —
-flagged "Unverified" in NEXTSTEPS). Spec `docs/specs/m4-store-and-forward.md`.
+flagged "Unverified" in NEXTSTEPS). Spec: `m4-store-and-forward`, to be authored under `docs/specs/`.
 **F.2** Reproducible **multi-arch (arm64) image** + signed releases + GHCR publish on tags
-(workflow scaffold exists). Spec `docs/specs/m5-packaging.md`.
+(workflow scaffold exists). Spec: `m5-packaging`, to be authored under `docs/specs/`.
 **F.3** Root-on-NVMe appliance build (removes the eMMC constraint).
 **F.4** systemd enablement with a dedicated `flightctl` service user + correct SSD-venv
 ownership.

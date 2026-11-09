@@ -9,6 +9,29 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+#### Code-quality reflection, Phase 3a — literal sweep, dead code, docs organization (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- **New operator knobs (P3-1 / C3), defaults unchanged:** `MESHSA_LLM_SOURCE_TIMEOUT_S`
+  (`ServerConfig.source_timeout_s`, the HTTP timeout on the assistant's mavlink2rest/FTS
+  reads; 3.0 s, must be > 0) and `MESHSA_SCOUT_STATION_POLL_INTERVAL_S` /
+  `MESHSA_SCOUT_STATION_TILE_URL` (`ScoutConfig.station_poll_interval_s`,
+  `station_tile_url`; the station page's refresh cadence and raster tile template — point
+  the latter at a local tile server for offline field use). Env inventory 78 → 80 keys.
+- `meshsa/defaults.py` rows: six external-convention ports (`PORT_FTS_UI`, `PORT_WEBMAP`,
+  `PORT_MAVP2P_GATEWAY`, `PORT_MAVP2P_MAVLINK2REST`, `PORT_DUMP1090_BEAST`, `PORT_SITL_TCP`),
+  `DEFAULT_MESHTASTIC_PORTNUM`, `DEFAULT_{MESHTASTIC,MSP,CRSF}_SERIAL_DEVICE`, `EARTH_RADIUS_M`,
+  `DEFAULT_HTTP_SOURCE_TIMEOUT_S`, `DEFAULT_STATION_POLL_INTERVAL_S`, `DEFAULT_STATION_TILE_URL`,
+  `DEFAULT_SOURCE_POLL_INTERVAL_S`, `DEFAULT_SOURCE_JOIN_TIMEOUT_S` — every value pinned in
+  `tests/test_defaults.py`.
+- `tools/coverage_summary.py` (P3-2): the one coverage-summary step for the three CI jobs
+  (the tools job now writes `coverage.xml`). `tests/conftest.py::SettableClock` for the
+  TTL/stale-window tests.
+- `docs/reviews/` (P3-3): the twelve historical reviews, audits and gap analyses, with an
+  index; `docs/*.md` is now stable plan + working plan only.
+- Ruff `BLE001` (blind except) is selected in all three configs (P3-5); every remaining
+  `except Exception` either re-raises, is narrowed, or carries `# noqa: BLE001 - <reason>`
+  and logs `exc_info=True`.
+
+### Added
 #### Code-quality reflection, Phase 2b — options models, shared queues, the tools split (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
 - Transport `*Options` models (P2-4): `TakTcpOptions`, `MeshtasticOptions`, `MspOptions`,
   `MavlinkSourceOptions` (frozen, keyword-only; exported from `meshsa.transports`) and
@@ -75,6 +98,39 @@ Versions follow [Semantic Versioning](https://semver.org/).
   heavy/hardware modules. The rule held in fact; now it is checked.
 
 ### Changed
+#### Code-quality reflection, Phase 3a (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
+- `docs/architecture/C4.md` → `docs/architecture/TS_WORKSPACE_C4.md` (P3-3 / H2): the
+  TypeScript workspace's C4 no longer shares a filename with the drone-comms `docs/C4.md`.
+- The docs citation check in `tools/validate_agents_docs.py` (P1-3) now **gates**: a dead
+  path cited by `README.md` or a stable `docs/**/*.md` fails the run (26 documents). Planned
+  paths a spec must name are declared in `tools/agents_docs/policy.py::CITATION_EXCEPTIONS`.
+- Transport link-loss warnings (`tak_tcp`, `meshtastic`, `tak_multicast`, polling sources),
+  the console's and assistant's upstream-error logs and the plugin loader now include the
+  traceback (`exc_info=True`); `_web.read_json_or_none` catches `ValueError` and
+  `LookupError` (an unknown client `charset` is a 400, not a 500).
+- **Logging hardening (from the P3-5 review):** `meshsa.cli.configure_logging` pins a plain
+  traceback formatter and is called by every console entry point (`meshsa-ui`, `meshsa-llm`
+  and `meshsa-scout` previously left structlog unconfigured), so a traceback never renders
+  frame locals via `rich`; and every credential field (`ServerConfig.token`, `UIConfig.token`,
+  `HealthConfig.token`, `ScoutConfig.station_token`, `MeshConfig.psk`, `NemotronConfig.api_key`,
+  `ServiceAuth.token`) is excluded from `repr`. `UIConfig.poll_interval_s`,
+  `ScoutConfig.station_poll_interval_s` and `ServerConfig.source_timeout_s` reject non-finite
+  values.
+- `ops/pi5-node/setup_pi5_node.sh` derives the ATAK/adsbcot CoT URL from `FTS_COT_PORT`
+  (default 8087, the same knob as `start_all.sh`); `flightctl/scripts/setup_fts.sh` honours
+  `SSD` like `start_all.sh` does.
+
+### Removed
+#### Code-quality reflection, Phase 3a — confirmed dead code (P3-2; no behaviour change)
+- `jetson_yolo_gcs.core.errors.ConfigError` (never raised or caught; configuration errors
+  are pydantic `ValidationError`s), the write-only `_token` attribute on the detection
+  ingest transport and `_history_len` on `TelemetryStore` (the constructor parameter and
+  its validation stay), the `pool` export in `lib/db` (`db` remains the API), the empty
+  `meshsa[tak]` and `jetson_yolo_gcs[hailo]` extras, and `twine` from both `[dev]` extras
+  (`release.yml` installs its own). `requirements/ci-constraints.txt` re-resolved: only
+  twine's dependency tree left it.
+
+### Changed
 #### Code-quality reflection, Phase 2b (`docs/CODE_QUALITY_TECH_DEBT_PLAN.md`)
 - Ruff complexity ratchets lowered at the functions the phase fixed, never raised:
   meshsa `max-args` 23 → 13 (anchor now `cot.py::CotCodec.__init__`), jetson `max-args`
@@ -128,7 +184,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
   code is unchanged. Gating waits for the `docs/` reorganization. On today's tree the
   sweep reports 45 dead citations: 38 in `docs/*.md` (10 of them in the historical
   `BRANCHES.md`, 8 in the plan itself), 6 in `docs/specs/`, one in
-  `docs/architecture/C4.md` and one in `README.md`. A trailing line citation
+  `docs/architecture/TS_WORKSPACE_C4.md` and one in `README.md`. A trailing line citation
   (`config.py:188`, `ci.yml:81-91`) is now stripped by `validate_skills.py`'s
   normalizer before resolution, which both linters share; it was a quarter of the noise.
 - **Pragma reasons (P1-4):** every `# pragma: no cover` in both `src/` trees now carries
@@ -383,7 +439,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 #### Charter alignment audit (2026-07-31)
 - `docs/CHARTER_ALIGNMENT_AUDIT_PLAN.md` — repeatable Phase A–E method for scanning the codebase
   against `CHARTER.md` scope, all five ratified carve-outs, and all seven invariants in one pass;
-  `docs/CHARTER_ALIGNMENT_AUDIT_PLAN_PEER_REVIEW.md` — its peer review (8 findings, all fixed).
+  `docs/reviews/CHARTER_ALIGNMENT_AUDIT_PLAN_PEER_REVIEW.md` — its peer review (8 findings, all fixed).
 - `docs/CHARTER_ALIGNMENT_AUDIT_2026-07-31.md` — the plan's first execution: a full gap-analysis
   pass (quality gates, magic-number sweep, bind/auth re-derivation, doc staleness) with 12
   findings, most fixed directly.
@@ -487,7 +543,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `scripts/hooks/pre-commit` — git pre-commit hook enforcing typecheck + lint on staged TS files
 - `.gitleaks.toml` — secret scanning rules; allowlists synthetic test tokens in `deliverables/`
 - `.pre-commit-config.yaml` — pre-commit hooks for TypeScript (ESLint/tsc) and Python (ruff, mypy) sides
-- `docs/architecture/C4.md` — C4 context, container, and component diagrams (Mermaid)
+- `docs/architecture/TS_WORKSPACE_C4.md` — C4 context, container, and component diagrams (Mermaid)
 - `docs/adr/001-monorepo-typescript-esm.md` — ADR: pnpm workspace + TypeScript ESM + esbuild
 
 #### Test Suite (AQA / Regression)

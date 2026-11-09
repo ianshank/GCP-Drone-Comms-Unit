@@ -262,7 +262,7 @@ class InferenceService:
                 )
             else:
                 _log.warning("inference_task_failed", exc_info=True)
-        except Exception:
+        except Exception:  # noqa: BLE001 - a failed analysis task is counted and logged, never crashes the service
             _log.warning("inference_task_failed", exc_info=True)
 
     async def _gated_analyze(self, envelope: Envelope) -> InferenceResult:

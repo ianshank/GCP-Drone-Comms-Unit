@@ -7,7 +7,7 @@
   **not** open M3/M4 or clear the Initiative-C gate
 - **authoritative sources**: `docs/CHARTER.md`, `docs/ROADMAP.md`,
   `docs/NEXTSTEPS.md`, `docs/AUDIT_M2_AUTH.md`, `docs/IMPLEMENTATION_PLAN.md`
-- **peer review**: `docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` (rev.1 was corrected
+- **peer review**: `docs/reviews/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` (rev.1 was corrected
   against the tree before implementation)
 
 ## Why

@@ -6,16 +6,9 @@ from typing import Any
 
 import pytest
 import structlog
+from conftest import SettableClock
 
 from meshsa.ui.logring import LogRing
-
-
-class FakeClock:
-    def __init__(self, t: float = 0.0) -> None:
-        self.t = t
-
-    def now(self) -> float:
-        return self.t
 
 
 def _emit(ring: LogRing, method: str, event: str, **kv: Any) -> dict[str, Any]:
@@ -30,7 +23,7 @@ def test_construction_guards() -> None:
 
 
 def test_capacity_bounded_newest_kept() -> None:
-    ring = LogRing(3, clock=FakeClock())
+    ring = LogRing(3, clock=SettableClock())
     for i in range(5):
         _emit(ring, "info", f"e{i}")
     events = [e["event"] for e in ring.entries()]
@@ -38,7 +31,7 @@ def test_capacity_bounded_newest_kept() -> None:
 
 
 def test_level_floor() -> None:
-    ring = LogRing(10, level="warning", clock=FakeClock())
+    ring = LogRing(10, level="warning", clock=SettableClock())
     _emit(ring, "debug", "quiet")
     _emit(ring, "info", "still-quiet")
     _emit(ring, "warning", "kept")
@@ -53,7 +46,7 @@ def test_level_floor() -> None:
 
 
 def test_scalar_only_entries() -> None:
-    ring = LogRing(10, clock=FakeClock(t=7.0))
+    ring = LogRing(10, clock=SettableClock(t=7.0))
     _emit(ring, "info", "evt", count=3, ok=True, name="x", ratio=0.5, none=None, blob={"a": 1})
     (entry,) = ring.entries()
     assert entry["event"] == "evt"
@@ -65,13 +58,13 @@ def test_scalar_only_entries() -> None:
 
 
 def test_timestamp_from_event_dict_wins() -> None:
-    ring = LogRing(10, clock=FakeClock(t=7.0))
+    ring = LogRing(10, clock=SettableClock(t=7.0))
     ring.processor(None, "info", {"event": "evt", "timestamp": 3.5})
     assert ring.entries()[0]["ts"] == 3.5
 
 
 def test_processor_returns_event_dict_unchanged() -> None:
-    ring = LogRing(10, clock=FakeClock())
+    ring = LogRing(10, clock=SettableClock())
     event_dict = {"event": "evt", "blob": {"a": 1}, "n": 1}
     out = ring.processor(None, "info", event_dict)
     assert out is event_dict
@@ -79,7 +72,7 @@ def test_processor_returns_event_dict_unchanged() -> None:
 
 
 def test_entries_returns_copies() -> None:
-    ring = LogRing(10, clock=FakeClock())
+    ring = LogRing(10, clock=SettableClock())
     _emit(ring, "info", "evt")
     ring.entries()[0]["event"] = "mutated"
     assert ring.entries()[0]["event"] == "evt"
@@ -88,7 +81,7 @@ def test_entries_returns_copies() -> None:
 def test_install_prepends_once_and_output_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     original = structlog.get_config().get("processors", [])
     try:
-        ring = LogRing(10, clock=FakeClock())
+        ring = LogRing(10, clock=SettableClock())
         ring.install()
         ring.install()  # idempotent: not added twice
         processors = structlog.get_config()["processors"]
@@ -102,7 +95,7 @@ def test_install_prepends_once_and_output_unchanged(monkeypatch: pytest.MonkeyPa
 
 
 def test_nonfinite_float_fields_excluded() -> None:
-    ring = LogRing(4, clock=FakeClock(t=1.0))
+    ring = LogRing(4, clock=SettableClock(t=1.0))
     _emit(ring, "info", "e", ok=1.5, bad_nan=float("nan"), bad_inf=float("inf"))
     (entry,) = ring.entries()
     assert entry["ok"] == 1.5

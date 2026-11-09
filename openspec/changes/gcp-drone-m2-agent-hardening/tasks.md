@@ -5,7 +5,7 @@
 
 ## Phase 0 — Ground truth (no writes)
 - [x] T-0.1 Verified the `AUDIT_M2_AUTH.md` inventory against current code
-      (peer review, `docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md`). Drift found and
+      (peer review, `docs/reviews/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md`). Drift found and
       fixed in this PR: `NEXTSTEPS.md` stale no-heartbeat-gate claim; the
       commander's local `validate_bind` duplicate (D-3.3). Known remaining:
       stale `--cov-fail-under=90` in generated `egg-info/PKG-INFO` (build

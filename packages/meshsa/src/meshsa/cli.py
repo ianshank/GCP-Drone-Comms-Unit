@@ -19,6 +19,7 @@ import contextlib
 import logging
 import os
 import signal
+from typing import Any
 
 import structlog
 
@@ -29,6 +30,8 @@ from .defaults import (
     DEFAULT_COT_STALE_S,
     DEFAULT_LOCAL_TARGET_HOST,
     DEFAULT_LOOPBACK_HOST,
+    DEFAULT_MESHTASTIC_PORTNUM,
+    DEFAULT_MESHTASTIC_SERIAL_DEVICE,
     DEFAULT_PLI_INTERVAL_S,
     PORT_FTS_TCP,
     PORT_HEALTH,
@@ -56,12 +59,16 @@ def _env_float(key: str, default: float) -> float:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Meshtastic <-> FreeTAKServer bridge node")
-    p.add_argument("--port", default=_env("PORT", "/dev/ttyUSB0"), help="T-Beam serial device")
+    p.add_argument(
+        "--port",
+        default=_env("PORT", DEFAULT_MESHTASTIC_SERIAL_DEVICE),
+        help="T-Beam serial device",
+    )
     p.add_argument(
         "--portnum",
         type=int,
-        default=_env_int("PORTNUM", 256),
-        help="Meshtastic app portnum (default 256 / PRIVATE_APP)",
+        default=_env_int("PORTNUM", DEFAULT_MESHTASTIC_PORTNUM),
+        help=f"Meshtastic app portnum (default {DEFAULT_MESHTASTIC_PORTNUM} / PRIVATE_APP)",
     )
     p.add_argument("--region", default=_env("MESH_REGION", "US"))
     p.add_argument("--fts-host", default=_env("FTS_HOST", DEFAULT_LOCAL_TARGET_HOST))
@@ -104,13 +111,32 @@ def log_level_num(name: str) -> int:
     return value if isinstance(value, int) else logging.INFO
 
 
-def configure_logging(level: str) -> None:
-    """Configure structlog's filtering level from a level name.
+def configure_logging(level: str | None = None) -> None:
+    """Configure structlog: the filtering level (when given) and a plain traceback renderer.
 
-    Shared by every console entry point (``meshsa-base``, the ``fpv-*`` tools and the
-    flightctl gateway runner) so the structlog wiring lives in exactly one place.
+    Shared by every console entry point (``meshsa-base``, ``meshsa-ui``, ``meshsa-llm``,
+    ``meshsa-scout``, the ``fpv-*`` tools and the flightctl gateway runner) so the
+    structlog wiring lives in exactly one place. The processor chain is structlog's
+    default except that exceptions (every ``exc_info=True`` warning on the link-loss and
+    HTTP-boundary paths) render with :func:`structlog.dev.plain_traceback`: the default
+    ``ConsoleRenderer`` switches to ``rich`` whenever that package happens to be
+    importable, and rich's formatter prints frame *locals* — which on the
+    ``_build_chat_agent`` path include a ``ServerConfig`` carrying the bearer token. What a
+    log line contains must not depend on which optional packages a venv has.
     """
-    structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(log_level_num(level)))
+    kwargs: dict[str, Any] = {
+        "processors": [
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.StackInfoRenderer(),
+            structlog.dev.set_exc_info,
+            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
+            structlog.dev.ConsoleRenderer(exception_formatter=structlog.dev.plain_traceback),
+        ]
+    }
+    if level is not None:
+        kwargs["wrapper_class"] = structlog.make_filtering_bound_logger(log_level_num(level))
+    structlog.configure(**kwargs)
 
 
 def _delimiter_bytes(raw: str) -> bytes:

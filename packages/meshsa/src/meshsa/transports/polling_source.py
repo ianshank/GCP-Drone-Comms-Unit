@@ -34,7 +34,12 @@ from typing import Any
 
 import structlog
 
-from ..defaults import DEFAULT_LINK_LOG_INTERVAL_S, DEFAULT_LOG_EVERY_N, DEFAULT_QUEUE_MAXSIZE
+from ..defaults import (
+    DEFAULT_LINK_LOG_INTERVAL_S,
+    DEFAULT_LOG_EVERY_N,
+    DEFAULT_QUEUE_MAXSIZE,
+    DEFAULT_SOURCE_JOIN_TIMEOUT_S,
+)
 from ..protocols import Clock, SystemClock
 from .base import AbstractTransport
 
@@ -58,7 +63,7 @@ class PollingSourceTransport(AbstractTransport):
         clock: Clock | None = None,
         queue_maxsize: int = DEFAULT_QUEUE_MAXSIZE,
         poll_wait_s: float = 0.0,
-        join_timeout_s: float = 2.0,
+        join_timeout_s: float = DEFAULT_SOURCE_JOIN_TIMEOUT_S,
         log_every_n: int = DEFAULT_LOG_EVERY_N,
         log_interval_s: float = DEFAULT_LINK_LOG_INTERVAL_S,
     ) -> None:
@@ -129,14 +134,16 @@ class PollingSourceTransport(AbstractTransport):
                         self._log_link("up")
                 if not produced and self._interval_elapsed():
                     self._log_link("down")
-            except Exception:
+            except Exception:  # noqa: BLE001 - a poll error of any kind stops the reader cleanly (logged with traceback) instead of killing the thread with an unhandled exception
                 # A poll/iteration error during shutdown (stop flag set / resource
                 # closing) is a normal stop, not a failure: log it at DEBUG. Only
                 # an error while still running is a genuine WARNING.
                 if self._stop_event.is_set():
-                    _log.debug("source poll error during stop", transport=self.name)
+                    _log.debug("source poll error during stop", transport=self.name, exc_info=True)
                 else:
-                    _log.warning("source poll error; stopping reader", transport=self.name)
+                    _log.warning(
+                        "source poll error; stopping reader", transport=self.name, exc_info=True
+                    )
                 break
             if self._poll_wait_s:
                 self._stop_event.wait(self._poll_wait_s)
@@ -187,8 +194,8 @@ class PollingSourceTransport(AbstractTransport):
         if self._resource is not None:
             try:
                 self._close(self._resource)
-            except Exception:
-                _log.debug("source close error", transport=self.name)
+            except Exception:  # noqa: BLE001 - teardown is best-effort; never raise on close
+                _log.debug("source close error", transport=self.name, exc_info=True)
         if self._thread is not None:
             self._thread.join(timeout=self._join_timeout_s)
             self._thread = None

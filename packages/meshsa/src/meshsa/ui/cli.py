@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from ..cli import configure_logging
 from ..config import NodeConfig
 from ..protocols import SystemClock
 from .app import build_ui_app
@@ -76,6 +77,7 @@ def main() -> None:  # pragma: no cover - process entry point
     ``[llm]`` extra and its key; the FPV strip is wired by embedders that own a
     ``LinkHealthMonitor`` (this generic entry point serves map/health/logs).
     """
+    configure_logging()
     try:
         import aiohttp  # noqa: F401  # presence check; web imported in _run
     except ImportError as exc:
@@ -146,11 +148,15 @@ def _build_chat_agent() -> object | None:  # pragma: no cover - optional [llm] w
         from ..llm.sources import FtsTrackSource, Mavlink2RestSource
 
         llm_cfg = resolve_config(os.environ)
-        telemetry = Mavlink2RestSource(llm_cfg.mavlink2rest_url, uid=llm_cfg.drone_uid)
-        tracks = FtsTrackSource(llm_cfg.fts_tracks_url)
+        telemetry = Mavlink2RestSource(
+            llm_cfg.mavlink2rest_url, uid=llm_cfg.drone_uid, timeout_s=llm_cfg.source_timeout_s
+        )
+        tracks = FtsTrackSource(llm_cfg.fts_tracks_url, timeout_s=llm_cfg.source_timeout_s)
         return build_agent(telemetry, tracks)
-    except Exception as exc:
-        _log.warning("ui_chat_unavailable", error=str(exc), error_type=type(exc).__name__)
+    except Exception as exc:  # noqa: BLE001 - optional assistant wiring must never take the console down
+        _log.warning(
+            "ui_chat_unavailable", error=str(exc), error_type=type(exc).__name__, exc_info=True
+        )
         return None
 
 

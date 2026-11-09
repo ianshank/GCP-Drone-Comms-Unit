@@ -2,7 +2,8 @@
 
 Rooted at :class:`JetsonYoloError` so callers can catch the whole family. Mirrors
 the ``meshsa.errors`` pattern (a single base + specific subclasses for registry
-lookups and config problems).
+lookups and runtime faults). Configuration problems are pydantic ``ValidationError``s
+from ``core.config`` and are not wrapped here.
 """
 
 from __future__ import annotations
@@ -22,10 +23,6 @@ class UnknownComponentError(JetsonYoloError):
 
 class UnknownBackendError(JetsonYoloError):
     """No detection backend matches the model file (e.g. unknown extension)."""
-
-
-class ConfigError(JetsonYoloError):
-    """A configuration value is missing or invalid."""
 
 
 class DetectionError(JetsonYoloError):

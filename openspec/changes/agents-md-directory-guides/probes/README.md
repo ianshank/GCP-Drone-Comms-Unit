@@ -1,6 +1,6 @@
 # Probes — round-3 feasibility evidence
 
-Round 3 of the peer review (`docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md`, findings R-1 … R-7)
+Round 3 of the peer review (`docs/reviews/OPENSPEC_AGENTS_MD_PEER_REVIEW.md`, findings R-1 … R-7)
 replaced argument with measurement. These are the artefacts. They are **not** guides and
 **not** the deliverable: the filenames deliberately avoid the `AGENTS.md` suffix so no
 current or future checker enumerates them as part of the tree.

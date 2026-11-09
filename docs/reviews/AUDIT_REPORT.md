@@ -4,8 +4,8 @@
 
 Date: 2026-06-02
 Scope: post-reorg + Phase 6 state on branch `feat/agent-harness-and-strict-types`. See
-[ARCHITECTURE.md](ARCHITECTURE.md) for the system design and
-[CHANGELOG.md](../CHANGELOG.md) for the reorg actions taken.
+[ARCHITECTURE.md](../ARCHITECTURE.md) for the system design and
+[CHANGELOG.md](../../CHANGELOG.md) for the reorg actions taken.
 
 ## Summary
 

@@ -7,9 +7,9 @@
   touch the Initiative-C gate
 - **authoritative sources**: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`,
   `docs/CHARTER.md`, `docs/ROADMAP.md`, `CONTRIBUTING.md`
-- **evidence register**: `docs/AGENTS_MD_EVIDENCE.md` (seven primary papers, each read in
+- **evidence register**: `docs/reviews/AGENTS_MD_EVIDENCE.md` (seven primary papers, each read in
   full; every claim carries its significance)
-- **peer review**: `docs/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` — four rounds. Round 3 was
+- **peer review**: `docs/reviews/OPENSPEC_AGENTS_MD_PEER_REVIEW.md` — four rounds. Round 3 was
   empirical; round 4 attacked the premise and **won**, cutting the change from 64 new
   files to 6
 - **related bundles**: `openspec/changes/gcp-drone-m2-agent-hardening` (this bundle
@@ -133,7 +133,7 @@ cannot show — bring-up ordering, codegen direction, a governance gate — with
 | I-2 | `governance.c_gate_met` stays `false`; no glob list is edited, **and no documentation data enters `governance.yaml`** | `.claude/governance.yaml`; CHARTER §6 | rev.3 argued the manifest must stay out of that file because its loader fails open, then added an exceptions block to it six tasks later. rev.4 puts nothing there |
 | I-3 | No instruction file is written into a frozen path | design §D-6 (verified against `match_globs`) | `scope_freeze.py` denies it |
 | I-4 | No rule restates a security constraint without naming its control or marking it advisory | E-6 | Checker + `security-reviewer` before PR |
-| I-5 | Every external claim cites `docs/AGENTS_MD_EVIDENCE.md` with its significance | `docs/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1 | Review |
+| I-5 | Every external claim cites `docs/reviews/AGENTS_MD_EVIDENCE.md` with its significance | `docs/reviews/OPENSPEC_M2_BUNDLE_PEER_REVIEW.md` F-1 | Review |
 | I-6 | New Python in `tools/` passes ruff, ruff format, mypy and pytest | CHARTER §4 Invariant 6 | Per-task gate in `tasks.md` |
 
 ## Scope — what this change is NOT

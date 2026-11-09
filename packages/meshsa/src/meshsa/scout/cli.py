@@ -162,7 +162,13 @@ def _cmd_run_station(
     pipe, _flight = _run_replay(block, config, rtk=not args.no_rtk, seed=args.seed)
     token = config.station_token or None
     # build_app enforces the fail-closed bind rule internally when given the host.
-    app = build_app(pipe.store, host=config.station_host, token=token)
+    app = build_app(
+        pipe.store,
+        host=config.station_host,
+        token=token,
+        poll_interval_s=config.station_poll_interval_s,
+        tile_url=config.station_tile_url,
+    )
     web.run_app(app, host=config.station_host, port=config.station_port)
     return 0
 
@@ -215,4 +221,7 @@ def run(argv: Sequence[str]) -> int:
 
 def main() -> None:  # pragma: no cover - process entry point
     """Console entry point (``meshsa-scout``)."""
+    from ..cli import configure_logging  # late: meshsa.cli pulls the node/transport stack
+
+    configure_logging()
     raise SystemExit(run(sys.argv[1:]))
