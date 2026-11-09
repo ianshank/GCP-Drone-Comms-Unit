@@ -272,7 +272,7 @@ dataclass fields, Protocol methods, the pypubsub `interface` parameter). What su
 | `meshsa/transports/detection_ingest.py:66` `self._token = token` | assigned, never read; `validate_bind` consumed it two lines earlier |
 | `meshsa/fpv/telemetry_store.py:28` `self._history_len` | assigned, never read; the in-file comment already says "retained for constructor compatibility" pending T-5.4 |
 | `lib/db/src/index.ts:13` `export const pool` | consumed only by the next line in the same file |
-| `lib/api-client-react/src/custom-fetch.ts` exports `BodyType`, `ApiError`, `ResponseParseError`, `CustomFetchOptions` | zero references including the orval-generated trees (`ErrorType` *is* used) — the unused **exports** are the finding, not the file |
+| `lib/api-client-react/src/custom-fetch.ts` exports `BodyType`, `ApiError`, `ResponseParseError`, `CustomFetchOptions` | zero references including the orval-generated trees (`ErrorType` *is* used). **Kept (P3-2):** orval imports `BodyType` by contract once an endpoint has a body, and the error classes are the library's public surface — reclassified to D2 |
 | `meshsa[tak] = []`, `jetson_yolo_gcs[hailo] = []` | empty extras — install no-ops that imply a dependency set that does not exist |
 | `twine` in both `[dev]` extras | `release.yml` installs its own copy; nothing local invokes it |
 | `scripts/` pnpm workspace | `@workspace/scripts` with `"files": []` and **zero** `.ts` files, still typechecked by `package.json`'s `typecheck` script (documented scaffolding — fold into P3-4) |
@@ -298,9 +298,9 @@ carve-out set (`ArmGuard.update_health`/`latched`, `crsf/rc.py` `ticks_to_us`/`u
 | ---- | ---- | --- |
 | `llm/server.py:103`, `ui/app.py:51`, `scout/station/app.py:35` | three near-identical 2-arg `validate_bind(host, token)` wrappers differing only in `service`/`remedy` strings | **Keep.** This is the shape `bind_guard` recognizes (design D-4): a `def validate_bind` outside `netauth` must delegate to the canonical symbol, and a listener file must call an imported `validate_bind` alias. A factory-produced callable would fail the checker. Only the `service`/`remedy` strings are candidates for `_web.py`'s `ServiceAuth` (D-5) |
 | `cv/geo.py:27` ↔ `scout/survey.py:24` | `_EARTH_R_M` twice **inside meshsa** | `defaults.py` (C7) |
-| `.github/workflows/ci.yml:81-91` ↔ `:149-159` (+ an awk variant at `:207`) | coverage-summary heredoc duplicated per job | `tools/coverage_summary.py <name> <gate>`; the `tools/` floor (P0-5) then uses it too |
+| `.github/workflows/ci.yml:81-91` ↔ `:149-159` (+ an awk variant at `:207`) | coverage-summary heredoc duplicated per job | `tools/coverage_summary.py <name> <gate>`; the `tools/` floor (P0-5) then uses it too — **landed with P3-2** |
 | `tools/check_task_sync.py:50-99` ↔ `tools/validate_agents_docs.py:284-328` | same `subprocess.run(["git", …])` boilerplate ×5 with repeated `# noqa: S603` | `tools/_git.py::git_ok`/`git_lines(root, *args)` — **landed with P2-6** |
-| `FakeClock` ×8 | `packages/meshsa/tests/conftest.py` provides the auto-increment variant; `test_ui_logring.py`, `test_ui_snapshot.py`, `test_command_lifecycle.py`, `test_command_service.py` each re-declare the *settable* variant; jetson and deliverables have their own | add a settable `FakeClock` fixture to the meshsa conftest and delete the four in-file copies (deliverables' copy is inline-by-design) |
+| `FakeClock` ×8 | `packages/meshsa/tests/conftest.py` provides the auto-increment variant; `test_ui_logring.py` and `test_ui_snapshot.py` re-declared the *settable* variant (the two command tests already imported the conftest one); jetson and deliverables have their own | `conftest.SettableClock` — **landed with P3-2**; the two in-file copies are gone (deliverables' copy is inline-by-design) |
 | `meshsa/registry.py` ↔ `jetson_yolo_gcs/core/registry.py`; `meshsa/protocols.py` `Clock`/`SystemClock`/`MonotonicClock` ↔ `jetson_yolo_gcs/core/clock.py`; the two `errors.py` bases; `cv/geo.py` ↔ `geometry/ned.py` off-axis/depression math | line-for-line mirrors across the two distributions | **deliberate** under the no-`meshsa`-dependency rule; this is exactly the `meshsa_core` case (P4-1). Until then, cross-cite each from the other so a fix lands in both |
 | seven checker `main(argv)` + repo-root scaffolds under `tools/` | near-identical argparse/root-resolution boilerplate | low value; mention only |
 
@@ -546,6 +546,41 @@ drop-oldest from drop-newest, and the two re-typed log-cadence literals got a ho
 | **P3-3** | `docs/reviews/` move for the historical records (H1), `C4.md` dedupe (H2), README tree fix (H3); P1-3 flips from advisory to gating | H | S | `validate_agents_docs.py` passes with the docs path check gating |
 | **P3-4** | T-2.3b: archive `mockup-sandbox` + `api-client-react`, drop Replit leftovers from `pnpm-workspace.yaml`/`package.json`, prune root `Makefile` to aliases of `validate-pre-pr.sh` | H4, H6 | M | `pnpm install` lockfile shrinks; `ts` job still green; `make validate` = steps 1–4 only, documented |
 | **P3-5** | `except Exception` triage (E3) with per-file `BLE001` opt-in where the file is now clean | E3 | M | count halves; every remaining site logs `exc_info=True` or narrows |
+
+**Status (2026-11-08, Phase 3a):** P3-1, P3-2, P3-3 and P3-5 landed (Phase 3a PR); P3-4 is
+Phase 3b, a separate PR because it is TypeScript-side and the branch convention is one open
+PR at a time. **P3-1:** every §2.C item is closed or carries its rationale. C3 — `ServerConfig.source_timeout_s`
+(`MESHSA_LLM_SOURCE_TIMEOUT_S`) and `ScoutConfig.station_poll_interval_s` /
+`station_tile_url` (injected into the station page as safe JS literals). C4 — six
+external-convention rows (`PORT_FTS_UI`, `PORT_WEBMAP`, `PORT_MAVP2P_GATEWAY`,
+`PORT_MAVP2P_MAVLINK2REST`, `PORT_DUMP1090_BEAST`, `PORT_SITL_TCP`), `DEFAULT_MESHTASTIC_PORTNUM`,
+and the Pi script derives its CoT URL from `FTS_COT_PORT`. C5 — `DEFAULT_SOURCE_POLL_INTERVAL_S`,
+`DEFAULT_SOURCE_JOIN_TIMEOUT_S`. C7 — `EARTH_RADIUS_M`, the three serial-device defaults,
+`_MAX_DATAGRAM_BYTES`, `setup_fts.sh` honours `SSD`. **Leave as is, with the rationale
+recorded here rather than in `governance.yaml`** (that file is Pydantic `extra="forbid"`
+and holds only `literal_guard` waivers; the acceptance row above was wrong about the
+home): the TAK pacing trio and `recv_timeout_s` are single-site tunables already on their
+`*Options` models (`defaults.py` is for values shared by more than one site); the DHCP
+range and AP channel in `setup_pi5_node.sh` and the remaining `/mnt/ssd` mentions are
+provisioning-script conventions outside the Python config pattern; C6 stays frozen until
+T-8.8. The env inventory is 78 → 80 keys. **P3-2:** `vulture` reports zero at confidence 80.
+The D1 set is deleted except `MAV_RESULT_IN_PROGRESS` (frozen path, T-8) and the
+`custom-fetch.ts` exports, which move to D2: orval imports `ErrorType`/`BodyType` by
+contract and `ApiError`/`ResponseParseError`/`CustomFetchOptions` are the library's error and
+options surface. The `scripts/` pnpm workspace goes with P3-4. D3 landed: `SettableClock`
+in the meshsa conftest, `tools/coverage_summary.py` for the three CI heredocs (the tools
+job now also writes `coverage.xml`, lines only — it does not measure branches). **P3-3:**
+twelve records moved to `docs/reviews/` with an index; the TypeScript workspace C4
+(previously also named `C4.md`) is now `docs/architecture/TS_WORKSPACE_C4.md`; README tree fixed; the P1-3 sweep gates — 26 documents, four
+planned paths declared in `CITATION_EXCEPTIONS` with rationales. **P3-5:** `BLE001` is
+selected in all three configs. Of 43 sites, 14 remain un-annotated: the six codec
+boundaries and `flight_logger.start`, which re-raise (ruff accepts those), plus the frozen
+command path (3), `run_commander.py` (3) and `deliverables/` (2, inline by design), which
+are waived per file with the reason beside them. The other 18 keep the broad catch with a
+`# noqa: BLE001 - <reason>` and now log `exc_info=True`; `read_json_or_none` narrowed to
+`ValueError`. The acceptance's "count halves" is met in the honest sense (43 → 14 bare),
+but the stronger result is that a new silent `except Exception` can no longer land.
+Ratchets re-measured: unchanged at every anchor.
 
 ### Phase 4 — Reuse at distribution scale (after a release exists)
 

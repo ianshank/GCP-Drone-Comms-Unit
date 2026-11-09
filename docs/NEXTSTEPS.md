@@ -52,6 +52,10 @@
       `_queues.py` (T-3.5b, scope narrowed to shared *accounting* — see the plan's status
       note), the `tools/agents_docs/` split + `tools/_git.py`, and jetson T-4.5.
 - [ ] **Phase 3 — config sweep, dead code, docs organization** (incl. T-2.3b).
+      **2026-11-08:** Phase 3a landed P3-1 (literal sweep; env inventory 78 → 80), P3-2
+      (dead code; `vulture` at zero), P3-3 (`docs/reviews/`, `TS_WORKSPACE_C4.md`, the docs
+      citation check now gates) and P3-5 (`BLE001` on; every broad catch annotated or
+      narrowed). 3b = P3-4 / T-2.3b (TypeScript archive) follows the merge.
 - [ ] **Phase 4 — `meshsa_core`** (T-7) once a release exists.
 - [ ] **Maintainer decisions** — that plan's §7 (six items; the A1 option and the `v0.3.0`
       cut gate Phase 0).
