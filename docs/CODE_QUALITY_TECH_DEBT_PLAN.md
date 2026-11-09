@@ -580,7 +580,11 @@ boundaries and `flight_logger.start`, which re-raise (ruff accepts those), plus 
 command path (3), `run_commander.py` (3) and `deliverables/` (2, inline by design), which
 are waived per file with the reason beside them. The other 18 keep the broad catch with a
 `# noqa: BLE001 - <reason>` and now log `exc_info=True`; `read_json_or_none` narrowed to
-`ValueError`. The acceptance's "count halves" is met in the honest sense (43 → 14 bare),
+`(ValueError, LookupError)` — the first draft narrowed to `ValueError` alone and the
+test-engineer review caught the regression: aiohttp decodes the body with the *client's*
+charset, so an unknown encoding name raised `LookupError` and turned a client error into a
+500 on all three JSON routes while every existing test fed a `ValueError`; now pinned in
+`test_app_contracts.py`. The acceptance's "count halves" is met in the honest sense (43 → 14 bare),
 but the stronger result is that a new silent `except Exception` can no longer land.
 Ratchets re-measured: unchanged at every anchor.
 

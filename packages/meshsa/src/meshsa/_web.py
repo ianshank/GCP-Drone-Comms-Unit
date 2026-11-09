@@ -178,7 +178,10 @@ async def read_json_or_none(
     """
     try:
         return await request.json()
-    except ValueError as exc:  # json.JSONDecodeError / UnicodeDecodeError: a malformed body
+    except (ValueError, LookupError) as exc:
+        # ValueError: json.JSONDecodeError / UnicodeDecodeError (a malformed body).
+        # LookupError: aiohttp decodes with the *client's* Content-Type charset, so an
+        # unknown encoding name surfaces here too; it is just as much a client error.
         if log is not None:
             log.warning(
                 event, route=route, error=str(exc), error_type=type(exc).__name__, exc_info=True

@@ -25,6 +25,8 @@ def test_bounds_enforced() -> None:
         ScoutConfig(vine_spacing_m=0.0)
     with pytest.raises(ValidationError):
         ScoutConfig(side_overlap=1.0)  # must be < 1
+    with pytest.raises(ValidationError):
+        ScoutConfig(station_poll_interval_s=0.0)  # must be > 0
 
 
 def test_from_env_binds_scout_fields() -> None:

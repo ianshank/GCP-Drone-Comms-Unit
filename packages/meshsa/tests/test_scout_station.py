@@ -183,7 +183,8 @@ def test_render_page_injects_poll_interval_and_tile_url_as_safe_literals() -> No
     tuned = render_page(None, poll_interval_s=0.5, tile_url="http://tiles.local/</script>{z}")
     assert "setInterval(refresh, 500)" in tuned
     assert "</script>{z}" not in tuned  # escaped like the token
-    assert "\\u003c/script" in tuned or "\u003c/script" in tuned
+    # The exact js_literal output: both `<` and `>` as \uXXXX escapes, the rest verbatim.
+    assert '"http://tiles.local/\\u003c/script\\u003e{z}"' in tuned
     assert "setInterval(refresh, 1)" in render_page(None, poll_interval_s=0.0001)  # floored
 
 

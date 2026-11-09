@@ -22,6 +22,7 @@ from tools.agents_docs import (
     main,
     matches_single_level_glob,
     policy,
+    resolution_bases,
     tracked_files,
     validate_file,
     validate_instruction_files,
@@ -179,6 +180,46 @@ def test_clean_docs_are_counted_in_the_verdict(
     git(repo, "add", ".")
     assert main(["--root", str(repo)]) == 0
     assert "1 doc(s) checked for dead citations)" in capsys.readouterr().out
+
+
+def test_docs_citation_exception_suppresses_the_gating_finding(
+    repo: Path,
+    one_guide_manifest: None,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A planned path a spec must name is declared, with a rationale, like a guide's."""
+    write(repo, "AGENTS.md", CLEAN_GUIDE)
+    write(repo, "docs/specs/x.md", "Will live at `packages/planned_pkg`.\n")
+    git(repo, "add", ".")
+    monkeypatch.setattr(
+        policy, "CITATION_EXCEPTIONS", {"docs/specs/x.md": {"packages/planned_pkg": "planned"}}
+    )
+    assert check_docs_citations(repo, tracked_files(repo)) == []
+    assert main(["--root", str(repo)]) == 0
+    monkeypatch.setattr(
+        policy, "CITATION_EXCEPTIONS", {"docs/specs/x.md": {"packages/planned_pkg": "  "}}
+    )
+    assert main(["--root", str(repo)]) == 1  # an empty rationale is counted in the gating path
+    assert "has an empty rationale" in capsys.readouterr().out
+
+
+def test_real_citation_exceptions_are_live() -> None:
+    """Every declared exception names a tracked, swept file, a token it contains, and a path
+    that really does not resolve — so when a planned package lands, the entry is noticed."""
+    tracked = set(tracked_files(REPO_ROOT))
+    swept = set(docs_citation_targets(sorted(tracked))) | set(policy.GUIDE_MANIFEST)
+    assert policy.CITATION_EXCEPTIONS, "the table is expected to carry the planned-path entries"
+    for rel_path, tokens in policy.CITATION_EXCEPTIONS.items():
+        assert rel_path in tracked, rel_path
+        assert rel_path in swept, f"{rel_path} is not reached by any citation check"
+        text = (REPO_ROOT / rel_path).read_text(encoding="utf-8")
+        for token, rationale in tokens.items():
+            assert token in text, f"{rel_path}: exception for a token it no longer cites: {token}"
+            assert rationale.strip(), f"{rel_path}: {token} has an empty rationale"
+            assert not any(
+                (base / token).exists() for base in resolution_bases(rel_path, REPO_ROOT)
+            ), f"{rel_path}: {token} now resolves; the exception is dead weight"
 
 
 @pytest.mark.parametrize(
