@@ -134,14 +134,16 @@ class PollingSourceTransport(AbstractTransport):
                         self._log_link("up")
                 if not produced and self._interval_elapsed():
                     self._log_link("down")
-            except Exception:  # noqa: BLE001 - link-loss resilience: the reader thread outlives any one poll error
+            except Exception:  # noqa: BLE001 - a poll error of any kind stops the reader cleanly (logged with traceback) instead of killing the thread with an unhandled exception
                 # A poll/iteration error during shutdown (stop flag set / resource
                 # closing) is a normal stop, not a failure: log it at DEBUG. Only
                 # an error while still running is a genuine WARNING.
                 if self._stop_event.is_set():
-                    _log.debug("source poll error during stop", transport=self.name)
+                    _log.debug("source poll error during stop", transport=self.name, exc_info=True)
                 else:
-                    _log.warning("source poll error; stopping reader", transport=self.name)
+                    _log.warning(
+                        "source poll error; stopping reader", transport=self.name, exc_info=True
+                    )
                 break
             if self._poll_wait_s:
                 self._stop_event.wait(self._poll_wait_s)

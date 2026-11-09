@@ -204,6 +204,15 @@ def test_docs_citation_exception_suppresses_the_gating_finding(
     assert "has an empty rationale" in capsys.readouterr().out
 
 
+#: Exceptions whose token is a *pattern* quoted from another file (a .gitignore rule), not
+#: a path that is planned to exist. Whether such a directory happens to exist on the
+#: checking machine says nothing about the citation, so the non-resolution assertion
+#: below does not apply to them.
+_QUOTED_PATTERNS: frozenset[tuple[str, str]] = frozenset(
+    {("docs/CHARTER_ALIGNMENT_AUDIT_2026-07-31.md", ".claude/worktrees/")}
+)
+
+
 def test_real_citation_exceptions_are_live() -> None:
     """Every declared exception names a tracked, swept file, a token it contains, and a path
     that really does not resolve — so when a planned package lands, the entry is noticed."""
@@ -217,6 +226,8 @@ def test_real_citation_exceptions_are_live() -> None:
         for token, rationale in tokens.items():
             assert token in text, f"{rel_path}: exception for a token it no longer cites: {token}"
             assert rationale.strip(), f"{rel_path}: {token} has an empty rationale"
+            if (rel_path, token) in _QUOTED_PATTERNS:
+                continue  # a quoted ignore rule; a local worktree must not fail the suite
             assert not any(
                 (base / token).exists() for base in resolution_bases(rel_path, REPO_ROOT)
             ), f"{rel_path}: {token} now resolves; the exception is dead weight"
