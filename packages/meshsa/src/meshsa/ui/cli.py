@@ -146,8 +146,10 @@ def _build_chat_agent() -> object | None:  # pragma: no cover - optional [llm] w
         from ..llm.sources import FtsTrackSource, Mavlink2RestSource
 
         llm_cfg = resolve_config(os.environ)
-        telemetry = Mavlink2RestSource(llm_cfg.mavlink2rest_url, uid=llm_cfg.drone_uid)
-        tracks = FtsTrackSource(llm_cfg.fts_tracks_url)
+        telemetry = Mavlink2RestSource(
+            llm_cfg.mavlink2rest_url, uid=llm_cfg.drone_uid, timeout_s=llm_cfg.source_timeout_s
+        )
+        tracks = FtsTrackSource(llm_cfg.fts_tracks_url, timeout_s=llm_cfg.source_timeout_s)
         return build_agent(telemetry, tracks)
     except Exception as exc:  # noqa: BLE001 - optional assistant wiring must never take the console down
         _log.warning(

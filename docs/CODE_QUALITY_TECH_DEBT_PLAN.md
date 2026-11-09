@@ -541,7 +541,7 @@ drop-oldest from drop-newest, and the two re-typed log-cadence literals got a ho
 
 | ID | Item | Theme | Size | Acceptance |
 | -- | ---- | ----- | ---- | ---------- |
-| **P3-1** | Hardcoded-value sweep per §2.C, highest-severity first; each literal becomes a config field with env binding or a `defaults.py` constant; `literal_guard` rules extended where a class of literal repeats | C | M | §2.C list empty or every remaining item carries a "leave as is" rationale in `governance.yaml` |
+| **P3-1** | Hardcoded-value sweep per §2.C, highest-severity first; each literal becomes a config field with env binding or a `defaults.py` constant; `literal_guard` rules extended where a class of literal repeats | C | M | §2.C list empty or every remaining item carries a "leave as is" rationale in this plan's Phase 3a status paragraph (`governance.yaml` holds `literal_guard` waivers only — it is `extra="forbid"`) |
 | **P3-2** | Dead-code removals per §2.D (confirmed set only); probable set goes to §7 | D | S–M | `vulture` advisory step reports zero at confidence 80 |
 | **P3-3** | `docs/reviews/` move for the historical records (H1), `C4.md` dedupe (H2), README tree fix (H3); P1-3 flips from advisory to gating | H | S | `validate_agents_docs.py` passes with the docs path check gating |
 | **P3-4** | T-2.3b: archive `mockup-sandbox` + `api-client-react`, drop Replit leftovers from `pnpm-workspace.yaml`/`package.json`, prune root `Makefile` to aliases of `validate-pre-pr.sh` | H4, H6 | M | `pnpm install` lockfile shrinks; `ts` job still green; `make validate` = steps 1–4 only, documented |
@@ -562,8 +562,10 @@ and holds only `literal_guard` waivers; the acceptance row above was wrong about
 home): the TAK pacing trio and `recv_timeout_s` are single-site tunables already on their
 `*Options` models (`defaults.py` is for values shared by more than one site); the DHCP
 range and AP channel in `setup_pi5_node.sh` and the remaining `/mnt/ssd` mentions are
-provisioning-script conventions outside the Python config pattern; C6 stays frozen until
-T-8.8. The env inventory is 78 → 80 keys. **P3-2:** `vulture` reports zero at confidence 80.
+provisioning-script conventions outside the Python config pattern; `/dev/video0` is already
+the jetson `CameraSettings.source` field (`CAMERA_SOURCE`), in a distribution that must not
+import `meshsa.defaults`; C6 stays frozen until T-8.8. The console's embedded chat agent
+(`ui/cli.py`) also passes `source_timeout_s`, so the key reaches both assistant paths. The env inventory is 78 → 80 keys. **P3-2:** `vulture` reports zero at confidence 80.
 The D1 set is deleted except `MAV_RESULT_IN_PROGRESS` (frozen path, T-8) and the
 `custom-fetch.ts` exports, which move to D2: orval imports `ErrorType`/`BodyType` by
 contract and `ApiError`/`ResponseParseError`/`CustomFetchOptions` are the library's error and
