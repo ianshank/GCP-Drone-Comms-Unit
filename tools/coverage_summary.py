@@ -30,7 +30,7 @@ def summarize(name: str, gate: int, xml_path: Path) -> str:
             f"**{name} coverage**: {xml_path.name} not produced (pytest failed before "
             "writing it, or --cov-report=xml was dropped)"
         )
-    root = ET.parse(xml_path).getroot()  # noqa: S314 - our own coverage.xml, not untrusted input
+    root = ET.parse(xml_path).getroot()  # our own pytest-cov artifact, not untrusted input
     line_rate = float(root.get("line-rate", "0")) * 100
     # Without ``--cov-branch`` coverage.py still writes branch-rate="0" and
     # branches-valid="0"; printing "0.00% branches" would read as a real measurement.

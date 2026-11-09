@@ -27,6 +27,8 @@ def test_bounds_enforced() -> None:
         ScoutConfig(side_overlap=1.0)  # must be < 1
     with pytest.raises(ValidationError):
         ScoutConfig(station_poll_interval_s=0.0)  # must be > 0
+    with pytest.raises(ValidationError):
+        ScoutConfig(station_poll_interval_s=float("inf"))  # JSON `Infinity` would 500 the page
 
 
 def test_from_env_binds_scout_fields() -> None:

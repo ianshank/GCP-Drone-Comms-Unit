@@ -19,6 +19,7 @@ import contextlib
 import logging
 import os
 import signal
+from typing import Any
 
 import structlog
 
@@ -110,13 +111,32 @@ def log_level_num(name: str) -> int:
     return value if isinstance(value, int) else logging.INFO
 
 
-def configure_logging(level: str) -> None:
-    """Configure structlog's filtering level from a level name.
+def configure_logging(level: str | None = None) -> None:
+    """Configure structlog: the filtering level (when given) and a plain traceback renderer.
 
-    Shared by every console entry point (``meshsa-base``, the ``fpv-*`` tools and the
-    flightctl gateway runner) so the structlog wiring lives in exactly one place.
+    Shared by every console entry point (``meshsa-base``, ``meshsa-ui``, ``meshsa-llm``,
+    ``meshsa-scout``, the ``fpv-*`` tools and the flightctl gateway runner) so the
+    structlog wiring lives in exactly one place. The processor chain is structlog's
+    default except that exceptions (every ``exc_info=True`` warning on the link-loss and
+    HTTP-boundary paths) render with :func:`structlog.dev.plain_traceback`: the default
+    ``ConsoleRenderer`` switches to ``rich`` whenever that package happens to be
+    importable, and rich's formatter prints frame *locals* — which on the
+    ``_build_chat_agent`` path include a ``ServerConfig`` carrying the bearer token. What a
+    log line contains must not depend on which optional packages a venv has.
     """
-    structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(log_level_num(level)))
+    kwargs: dict[str, Any] = {
+        "processors": [
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.StackInfoRenderer(),
+            structlog.dev.set_exc_info,
+            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
+            structlog.dev.ConsoleRenderer(exception_formatter=structlog.dev.plain_traceback),
+        ]
+    }
+    if level is not None:
+        kwargs["wrapper_class"] = structlog.make_filtering_bound_logger(log_level_num(level))
+    structlog.configure(**kwargs)
 
 
 def _delimiter_bytes(raw: str) -> bytes:

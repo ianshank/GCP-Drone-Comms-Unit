@@ -584,7 +584,17 @@ are waived per file with the reason beside them. The other 18 keep the broad cat
 test-engineer review caught the regression: aiohttp decodes the body with the *client's*
 charset, so an unknown encoding name raised `LookupError` and turned a client error into a
 500 on all three JSON routes while every existing test fed a `ValueError`; now pinned in
-`test_app_contracts.py`. The acceptance's "count halves" is met in the honest sense (43 → 14 bare),
+`test_app_contracts.py`. The security review then showed the other edge of `exc_info=True`:
+structlog's default renderer switches to `rich` whenever that package is importable, and
+rich prints frame *locals*, so a traceback through `_build_chat_agent` would have printed
+the `ServerConfig` with its bearer token. Two layers now: `cli.configure_logging` (every
+entry point) pins `plain_traceback`, and every credential field (`ServerConfig.token`,
+`UIConfig.token`, `HealthConfig.token`, `ScoutConfig.station_token`, `MeshConfig.psk`,
+`NemotronConfig.api_key`, `ServiceAuth.token`) is `repr=False`, pinned in
+`tests/test_credential_repr.py`. The two page poll intervals and the source timeout also
+reject non-finite values (`allow_inf_nan=False`): a JSON `Infinity` passed `gt=0` and would
+have made the page a 500 on every request. The acceptance's "count halves" is met in the
+honest sense (43 → 14 bare),
 but the stronger result is that a new silent `except Exception` can no longer land.
 Ratchets re-measured: unchanged at every anchor.
 

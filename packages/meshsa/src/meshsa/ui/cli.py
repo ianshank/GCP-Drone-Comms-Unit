@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from ..cli import configure_logging
 from ..config import NodeConfig
 from ..protocols import SystemClock
 from .app import build_ui_app
@@ -76,6 +77,7 @@ def main() -> None:  # pragma: no cover - process entry point
     ``[llm]`` extra and its key; the FPV strip is wired by embedders that own a
     ``LinkHealthMonitor`` (this generic entry point serves map/health/logs).
     """
+    configure_logging()
     try:
         import aiohttp  # noqa: F401  # presence check; web imported in _run
     except ImportError as exc:

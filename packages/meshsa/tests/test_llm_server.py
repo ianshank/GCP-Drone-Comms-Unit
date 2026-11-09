@@ -11,6 +11,7 @@ from meshsa.llm.server import (
     DEFAULT_HOST,
     DEFAULT_MAX_PROMPT_CHARS,
     DEFAULT_PORT,
+    ServerConfig,
     authorize,
     chat_reply,
     is_loopback,
@@ -221,3 +222,5 @@ def test_source_timeout_is_env_reachable_and_must_be_positive() -> None:
     assert resolve_config({"MESHSA_LLM_SOURCE_TIMEOUT_S": "0.25"}).source_timeout_s == 0.25
     with pytest.raises(ValueError):
         resolve_config({"MESHSA_LLM_SOURCE_TIMEOUT_S": "0"})
+    with pytest.raises(ValueError):
+        ServerConfig(source_timeout_s=float("inf"))  # non-finite is rejected on every path

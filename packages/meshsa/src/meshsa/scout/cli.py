@@ -221,4 +221,7 @@ def run(argv: Sequence[str]) -> int:
 
 def main() -> None:  # pragma: no cover - process entry point
     """Console entry point (``meshsa-scout``)."""
+    from ..cli import configure_logging  # late: meshsa.cli pulls the node/transport stack
+
+    configure_logging()
     raise SystemExit(run(sys.argv[1:]))

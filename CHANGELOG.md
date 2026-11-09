@@ -106,7 +106,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
   paths a spec must name are declared in `tools/agents_docs/policy.py::CITATION_EXCEPTIONS`.
 - Transport link-loss warnings (`tak_tcp`, `meshtastic`, `tak_multicast`, polling sources),
   the console's and assistant's upstream-error logs and the plugin loader now include the
-  traceback (`exc_info=True`); `_web.read_json_or_none` catches `ValueError` only.
+  traceback (`exc_info=True`); `_web.read_json_or_none` catches `ValueError` and
+  `LookupError` (an unknown client `charset` is a 400, not a 500).
+- **Logging hardening (from the P3-5 review):** `meshsa.cli.configure_logging` pins a plain
+  traceback formatter and is called by every console entry point (`meshsa-ui`, `meshsa-llm`
+  and `meshsa-scout` previously left structlog unconfigured), so a traceback never renders
+  frame locals via `rich`; and every credential field (`ServerConfig.token`, `UIConfig.token`,
+  `HealthConfig.token`, `ScoutConfig.station_token`, `MeshConfig.psk`, `NemotronConfig.api_key`,
+  `ServiceAuth.token`) is excluded from `repr`. `UIConfig.poll_interval_s`,
+  `ScoutConfig.station_poll_interval_s` and `ServerConfig.source_timeout_s` reject non-finite
+  values.
 - `ops/pi5-node/setup_pi5_node.sh` derives the ATAK/adsbcot CoT URL from `FTS_COT_PORT`
   (default 8087, the same knob as `start_all.sh`); `flightctl/scripts/setup_fts.sh` honours
   `SSD` like `start_all.sh` does.

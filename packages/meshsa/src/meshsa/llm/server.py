@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from .._envconfig import apply_overrides, env_key, parse_token
 from .._parsing import parse_int
 from .._web import ServiceAuth, api_json, guarded, healthz, read_json_or_none, register_routes
+from ..cli import configure_logging
 from ..defaults import DEFAULT_HTTP_SOURCE_TIMEOUT_S, DEFAULT_LOOPBACK_HOST, PORT_LLM
 
 # ``authorize``/``is_loopback`` are re-exported for callers (flightctl, tests); the explicit
@@ -74,13 +75,15 @@ class ServerConfig(BaseModel):
 
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    token: str | None = None
+    token: str | None = Field(default=None, repr=False)
     mavlink2rest_url: str = DEFAULT_MAVLINK2REST_URL
     drone_uid: str = DEFAULT_DRONE_UID
     fts_tracks_url: str = DEFAULT_FTS_TRACKS_URL
     max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS
     #: Total HTTP timeout on each upstream source read (``MESHSA_LLM_SOURCE_TIMEOUT_S``).
-    source_timeout_s: float = Field(default=DEFAULT_HTTP_SOURCE_TIMEOUT_S, gt=0.0)
+    source_timeout_s: float = Field(
+        default=DEFAULT_HTTP_SOURCE_TIMEOUT_S, gt=0.0, allow_inf_nan=False
+    )
 
 
 def _port(name: str, raw: str) -> int:
@@ -202,6 +205,7 @@ def main() -> None:  # pragma: no cover - process entry point
     Requires the ``[llm]`` extra and ``ANTHROPIC_API_KEY``. Missing optional
     dependencies produce a clear install hint rather than a raw import traceback.
     """
+    configure_logging()
     try:
         import aiohttp  # noqa: F401  # presence check; web imported below
         import anthropic  # noqa: F401  # presence check; used lazily by build_agent

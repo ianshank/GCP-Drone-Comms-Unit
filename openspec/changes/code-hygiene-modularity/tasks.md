@@ -326,7 +326,9 @@
 - [ ] T-8.8 `command/config.py` migrates to `_envconfig.py`; picks up
       `defaults.PORT_COMMANDER`; adopts `meshsa_core.mavlink.extract_endpoint_host` for its
       MAVLink endpoint; `HealthReport` import points at the T-5.2 neutral module (retiring
-      the interim re-export).
+      the interim re-export); the three `except Exception` sites in `command/**` and the
+      three in `run_commander.py` get their `# noqa: BLE001 - reason` and the per-file
+      `BLE001` waivers in `packages/meshsa/pyproject.toml` / `ruff.toml` are dropped (plan P3-5).
 
 ## Phase 9 — Coupling fixes, non-command
 - [ ] T-9.1 `build_node(..., codecs: Registry[Codec] = codec_registry)` — additive kwarg,

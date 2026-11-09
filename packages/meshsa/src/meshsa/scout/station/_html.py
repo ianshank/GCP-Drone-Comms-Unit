@@ -12,6 +12,8 @@ block. For fully offline field use, vendor the assets and point the
 
 from __future__ import annotations
 
+import re
+
 from ..._webpage import MAPLIBRE_CSS_TAG, MAPLIBRE_JS_TAG
 from ..._webpage import js_literal as _js_literal
 from ...defaults import DEFAULT_STATION_POLL_INTERVAL_S, DEFAULT_STATION_TILE_URL
@@ -22,6 +24,11 @@ _TOKEN_PLACEHOLDER = "__SCOUT_TOKEN__"
 #: cadence in milliseconds and the raster tile template (``ScoutConfig.station_*``).
 _POLL_MS_PLACEHOLDER = "__SCOUT_POLL_MS__"
 _TILE_URL_PLACEHOLDER = "__SCOUT_TILE_URL__"
+_PLACEHOLDER_RE = re.compile(
+    "|".join(
+        re.escape(p) for p in (_TOKEN_PLACEHOLDER, _POLL_MS_PLACEHOLDER, _TILE_URL_PLACEHOLDER)
+    )
+)
 
 #: Build-time placeholders for the shared, version-pinned MapLibre asset tags — resolved
 #: once below, not per request.
@@ -46,11 +53,13 @@ def render_page(
     data/status requests. `/` itself is gated on the same token by the app, so serving it
     here does not widen exposure.
     """
-    return (
-        MAP_HTML.replace(_TOKEN_PLACEHOLDER, _js_literal(token))
-        .replace(_POLL_MS_PLACEHOLDER, str(max(1, int(poll_interval_s * 1000))))
-        .replace(_TILE_URL_PLACEHOLDER, _js_literal(tile_url))
-    )
+    values = {
+        _TOKEN_PLACEHOLDER: _js_literal(token),
+        _POLL_MS_PLACEHOLDER: str(max(1, int(poll_interval_s * 1000))),
+        _TILE_URL_PLACEHOLDER: _js_literal(tile_url),
+    }
+    # One pass: a value that itself contains another placeholder's spelling is left alone.
+    return _PLACEHOLDER_RE.sub(lambda m: values[m.group(0)], MAP_HTML)
 
 
 _MAP_HTML_TEMPLATE = """<!doctype html>

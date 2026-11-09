@@ -20,7 +20,7 @@ the same rule the factories already follow.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
@@ -87,7 +87,8 @@ class ServiceAuth:
     """
 
     service: str
-    token: str | None
+    #: ``repr=False``: a ``ServiceAuth`` can sit in a traceback frame's locals.
+    token: str | None = field(repr=False)
 
     @property
     def challenge(self) -> str:

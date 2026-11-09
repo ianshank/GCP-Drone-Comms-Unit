@@ -19,7 +19,7 @@ from ..defaults import DEFAULT_INFERENCE_BACKOFF_BASE, DEFAULT_INFERENCE_BACKOFF
 
 class NemotronConfig(BaseModel):
     enabled: bool = False
-    api_key: str = ""
+    api_key: str = Field(default="", repr=False)
     base_url: str = "https://integrate.api.nvidia.com/v1"
     model: str = "nvidia/nemotron-3-ultra-550b-a55b"
     system_prompt: str = "You are a tactical AI assistant. Summarize the user's message clearly. Keep it under 100 words."
